@@ -305,9 +305,18 @@ public class OasisSpawnSystem : MonoBehaviour
 
         // If player has StarterAssets FirstPersonController, level the camera pitch to horizon
         var fpc = combatant.GetComponent<StarterAssets.FirstPersonController>();
-        if (fpc != null && fpc.CinemachineCameraTarget != null)
+        if (fpc != null)
         {
-            fpc.CinemachineCameraTarget.transform.localRotation = Quaternion.identity;
+            fpc.ResetCameraPitch(0f);
+        }
+        var inputs = combatant.GetComponent<StarterAssets.StarterAssetsInputs>();
+        if (inputs != null)
+        {
+            inputs.look = Vector2.zero;
+        }
+        if (Camera.main != null && (combatant.CompareTag("Player") || fpc != null))
+        {
+            Camera.main.transform.rotation = combatant.rotation;
         }
 
         // Restore clean running posture and reset any crouch/downed speeds

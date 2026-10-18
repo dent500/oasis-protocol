@@ -44,16 +44,10 @@ namespace StarterAssets
             {
                 if (ShouldKeepCursorUnlocked())
                 {
-                    cursorLocked = false;
-                    cursorInputForLook = false;
                     SetCursorState(false);
-                    Cursor.visible = true;
                     return;
                 }
-                if (cursorLocked)
-                {
-                    SetCursorState(true);
-                }
+                SetCursorState(true);
             };
             _enableInput.Enable();
 
@@ -64,6 +58,25 @@ namespace StarterAssets
             };
             _touchFocus.Enable();
 #endif
+        }
+
+        private void Update()
+        {
+            if (ShouldKeepCursorUnlocked())
+            {
+                if (cursorLocked || !Cursor.visible || Cursor.lockState != CursorLockMode.None)
+                {
+                    SetCursorState(false);
+                }
+            }
+            else if (cursorLocked)
+            {
+                if (Cursor.visible || Cursor.lockState != CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
+            }
         }
 
         private bool ShouldKeepCursorUnlocked()
@@ -107,9 +120,19 @@ namespace StarterAssets
             {
                 CameraManager.NotifyPlayerMoved();
             }
-            if (cursorInputForLook)
+            if (cursorInputForLook && cursorLocked && !ShouldKeepCursorUnlocked())
             {
-                LookInput(value.Get<Vector2>());
+                Vector2 lookDelta = value.Get<Vector2>();
+                // Filter out massive single-frame cursor centering warps when cursor first locks
+                if (lookDelta.sqrMagnitude > 40000f) // > 200px
+                {
+                    lookDelta = Vector2.ClampMagnitude(lookDelta, 50f);
+                }
+                LookInput(lookDelta);
+            }
+            else
+            {
+                LookInput(Vector2.zero);
             }
         }
 
@@ -158,22 +181,24 @@ namespace StarterAssets
             if (ShouldKeepCursorUnlocked())
             {
                 SetCursorState(false);
-                Cursor.visible = true;
                 return;
             }
             SetCursorState(cursorLocked);
         }
 
-        private void SetCursorState(bool newState)
+        public void SetCursorState(bool newState)
         {
             if (ShouldKeepCursorUnlocked())
             {
                 newState = false;
             }
+            cursorLocked = newState;
+            cursorInputForLook = newState;
             Cursor.lockState = newState ? CursorLockMode.Locked : CursorLockMode.None;
-            if (!newState)
+            Cursor.visible = !newState;
+            if (newState)
             {
-                Cursor.visible = true;
+                look = Vector2.zero;
             }
         }
     }

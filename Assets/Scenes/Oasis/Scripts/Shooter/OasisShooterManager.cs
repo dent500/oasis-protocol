@@ -2170,8 +2170,7 @@ public class OasisShooterManager : MonoBehaviour
         var playerInputs = FindAnyObjectByType<StarterAssets.StarterAssetsInputs>();
         if (playerInputs != null)
         {
-            playerInputs.cursorLocked = false;
-            playerInputs.cursorInputForLook = false;
+            playerInputs.SetCursorState(false);
             playerInputs.look = Vector2.zero;
             playerInputs.move = Vector2.zero;
         }

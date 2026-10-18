@@ -1591,11 +1591,20 @@ public class OasisCharacterCustomizer : MonoBehaviour
         // 5. Restore gameplay controls and cursor lock
         if (_starterInputs != null)
         {
-            _starterInputs.cursorInputForLook = true;
-            _starterInputs.cursorLocked = true;
+            _starterInputs.look = Vector2.zero;
+            _starterInputs.SetCursorState(true);
         }
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+        var pFpc = pTransform != null ? pTransform.GetComponent<StarterAssets.FirstPersonController>() : null;
+        if (pFpc != null)
+        {
+            pFpc.ResetCameraPitch(0f);
+        }
+        if (Camera.main != null && pTransform != null)
+        {
+            Camera.main.transform.rotation = pTransform.rotation;
+        }
 
         // 6. Restore In-game Combat HUD and Map
         if (OasisShooterManager.Instance != null)

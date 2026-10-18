@@ -165,8 +165,7 @@ public class OasisCombatMovement : MonoBehaviour
             }
             if (_inputs != null)
             {
-                _inputs.cursorLocked = false;
-                _inputs.cursorInputForLook = false;
+                _inputs.SetCursorState(false);
                 _inputs.look = Vector2.zero;
                 _inputs.move = Vector2.zero;
             }

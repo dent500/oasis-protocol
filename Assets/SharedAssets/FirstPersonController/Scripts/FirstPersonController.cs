@@ -74,14 +74,33 @@ namespace StarterAssets
 
         private const float _threshold = 0.01f;
 
+        public float CinemachineTargetPitch
+        {
+            get => _cinemachineTargetPitch;
+            set
+            {
+                _cinemachineTargetPitch = ClampAngle(value, BottomClamp, TopClamp);
+                if (CinemachineCameraTarget != null)
+                {
+                    CinemachineCameraTarget.transform.localRotation = Quaternion.Euler(_cinemachineTargetPitch, 0.0f, 0.0f);
+                }
+            }
+        }
+
+        public void ResetCameraPitch(float pitch = 0f)
+        {
+            CinemachineTargetPitch = pitch;
+        }
+
         private bool IsCurrentDeviceMouse
         {
             get
             {
                 #if ENABLE_INPUT_SYSTEM
-                return _playerInput.currentControlScheme == "KeyboardMouse";
+                if (_playerInput == null) return true;
+                return _playerInput.currentControlScheme != "Gamepad";
                 #else
-                return false;
+                return true;
                 #endif
             }
         }
@@ -104,6 +123,9 @@ namespace StarterAssets
 #else
             Debug.LogError( "Starter Assets package is missing dependencies. Please use Tools/Starter Assets/Reinstall Dependencies to fix it");
 #endif
+
+            // Ensure camera starts leveled at horizon
+            ResetCameraPitch(0f);
 
             // Disable any child CapsuleCollider or MeshCollider on the player hierarchy so Physics.CheckSphere never detects the player's own body as ground in mid-air!
             foreach (var col in GetComponentsInChildren<Collider>(true))
