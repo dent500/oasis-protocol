@@ -40,6 +40,7 @@ public class OasisMapSystem : MonoBehaviour
     private readonly List<RectTransform> _fullDroneBlips = new List<RectTransform>();
 
     private bool _isFullscreenOpen = false;
+    public bool IsFullscreenOpen => _isFullscreenOpen;
 
     // Points of Interest
     private struct POI

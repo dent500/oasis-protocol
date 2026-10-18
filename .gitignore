@@ -32,3 +32,6 @@
 # OS generated
 .DS_Store
 Thumbs.db
+*.exe
+*.slnx
+Assets/_Recovery*

@@ -92,6 +92,14 @@ public class BlasterWeapon : MonoBehaviour
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
     }
 
+    private void OnDisable()
+    {
+        if (_fpc != null)
+        {
+            _fpc.RotationSpeed = _origRotationSpeed;
+        }
+    }
+
     private void Update()
     {
         bool inactiveCombat =
@@ -193,7 +201,7 @@ public class BlasterWeapon : MonoBehaviour
         if (_fpc != null)
         {
             bool isPrecisionAim = !is3rdPerson || is3rdAiming;
-            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * 0.50f) : _origRotationSpeed;
+            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * 0.40f) : _origRotationSpeed;
         }
 
         // 4. Scope Overlay visibility and telemetry
@@ -220,6 +228,7 @@ public class BlasterWeapon : MonoBehaviour
         _nextFireTime = Time.time + fireRate;
         currentAmmo--;
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
+        OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
 
         // Apply recoil impulse
         _currentRecoilPos += new Vector3(0, 0.015f, -recoilKickback);
@@ -330,6 +339,7 @@ public class BlasterWeapon : MonoBehaviour
                 if (hitAI.teamId != localTeam)
                 {
                     hitAI.TakeDamage(damage, bestHit.point, bestHit.normal, localId, localTeam);
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, damage, bestHit.distance);
                     OasisCombatMovement.Instance?.TriggerHitmarker();
                     OasisShooterManager.Instance?.OnTargetHit(damage, hitAI.isDowned);
                     OasisShooterManager.Instance?.AddPlayerScore(15);
@@ -421,6 +431,7 @@ public class BlasterWeapon : MonoBehaviour
     {
         _isReloading = true;
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
+        OasisAITelemetryLogger.Instance?.RecordPlayerReload();
 
         if (_audioSource != null)
         {

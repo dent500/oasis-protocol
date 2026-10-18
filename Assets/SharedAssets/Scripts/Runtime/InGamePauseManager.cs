@@ -12,6 +12,7 @@ using UnityEngine.InputSystem;
 public class InGamePauseManager : MonoBehaviour
 {
     public static InGamePauseManager Instance { get; private set; }
+    public bool IsPaused => _isPaused;
 
     private GameObject _pauseCanvas;
     private bool _isPaused = false;

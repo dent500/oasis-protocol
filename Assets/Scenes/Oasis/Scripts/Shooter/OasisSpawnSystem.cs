@@ -328,5 +328,10 @@ public class OasisSpawnSystem : MonoBehaviour
 
         Physics.SyncTransforms();
         if (cc != null) cc.enabled = true;
+
+        if (combatant.CompareTag("Player") || fpc != null)
+        {
+            OasisAITelemetryLogger.Instance?.RecordPlayerSpawn(spawnPos);
+        }
     }
 }

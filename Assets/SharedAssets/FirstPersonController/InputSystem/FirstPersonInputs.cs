@@ -31,23 +31,13 @@ namespace StarterAssets
         private void Start()
         {
 #if ENABLE_INPUT_SYSTEM
-            _ignoreInput = new InputAction(binding: "/Keyboard/escape");
-            _ignoreInput.performed += context =>
-            {
-                // Only unlock cursor, do not permanently disable movement
-                SetCursorState(false);
-            };
-            _ignoreInput.Enable();
-
             _enableInput = new InputAction(binding: "/Mouse/leftButton");
             _enableInput.performed += context =>
             {
-                if (ShouldKeepCursorUnlocked())
+                if (!ShouldKeepCursorUnlocked())
                 {
-                    SetCursorState(false);
-                    return;
+                    SetCursorState(true);
                 }
-                SetCursorState(true);
             };
             _enableInput.Enable();
 
@@ -58,36 +48,88 @@ namespace StarterAssets
             };
             _touchFocus.Enable();
 #endif
+            SetCursorState(!ShouldKeepCursorUnlocked());
         }
 
         private void Update()
         {
-            if (ShouldKeepCursorUnlocked())
+            bool shouldUnlock = ShouldKeepCursorUnlocked();
+            if (shouldUnlock)
             {
                 if (cursorLocked || !Cursor.visible || Cursor.lockState != CursorLockMode.None)
                 {
-                    SetCursorState(false);
+                    cursorLocked = false;
+                    cursorInputForLook = false;
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
                 }
             }
-            else if (cursorLocked)
+            else
+            {
+                // In active gameplay, GUARANTEE cursor is locked in the center and completely invisible
+                if (!cursorLocked || Cursor.visible || Cursor.lockState != CursorLockMode.Locked)
+                {
+                    cursorLocked = true;
+                    cursorInputForLook = true;
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
+
+#if ENABLE_INPUT_SYSTEM
+                if (Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame))
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                    cursorLocked = true;
+                    cursorInputForLook = true;
+                }
+#else
+                if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                    cursorLocked = true;
+                    cursorInputForLook = true;
+                }
+#endif
+            }
+        }
+
+        private void OnGUI()
+        {
+            // OnGUI runs after Update/LateUpdate. Prevent any IMGUI elements from making cursor visible during gameplay.
+            if (!ShouldKeepCursorUnlocked())
             {
                 if (Cursor.visible || Cursor.lockState != CursorLockMode.Locked)
                 {
                     Cursor.lockState = CursorLockMode.Locked;
                     Cursor.visible = false;
+                    cursorLocked = true;
+                    cursorInputForLook = true;
                 }
             }
         }
 
-        private bool ShouldKeepCursorUnlocked()
+        public bool ShouldKeepCursorUnlocked()
         {
             if (!this || !isActiveAndEnabled) return true;
-            if (OasisShooterManager.Instance != null &&
-                (OasisShooterManager.Instance.isMatchFinished || OasisShooterManager.Instance.isSimulationMode))
+            if (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused)
             {
                 return true;
             }
             if (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive)
+            {
+                return true;
+            }
+            if (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isMatchFinished || OasisShooterManager.Instance.isSimulationMode))
+            {
+                return true;
+            }
+            if (OasisMapSystem.Instance != null && OasisMapSystem.Instance.IsFullscreenOpen)
+            {
+                return true;
+            }
+            if (OasisAITelemetryLogger.Instance != null && OasisAITelemetryLogger.Instance.showLiveTelemetryHUD)
             {
                 return true;
             }
@@ -114,6 +156,8 @@ namespace StarterAssets
             MoveInput(value.Get<Vector2>());
         }
 
+        private int _ignoreLookFrames = 0;
+
         public void OnLook(InputValue value)
         {
             if (CameraManager != null)
@@ -122,12 +166,13 @@ namespace StarterAssets
             }
             if (cursorInputForLook && cursorLocked && !ShouldKeepCursorUnlocked())
             {
-                Vector2 lookDelta = value.Get<Vector2>();
-                // Filter out massive single-frame cursor centering warps when cursor first locks
-                if (lookDelta.sqrMagnitude > 40000f) // > 200px
+                if (_ignoreLookFrames > 0)
                 {
-                    lookDelta = Vector2.ClampMagnitude(lookDelta, 50f);
+                    _ignoreLookFrames--;
+                    LookInput(Vector2.zero);
+                    return;
                 }
+                Vector2 lookDelta = value.Get<Vector2>();
                 LookInput(lookDelta);
             }
             else
@@ -191,6 +236,10 @@ namespace StarterAssets
             if (ShouldKeepCursorUnlocked())
             {
                 newState = false;
+            }
+            if (newState && !cursorLocked)
+            {
+                _ignoreLookFrames = 2;
             }
             cursorLocked = newState;
             cursorInputForLook = newState;

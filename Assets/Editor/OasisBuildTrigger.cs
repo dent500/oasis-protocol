@@ -8,10 +8,12 @@ using UnityEngine;
 public static class OasisBuildTrigger
 {
     private const string TriggerFile = "Temp/trigger_build.txt";
+    private const string TriggerLinuxFile = "Temp/trigger_build_linux.txt";
+    private const string TriggerAllFile = "Temp/trigger_build_all.txt";
 
     static OasisBuildTrigger()
     {
-        EditorApplication.delayCall += CheckTrigger;
+        EditorApplication.update += PollTrigger;
     }
 
     [MenuItem("Oasis/Build Windows Standalone")]
@@ -74,16 +76,23 @@ public static class OasisBuildTrigger
         Debug.Log($"[OasisBuildTrigger] Linux build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
     }
 
-    private static void CheckTrigger()
+    private static void PollTrigger()
     {
-        if (File.Exists(TriggerFile))
+        if (File.Exists(TriggerAllFile))
         {
-            try
-            {
-                File.Delete(TriggerFile);
-            }
-            catch {}
+            try { File.Delete(TriggerAllFile); } catch {}
             BuildStandalone();
+            BuildLinuxStandalone();
+        }
+        else if (File.Exists(TriggerFile))
+        {
+            try { File.Delete(TriggerFile); } catch {}
+            BuildStandalone();
+        }
+        else if (File.Exists(TriggerLinuxFile))
+        {
+            try { File.Delete(TriggerLinuxFile); } catch {}
+            BuildLinuxStandalone();
         }
     }
 }

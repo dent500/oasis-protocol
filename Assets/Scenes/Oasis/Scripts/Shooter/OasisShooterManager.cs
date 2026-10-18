@@ -430,6 +430,7 @@ public class OasisShooterManager : MonoBehaviour
             if (playerDownedTimer <= 0f)
             {
                 // Bleedout expired! Re-deploy at base
+                OasisAITelemetryLogger.Instance?.RecordPlayerBleedout();
                 isPlayerDowned = false;
                 playerDownedTimer = 0f;
                 int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
@@ -972,6 +973,9 @@ public class OasisShooterManager : MonoBehaviour
         currentHealth = Mathf.Max(0, currentHealth - amount);
         _regenDelayTimer = 4.0f; // 4 seconds delay after taking damage before shields begin recharging
 
+        string attackerBotName = attackerBot != null ? attackerBot.botName : "ENEMY";
+        OasisAITelemetryLogger.Instance?.RecordPlayerDamageTaken(amount, attackerBotName);
+
         UpdateHealthUI();
 
         // Sound effect
@@ -1010,6 +1014,7 @@ public class OasisShooterManager : MonoBehaviour
                     isPlayerDowned = true;
                     playerDownedTimer = 8.0f;
                     playerReviveProgress = 0f;
+                    OasisAITelemetryLogger.Instance?.RecordPlayerKnockedDown(attackerBotName);
 
                     // Credit attacking CPU bot with kill and knockdown score
                     if (attackerBot != null)

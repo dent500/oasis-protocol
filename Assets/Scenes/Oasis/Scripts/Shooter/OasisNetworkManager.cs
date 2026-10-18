@@ -293,28 +293,34 @@ public class OasisNetworkManager : MonoBehaviour
     {
         List<ScoreboardEntry> list = new List<ScoreboardEntry>();
 
-        int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-        string teamPrefix = $"[{OasisShooterManager.GetTeamShortName(myTeam)}] ";
-        string localName = teamPrefix + "YOU (OPERATIVE)";
-        Color teamCol = OasisShooterManager.GetTeamColor(myTeam);
+        bool isSpectating = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) ||
+                            (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSpectatorMode);
 
-        int pScore = localScore;
-        int pKills = localKills;
-        if (OasisShooterManager.Instance != null)
+        if (!isSpectating)
         {
-            pScore = Mathf.Max(pScore, OasisShooterManager.Instance.score);
-            pKills = Mathf.Max(pKills, OasisShooterManager.Instance.kills);
+            int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+            string teamPrefix = $"[{OasisShooterManager.GetTeamShortName(myTeam)}] ";
+            string localName = teamPrefix + "YOU (OPERATIVE)";
+            Color teamCol = OasisShooterManager.GetTeamColor(myTeam);
+
+            int pScore = localScore;
+            int pKills = localKills;
+            if (OasisShooterManager.Instance != null)
+            {
+                pScore = Mathf.Max(pScore, OasisShooterManager.Instance.score);
+                pKills = Mathf.Max(pKills, OasisShooterManager.Instance.kills);
+            }
+
+            list.Add(new ScoreboardEntry
+            {
+                playerId = myPlayerId,
+                playerName = localName,
+                score = pScore,
+                kills = pKills,
+                playerColor = teamCol,
+                isLocal = true
+            });
         }
-
-        list.Add(new ScoreboardEntry
-        {
-            playerId = myPlayerId,
-            playerName = localName,
-            score = pScore,
-            kills = pKills,
-            playerColor = teamCol,
-            isLocal = true
-        });
 
         foreach (var kvp in _remotePlayers)
         {
@@ -2579,20 +2585,34 @@ public class OasisNetworkManager : MonoBehaviour
         // Add 3D World Name Tag
         GameObject nameTagObj = new GameObject("NameTag");
         nameTagObj.transform.SetParent(operative.transform, false);
-        nameTagObj.transform.localPosition = new Vector3(0, 2.2f, 0);
+        nameTagObj.transform.localPosition = new Vector3(0, 2.85f, 0);
 
         Canvas canvas = nameTagObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         RectTransform rt = nameTagObj.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(220, 44);
+        rt.sizeDelta = new Vector2(220, 68);
         rt.localScale = Vector3.one * 0.01f;
 
-        Text nameText = nameTagObj.AddComponent<Text>();
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        GameObject textObj = new GameObject("NameText");
+        textObj.transform.SetParent(nameTagObj.transform, false);
+        RectTransform ntRt = textObj.AddComponent<RectTransform>();
+        ntRt.anchorMin = Vector2.zero;
+        ntRt.anchorMax = Vector2.one;
+        ntRt.offsetMin = Vector2.zero;
+        ntRt.offsetMax = Vector2.zero;
+
+        Text nameText = textObj.AddComponent<Text>();
+        nameText.font = font;
         nameText.text = $"{playerName} [OP-{id}]";
-        nameText.fontSize = 20;
+        nameText.fontSize = 18;
         nameText.fontStyle = FontStyle.Bold;
         nameText.alignment = TextAnchor.MiddleCenter;
         nameText.color = OasisShooterManager.GetTeamColor(teamId);
+        Outline ntOutline = textObj.AddComponent<Outline>();
+        ntOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
+        ntOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
         nameTagObj.AddComponent<FaceCameraBillboard>();
         inst.nameTagText = nameText;
@@ -3340,14 +3360,19 @@ public class OasisNetworkManager : MonoBehaviour
 /// </summary>
 public class FaceCameraBillboard : MonoBehaviour
 {
-    private Transform _cam;
+    private Camera _cam;
 
     private void LateUpdate()
     {
-        if (_cam == null && Camera.main != null) _cam = Camera.main.transform;
+        if (_cam == null) _cam = Camera.main ?? FindAnyObjectByType<Camera>();
         if (_cam != null)
         {
-            transform.rotation = Quaternion.LookRotation(transform.position - _cam.position);
+            transform.rotation = _cam.transform.rotation;
+
+            // Distance scaling for multiplayer player overhead name tags
+            float dist = Vector3.Distance(transform.position, _cam.transform.position);
+            float scale = Mathf.Clamp(dist * 0.00085f, 0.010f, 0.028f);
+            transform.localScale = Vector3.one * scale;
         }
     }
 }

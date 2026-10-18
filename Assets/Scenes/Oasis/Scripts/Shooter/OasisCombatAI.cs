@@ -39,11 +39,13 @@ public class OasisCombatAI : MonoBehaviour
     private Transform _visualRoot;
     private AudioSource _audioSource;
 
-    // Overhead UI
+    // Overhead UI & 3D Team Beacon
     private GameObject _overheadCanvasObj;
     private Slider _overheadHealthSlider;
     private Slider _overheadShieldSlider;
     private Text _overheadNameText;
+    private GameObject _overheadBeaconObj;
+    private Material _overheadBeaconMat;
 
     // Targeting & Navigation
     private Transform _currentTarget;
@@ -137,6 +139,7 @@ public class OasisCombatAI : MonoBehaviour
 
         BuildHumanoidVisual(skinTex, skinAccent);
         BuildOverheadHealthBar();
+        BuildOverheadBeacon();
 
         OasisAITelemetryLogger.Instance?.RecordBotSpawn(this);
     }
@@ -324,47 +327,172 @@ public class OasisCombatAI : MonoBehaviour
         return gun;
     }
 
+    private static Sprite s_ArrowSprite;
+    public static Sprite GetOverheadArrowSprite()
+    {
+        if (s_ArrowSprite != null) return s_ArrowSprite;
+
+        int w = 64;
+        int h = 64;
+        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+
+        Color clear = new Color(0, 0, 0, 0);
+        Color white = Color.white;
+        Color border = new Color(0.05f, 0.05f, 0.05f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            float ny = (float)y / (h - 1);
+            float t = Mathf.Clamp01((ny - 0.06f) / 0.88f);
+            float outerHalfWidth = Mathf.Lerp(0.04f, 0.44f, t);
+
+            for (int x = 0; x < w; x++)
+            {
+                float nx = (float)x / (w - 1);
+                float dx = Mathf.Abs(nx - 0.5f);
+
+                float notchY = 0.40f + (dx / 0.44f) * 0.48f;
+
+                if (ny >= 0.06f && ny <= 0.94f && dx <= outerHalfWidth && ny <= notchY)
+                {
+                    bool isBorder = (dx >= outerHalfWidth - 0.035f) || 
+                                   (ny <= 0.10f) || 
+                                   (ny >= notchY - 0.035f);
+
+                    tex.SetPixel(x, y, isBorder ? border : white);
+                }
+                else
+                {
+                    tex.SetPixel(x, y, clear);
+                }
+            }
+        }
+
+        tex.Apply();
+        s_ArrowSprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+        return s_ArrowSprite;
+    }
+
+    private static Mesh s_ArrowMesh;
+    private static Mesh GetOverheadArrowMesh()
+    {
+        if (s_ArrowMesh != null) return s_ArrowMesh;
+
+        Mesh m = new Mesh();
+        m.name = "ProceduralOverheadArrow";
+
+        // Sleek downward pointing faceted diamond/arrow
+        // Tip at bottom (0, 0, 0)
+        // 4 corners of waist (height = 0.32m, radius = 0.18m)
+        // Top crown point (height = 0.45m)
+        Vector3 tip = Vector3.zero;
+        Vector3 c0 = new Vector3(-0.18f, 0.32f, -0.18f);
+        Vector3 c1 = new Vector3( 0.18f, 0.32f, -0.18f);
+        Vector3 c2 = new Vector3( 0.18f, 0.32f,  0.18f);
+        Vector3 c3 = new Vector3(-0.18f, 0.32f,  0.18f);
+        Vector3 crown = new Vector3(0f, 0.45f, 0f);
+
+        Vector3[] verts = new Vector3[]
+        {
+            // Bottom 4 faces (pointing down towards operative)
+            tip, c1, c0,
+            tip, c2, c1,
+            tip, c3, c2,
+            tip, c0, c3,
+            // Top 4 faces (faceted diamond roof)
+            crown, c0, c1,
+            crown, c1, c2,
+            crown, c2, c3,
+            crown, c3, c0
+        };
+
+        int[] tris = new int[24];
+        for (int i = 0; i < 24; i++) tris[i] = i;
+
+        m.vertices = verts;
+        m.triangles = tris;
+        m.RecalculateNormals();
+        m.RecalculateBounds();
+        s_ArrowMesh = m;
+        return s_ArrowMesh;
+    }
+
+    private void BuildOverheadBeacon()
+    {
+        if (_overheadBeaconObj != null) Destroy(_overheadBeaconObj);
+
+        _overheadBeaconObj = new GameObject("Overhead_Team_Beacon");
+        _overheadBeaconObj.transform.SetParent(transform, false);
+        _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
+
+        MeshFilter mf = _overheadBeaconObj.AddComponent<MeshFilter>();
+        mf.sharedMesh = GetOverheadArrowMesh();
+
+        MeshRenderer mr = _overheadBeaconObj.AddComponent<MeshRenderer>();
+        Shader unlitShader = Shader.Find("Universal Render Pipeline/Unlit") 
+                             ?? Shader.Find("Unlit/Color") 
+                             ?? OasisShaderHelper.GetLitShader();
+        _overheadBeaconMat = new Material(unlitShader);
+        _overheadBeaconMat.color = teamColor;
+        if (_overheadBeaconMat.HasProperty("_BaseColor"))
+        {
+            _overheadBeaconMat.SetColor("_BaseColor", teamColor);
+        }
+        if (_overheadBeaconMat.HasProperty("_EmissionColor"))
+        {
+            _overheadBeaconMat.EnableKeyword("_EMISSION");
+            _overheadBeaconMat.SetColor("_EmissionColor", teamColor * 2.0f);
+        }
+        mr.sharedMaterial = _overheadBeaconMat;
+    }
+
     private void BuildOverheadHealthBar()
     {
         if (_overheadCanvasObj != null) Destroy(_overheadCanvasObj);
 
-        _overheadCanvasObj = new GameObject("Overhead_Health_Canvas");
+        _overheadCanvasObj = new GameObject("Overhead_Health_Canvas", typeof(RectTransform), typeof(Canvas));
         _overheadCanvasObj.transform.SetParent(transform, false);
-        _overheadCanvasObj.transform.localPosition = new Vector3(0f, 2.18f, 0f);
+        _overheadCanvasObj.transform.localPosition = new Vector3(0f, 3.42f, 0f);
 
-        Canvas canvas = _overheadCanvasObj.AddComponent<Canvas>();
+        Canvas canvas = _overheadCanvasObj.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
 
         RectTransform cRT = _overheadCanvasObj.GetComponent<RectTransform>();
-        cRT.sizeDelta = new Vector2(86, 24);
-        cRT.localScale = Vector3.one * 0.005f;
+        cRT.sizeDelta = new Vector2(160, 60);
+        cRT.localScale = Vector3.one * 0.010f;
 
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-        // Overhead Call-Sign Name
-        GameObject nameObj = new GameObject("NameText");
+        // 1. Overhead Call-Sign Name
+        GameObject nameObj = new GameObject("NameText", typeof(RectTransform), typeof(Text));
         nameObj.transform.SetParent(_overheadCanvasObj.transform, false);
-        RectTransform nRT = nameObj.AddComponent<RectTransform>();
-        nRT.anchorMin = new Vector2(0f, 0.52f);
-        nRT.anchorMax = new Vector2(1f, 1f);
-        nRT.offsetMin = Vector2.zero;
-        nRT.offsetMax = Vector2.zero;
-        _overheadNameText = nameObj.AddComponent<Text>();
+        RectTransform nRT = nameObj.GetComponent<RectTransform>();
+        nRT.anchorMin = new Vector2(0.5f, 0.5f);
+        nRT.anchorMax = new Vector2(0.5f, 0.5f);
+        nRT.sizeDelta = new Vector2(160, 22);
+        nRT.anchoredPosition = new Vector2(0f, 10f);
+
+        _overheadNameText = nameObj.GetComponent<Text>();
         _overheadNameText.font = font;
         _overheadNameText.text = botName;
-        _overheadNameText.fontSize = 11;
+        _overheadNameText.fontSize = 14;
         _overheadNameText.fontStyle = FontStyle.Bold;
         _overheadNameText.alignment = TextAnchor.MiddleCenter;
         _overheadNameText.color = teamColor;
+        Outline nOutline = nameObj.AddComponent<Outline>();
+        nOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
+        nOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
-        // Shield Bar Slider (Top thin bar so shield hits are immediately visible!)
+        // 2. Shield Bar Slider (Top thin bar so shield hits are immediately visible!)
         GameObject sSliderObj = new GameObject("ShieldSlider");
         sSliderObj.transform.SetParent(_overheadCanvasObj.transform, false);
         RectTransform ssRT = sSliderObj.AddComponent<RectTransform>();
-        ssRT.anchorMin = new Vector2(0.05f, 0.34f);
-        ssRT.anchorMax = new Vector2(0.95f, 0.50f);
-        ssRT.offsetMin = Vector2.zero;
-        ssRT.offsetMax = Vector2.zero;
+        ssRT.anchorMin = new Vector2(0.5f, 0.5f);
+        ssRT.anchorMax = new Vector2(0.5f, 0.5f);
+        ssRT.sizeDelta = new Vector2(90, 6);
+        ssRT.anchoredPosition = new Vector2(0f, -4f);
 
         _overheadShieldSlider = sSliderObj.AddComponent<Slider>();
         _overheadShieldSlider.minValue = 0f;
@@ -400,14 +528,14 @@ public class OasisCombatAI : MonoBehaviour
         sFillImg.color = new Color(0.28f, 0.92f, 1.0f, 0.95f);
         _overheadShieldSlider.fillRect = sFRT;
 
-        // Health Bar Slider (Bottom main bar)
+        // 3. Health Bar Slider (Bottom main bar)
         GameObject hSliderObj = new GameObject("HealthSlider");
         hSliderObj.transform.SetParent(_overheadCanvasObj.transform, false);
         RectTransform hsRT = hSliderObj.AddComponent<RectTransform>();
-        hsRT.anchorMin = new Vector2(0.05f, 0.06f);
-        hsRT.anchorMax = new Vector2(0.95f, 0.30f);
-        hsRT.offsetMin = Vector2.zero;
-        hsRT.offsetMax = Vector2.zero;
+        hsRT.anchorMin = new Vector2(0.5f, 0.5f);
+        hsRT.anchorMax = new Vector2(0.5f, 0.5f);
+        hsRT.sizeDelta = new Vector2(90, 8);
+        hsRT.anchoredPosition = new Vector2(0f, -14f);
 
         _overheadHealthSlider = hSliderObj.AddComponent<Slider>();
         _overheadHealthSlider.minValue = 0f;
@@ -657,6 +785,36 @@ public class OasisCombatAI : MonoBehaviour
 
     private void LateUpdate()
     {
+        Camera cam = Camera.main;
+        if (cam == null) cam = FindAnyObjectByType<Camera>();
+
+        // Keep overhead team indicator chevron and health bar perfectly billboarded and distance-scaled to the active camera
+        if (_overheadCanvasObj != null && _overheadCanvasObj.activeSelf)
+        {
+            if (cam != null)
+            {
+                _overheadCanvasObj.transform.rotation = cam.transform.rotation;
+
+                // Distance-scaled sizing so overhead nametag & health bar remain readable at combat ranges
+                float dist = Vector3.Distance(transform.position, cam.transform.position);
+                float dynamicScale = Mathf.Clamp(dist * 0.00075f, 0.009f, 0.026f);
+                _overheadCanvasObj.transform.localScale = Vector3.one * dynamicScale;
+            }
+        }
+
+        // Keep 3D overhead team beacon spinning and distance-scaled
+        if (_overheadBeaconObj != null && _overheadBeaconObj.activeSelf)
+        {
+            _overheadBeaconObj.transform.Rotate(Vector3.up, 85f * Time.deltaTime, Space.World);
+
+            if (cam != null)
+            {
+                float dist = Vector3.Distance(transform.position, cam.transform.position);
+                float beaconScale = Mathf.Clamp(dist * 0.065f, 1.0f, 2.8f);
+                _overheadBeaconObj.transform.localScale = Vector3.one * beaconScale;
+            }
+        }
+
         if (_isDead || isDowned || _currentTarget == null) return;
 
         // Rotate upper body spine & gun arm to aim vertically towards target
@@ -1279,6 +1437,18 @@ public class OasisCombatAI : MonoBehaviour
             _overheadNameText.text = $"[DOWNED (8s)] {botName}";
             _overheadNameText.color = new Color(1f, 0.75f, 0.15f);
         }
+        if (_overheadBeaconMat != null)
+        {
+            _overheadBeaconMat.color = new Color(1f, 0.45f, 0.15f);
+        }
+        if (_overheadBeaconObj != null)
+        {
+            _overheadBeaconObj.transform.localPosition = new Vector3(0f, 1.30f, -0.35f);
+        }
+        if (_overheadCanvasObj != null)
+        {
+            _overheadCanvasObj.transform.localPosition = new Vector3(0f, 1.85f, -0.35f);
+        }
         if (_overheadShieldSlider != null)
         {
             _overheadShieldSlider.value = 0f;
@@ -1354,6 +1524,7 @@ public class OasisCombatAI : MonoBehaviour
 
         if (_overheadCanvasObj != null)
         {
+            _overheadCanvasObj.transform.localPosition = new Vector3(0f, 3.42f, 0f);
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
@@ -1368,6 +1539,13 @@ public class OasisCombatAI : MonoBehaviour
             {
                 _overheadHealthSlider.value = currentHealth;
             }
+        }
+
+        if (_overheadBeaconObj != null)
+        {
+            _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
+            _overheadBeaconObj.SetActive(true);
+            if (_overheadBeaconMat != null) _overheadBeaconMat.color = teamColor;
         }
 
         if (_animator != null)
@@ -1387,23 +1565,17 @@ public class OasisCombatAI : MonoBehaviour
 
         OasisAITelemetryLogger.Instance?.RecordBleedoutDeath(this);
 
+        // Immediately hide visual model and overhead UI upon death so corpse never stands upright on the battlefield
         if (_visualRoot != null)
         {
-            _visualRoot.localPosition = Vector3.zero;
-            _visualRoot.localRotation = Quaternion.identity;
+            _visualRoot.gameObject.SetActive(false);
         }
         if (_characterController != null) _characterController.enabled = false;
         if (_overheadCanvasObj != null) _overheadCanvasObj.SetActive(false);
+        if (_overheadBeaconObj != null) _overheadBeaconObj.SetActive(false);
 
-        // Play Death animation safely
-        if (_animator != null && _animator.runtimeAnimatorController != null)
-        {
-            _animator.speed = 1.0f;
-            if (_animator.HasState(0, Animator.StringToHash("Die")))
-            {
-                _animator.Play("Die");
-            }
-        }
+        // Spawn digital elimination impact effect
+        BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.5f, Vector3.up, false);
 
         // Award score & update team match score (only when bleedout timer expires or executed!)
         int myPlayerId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
@@ -1437,14 +1609,15 @@ public class OasisCombatAI : MonoBehaviour
 
         _verticalVelocity = 0f;
 
+        // When respawning from bleedout death, combatant respawns back inside starting base outpost
+        OasisSpawnSystem.Instance.RespawnCombatant(transform, this.teamId);
+
         if (_visualRoot != null)
         {
             _visualRoot.localPosition = Vector3.zero;
             _visualRoot.localRotation = Quaternion.identity;
+            _visualRoot.gameObject.SetActive(true);
         }
-
-        // When respawning from bleedout death, combatant respawns back inside starting base outpost
-        OasisSpawnSystem.Instance.RespawnCombatant(transform, this.teamId);
 
         currentHealth = maxHealth;
         currentShield = maxShield;
@@ -1458,6 +1631,7 @@ public class OasisCombatAI : MonoBehaviour
         if (_characterController != null) _characterController.enabled = true;
         if (_overheadCanvasObj != null)
         {
+            _overheadCanvasObj.transform.localPosition = new Vector3(0f, 3.42f, 0f);
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
@@ -1466,6 +1640,13 @@ public class OasisCombatAI : MonoBehaviour
             }
             if (_overheadShieldSlider != null) _overheadShieldSlider.value = maxShield;
             if (_overheadHealthSlider != null) _overheadHealthSlider.value = maxHealth;
+        }
+
+        if (_overheadBeaconObj != null)
+        {
+            _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
+            _overheadBeaconObj.SetActive(true);
+            if (_overheadBeaconMat != null) _overheadBeaconMat.color = teamColor;
         }
 
         if (_animator != null)

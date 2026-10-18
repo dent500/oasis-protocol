@@ -97,8 +97,13 @@ namespace StarterAssets
             get
             {
                 #if ENABLE_INPUT_SYSTEM
-                if (_playerInput == null) return true;
-                return _playerInput.currentControlScheme != "Gamepad";
+                if (UnityEngine.InputSystem.Gamepad.current != null && 
+                    UnityEngine.InputSystem.Gamepad.current.wasUpdatedThisFrame && 
+                    UnityEngine.InputSystem.Gamepad.current.rightStick.ReadValue().sqrMagnitude > 0.01f)
+                {
+                    return false;
+                }
+                return true;
                 #else
                 return true;
                 #endif
@@ -208,11 +213,17 @@ namespace StarterAssets
             // if there is an input
             if (_input.look.sqrMagnitude >= _threshold)
             {
-                //Don't multiply mouse input by Time.deltaTime
-                float deltaTimeMultiplier = IsCurrentDeviceMouse ? 1.0f : Time.deltaTime;
+                // Mouse look: Calibrated 0.045 degrees per pixel for smooth, controllable turning
+                float baseLookScale = 0.045f;
 
-                _cinemachineTargetPitch += _input.look.y * RotationSpeed * deltaTimeMultiplier;
-                _rotationVelocity = _input.look.x * RotationSpeed * deltaTimeMultiplier;
+                // Gamepad look: 120 degrees per second scaled by delta time.
+                // Multiplied by RotationSpeed (which ADS aim drops for steady sniping).
+                float lookMultiplier = IsCurrentDeviceMouse
+                    ? (baseLookScale * RotationSpeed)
+                    : (120.0f * Time.deltaTime * RotationSpeed);
+
+                _cinemachineTargetPitch += _input.look.y * lookMultiplier * 0.85f;
+                _rotationVelocity = _input.look.x * lookMultiplier;
 
                 // clamp our pitch rotation
                 _cinemachineTargetPitch = ClampAngle(_cinemachineTargetPitch, BottomClamp, TopClamp);

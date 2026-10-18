@@ -283,7 +283,9 @@ public class OasisCombatMovement : MonoBehaviour
                 _downedTeammateNearby.reviveProgress += Time.deltaTime / 2.5f;
                 if (_downedTeammateNearby.reviveProgress >= 1.0f)
                 {
+                    string mateName = _downedTeammateNearby.botName;
                     _downedTeammateNearby.Revive();
+                    OasisAITelemetryLogger.Instance?.RecordPlayerReviveSuccess(mateName);
                     OasisShooterManager.Instance?.AddPlayerScore(75);
                     OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>SQUADMATE RESURRECTED! +75 PTS</color>", 3.0f);
                     _downedTeammateNearby = null;
@@ -304,10 +306,12 @@ public class OasisCombatMovement : MonoBehaviour
 
                 if (_downedRemotePlayerNearby.reviveProgress >= 1.0f)
                 {
+                    string mateName = _downedRemotePlayerNearby.name;
                     OasisNetworkManager.Instance?.BroadcastPlayerRevived(_downedRemotePlayerNearby.id, OasisNetworkManager.Instance.myPlayerId);
                     _downedRemotePlayerNearby.isDowned = false;
                     _downedRemotePlayerNearby.reviveProgress = 0f;
                     OasisNetworkManager.Instance?.ApplyOperativeSkinToRemotePlayer(_downedRemotePlayerNearby);
+                    OasisAITelemetryLogger.Instance?.RecordPlayerReviveSuccess(mateName);
                     OasisShooterManager.Instance?.AddPlayerScore(75);
                     OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>SQUADMATE {_downedRemotePlayerNearby.name.ToUpper()} RESURRECTED! +75 PTS</color>", 3.0f);
                     _downedRemotePlayerNearby = null;
