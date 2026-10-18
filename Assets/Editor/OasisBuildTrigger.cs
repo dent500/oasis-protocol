@@ -44,6 +44,36 @@ public static class OasisBuildTrigger
         Debug.Log($"[OasisBuildTrigger] Build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
     }
 
+    [MenuItem("Oasis/Build Linux Standalone")]
+    public static void BuildLinuxStandalone()
+    {
+        Debug.Log("[OasisBuildTrigger] Starting Linux Standalone build...");
+
+        string[] scenes = new string[]
+        {
+            "Assets/Scenes/MainMenu/MainMenu.unity",
+            "Assets/Scenes/Oasis/OasisScene.unity"
+        };
+
+        string buildPath = "Builds/Linux/Oasis Protocol.x86_64";
+        string buildDir = Path.GetDirectoryName(buildPath);
+        if (!string.IsNullOrEmpty(buildDir) && !Directory.Exists(buildDir))
+        {
+            Directory.CreateDirectory(buildDir);
+        }
+
+        BuildPlayerOptions options = new BuildPlayerOptions
+        {
+            scenes = scenes,
+            locationPathName = buildPath,
+            target = BuildTarget.StandaloneLinux64,
+            options = BuildOptions.None
+        };
+
+        BuildReport report = BuildPipeline.BuildPlayer(options);
+        Debug.Log($"[OasisBuildTrigger] Linux build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
+    }
+
     private static void CheckTrigger()
     {
         if (File.Exists(TriggerFile))
