@@ -1,0 +1,1213 @@
+using System.Collections;
+using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
+
+/// <summary>
+/// Combat Movement System for the Oasis FPS Shooter:
+/// 1. Crouch / Slide (C or Left Ctrl):
+///    - Dynamically reduces CharacterController height and eye level.
+///    - Decreases profile to take cover behind dunes and rocks.
+///    - If crouching while sprinting, performs a high-speed momentum power slide!
+/// 2. Combat Jump (Space):
+///    - Snappy vertical thrust with procedural launch sound.
+/// 3. Combat Dash / Dodge Thruster (Left Shift or Double-Tap Direction):
+///    - Rapid horizontal burst to evade incoming plasma projectiles with cooldown recovery.
+/// </summary>
+public class OasisCombatMovement : MonoBehaviour
+{
+    public static OasisCombatMovement Instance { get; private set; }
+
+    [Header("Crouch & Slide Settings")]
+    public float standingHeight = 1.80f;
+    public float crouchHeight = 1.00f;
+    public float standingCameraY = 1.60f;
+    public float crouchCameraY = 0.85f;
+    public float crouchSpeedMultiplier = 0.55f;
+    public float slideSpeedMultiplier = 1.7f;
+    public float slideDuration = 0.85f;
+
+    [Header("Dash / Evade Settings")]
+    public float dashForce = 16f;
+    public float dashDuration = 0.22f;
+    public float dashCooldown = 1.2f;
+
+    [Header("Obstacle Auto-Vault & Stuck Jump Settings")]
+    [Tooltip("If enabled, automatically assists jumping/vaulting when caught on or running into low obstacles (rocks, dunes, steps).")]
+    public bool enableObstacleJump = true;
+    public float obstacleVaultForwardBoost = 4.0f;
+    private float _playerStuckTimer = 0f;
+    private Vector3 _playerLastSampledPos;
+
+    [Header("Robot Hero Character Model")]
+    public GameObject robotHeroVisual;
+    public Animator robotHeroAnimator;
+    public bool isThirdPerson = true;
+    public bool isAimingThirdPerson = false;
+    public bool isHoldingLeftClickAim = false;
+
+    // State
+    public bool isCrouching { get; private set; }
+    public bool isSliding { get; private set; }
+    public bool isDashing { get; private set; }
+    public float dashCooldownRemaining { get; private set; }
+
+    private CharacterController _characterController;
+    private StarterAssets.FirstPersonController _fpc;
+    private StarterAssets.StarterAssetsInputs _inputs;
+    private Transform _cameraTarget;
+    private AudioSource _audioSource;
+    private Transform _spineBone;
+    private Transform _gunArmBone;
+    public Transform gunArmBone => _gunArmBone;
+
+    public Vector3 GetThirdPersonMuzzlePosition()
+    {
+        if (_gunArmBone != null)
+        {
+            // The rifle barrel extends forward along the gun arm bone's aim axis
+            // In the FBX rig, the rifle tip is ~0.65m forward and ~0.05m up from the grip/bone pivot
+            return _gunArmBone.position + _gunArmBone.forward * 0.65f + _gunArmBone.up * 0.05f;
+        }
+        // Fallback if bone not found
+        return transform.position + transform.forward * 0.7f + transform.up * 1.2f + transform.right * 0.35f;
+    }
+
+    [Header("Speed Settings")]
+    public float baseRunSpeed = 7.0f;
+    public float baseSprintSpeed = 10.0f;
+
+    private float _currentHeight;
+    private float _currentCameraY;
+    private Vector3 _initialCenter;
+    private Vector3 _dashDirection;
+    private float _dashTimeRemaining;
+    private Vector3 _slideDirection;
+    private float _slideTimeRemaining;
+    private float _origMoveSpeed = 7.0f;
+    private float _origSprintSpeed = 10.0f;
+    private bool _wasDowned = false;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        Instance = this;
+    }
+
+    private void Start()
+    {
+        _characterController = GetComponent<CharacterController>();
+        _fpc = GetComponent<StarterAssets.FirstPersonController>();
+        _inputs = GetComponent<StarterAssets.StarterAssetsInputs>();
+
+        if (_fpc != null)
+        {
+            _fpc.MoveSpeed = baseRunSpeed;
+            _fpc.SprintSpeed = baseSprintSpeed;
+            _origMoveSpeed = baseRunSpeed;
+            _origSprintSpeed = baseSprintSpeed;
+        }
+
+        isCrouching = false;
+        ApplyCrouchSpeed();
+
+        if (_fpc != null && _fpc.CinemachineCameraTarget != null)
+        {
+            _cameraTarget = _fpc.CinemachineCameraTarget.transform;
+            standingCameraY = 1.60f; // Standard adult human eye level
+            crouchCameraY = 0.85f;
+            Vector3 camPos = _cameraTarget.localPosition;
+            camPos.y = standingCameraY;
+            _cameraTarget.localPosition = camPos;
+        }
+
+        if (_characterController != null)
+        {
+            standingHeight = 1.80f; // Standard adult human height
+            _characterController.height = standingHeight;
+            _initialCenter = new Vector3(0f, 0.90f, 0f);
+            _characterController.center = _initialCenter;
+            crouchHeight = 1.00f;
+        }
+
+        _currentHeight = standingHeight;
+        _currentCameraY = standingCameraY;
+
+        _audioSource = gameObject.AddComponent<AudioSource>();
+        _audioSource.spatialBlend = 0f;
+        _audioSource.volume = 0.7f;
+
+        SetupLocalRobotHero();
+    }
+
+    private OasisCombatAI _downedTeammateNearby = null;
+    private OasisNetworkManager.RemotePlayerInstance _downedRemotePlayerNearby = null;
+
+    private void Update()
+    {
+        bool menuOrMatchEnded =
+            (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isSimulationMode || OasisShooterManager.Instance.isMatchFinished)) ||
+            (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive);
+
+        if (menuOrMatchEnded)
+        {
+            isHoldingLeftClickAim = false;
+            isAimingThirdPerson = false;
+            if (!isThirdPerson)
+            {
+                isThirdPerson = true;
+                SetMeshVisibility(false);
+            }
+            if (_inputs != null)
+            {
+                _inputs.cursorLocked = false;
+                _inputs.cursorInputForLook = false;
+                _inputs.look = Vector2.zero;
+                _inputs.move = Vector2.zero;
+            }
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            return;
+        }
+
+        if (_characterController == null) return;
+
+        // Manage Dash Cooldown
+        if (dashCooldownRemaining > 0f)
+        {
+            dashCooldownRemaining -= Time.deltaTime;
+        }
+
+        // Check if Player is Downed in Team Battle: enter prone ground crawl posture and animation
+        bool isDowned = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned);
+        if (isDowned)
+        {
+            _wasDowned = true;
+            if (_fpc != null)
+            {
+                _fpc.MoveSpeed = 1.15f; // Slow prone crawl speed
+                _fpc.SprintSpeed = 1.15f;
+            }
+            if (_cameraTarget != null)
+            {
+                Vector3 camPos = _cameraTarget.localPosition;
+                camPos.y = Mathf.Lerp(camPos.y, 0.45f, Time.deltaTime * 6f);
+                _cameraTarget.localPosition = camPos;
+            }
+            float crawlSpeed = _characterController != null
+                ? new Vector3(_characterController.velocity.x, 0f, _characterController.velocity.z).magnitude
+                : 0f;
+            bool isCrawling = crawlSpeed > 0.1f;
+
+            if (robotHeroVisual != null)
+            {
+                float crawlSway = isCrawling ? Mathf.Sin(Time.time * 5.2f) * 6.0f : 0f;
+                robotHeroVisual.transform.localPosition = Vector3.Lerp(robotHeroVisual.transform.localPosition, new Vector3(0f, 0.22f, -0.40f), Time.deltaTime * 10f);
+                robotHeroVisual.transform.localRotation = Quaternion.Slerp(robotHeroVisual.transform.localRotation, Quaternion.Euler(82f, 0f, crawlSway), Time.deltaTime * 10f);
+            }
+            if (robotHeroAnimator != null)
+            {
+                robotHeroAnimator.speed = isCrawling ? 0.58f : 0.12f;
+                robotHeroAnimator.Play("WalkFront_Shoot_AR");
+            }
+            return; // Cannot sprint, dash, or revive while downed and crawling
+        }
+        else if (_wasDowned)
+        {
+            _wasDowned = false;
+            ResetMovementState();
+        }
+
+        if (robotHeroVisual != null)
+        {
+            robotHeroVisual.transform.localPosition = Vector3.Lerp(robotHeroVisual.transform.localPosition, Vector3.zero, Time.deltaTime * 12f);
+        }
+
+        HandleRevivalInteractions();
+        HandleCrouchInput();
+        HandleDashInput();
+        HandleAimCameraInput();
+        HandleJumpEffect();
+        HandleObstacleJumpAssist();
+        UpdateCrouchAndSlide();
+        UpdateDash();
+        UpdateCharacterAnimation();
+    }
+
+    private void HandleRevivalInteractions()
+    {
+        _downedTeammateNearby = null;
+        _downedRemotePlayerNearby = null;
+        int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        float closestDist = 2.8f;
+
+        // 1. Check AI squadmates
+        foreach (var b in OasisCombatAI.ActiveBots)
+        {
+            if (b == null || b.teamId != localPlayerTeam || !b.isDowned) continue;
+            float d = Vector3.Distance(transform.position, b.transform.position);
+            if (d < closestDist)
+            {
+                closestDist = d;
+                _downedTeammateNearby = b;
+            }
+        }
+
+        // 2. Check remote human squadmates
+        if (OasisNetworkManager.Instance != null)
+        {
+            var remoteList = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+            for (int i = 0; i < remoteList.Count; i++)
+            {
+                var rp = remoteList[i];
+                if (rp == null || rp.teamId != localPlayerTeam || !rp.isDowned || rp.transform == null) continue;
+                float d = Vector3.Distance(transform.position, rp.transform.position);
+                if (d < closestDist)
+                {
+                    closestDist = d;
+                    _downedTeammateNearby = null;
+                    _downedRemotePlayerNearby = rp;
+                }
+            }
+        }
+
+        if (_downedTeammateNearby != null)
+        {
+            bool reviveHeld = OasisKeybindManager.IsPressed(OasisAction.Revive);
+            if (reviveHeld)
+            {
+                _downedTeammateNearby.reviveProgress += Time.deltaTime / 2.5f;
+                if (_downedTeammateNearby.reviveProgress >= 1.0f)
+                {
+                    _downedTeammateNearby.Revive();
+                    OasisShooterManager.Instance?.AddPlayerScore(75);
+                    OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>SQUADMATE RESURRECTED! +75 PTS</color>", 3.0f);
+                    _downedTeammateNearby = null;
+                }
+            }
+            else if (_downedTeammateNearby.reviveProgress > 0f)
+            {
+                _downedTeammateNearby.reviveProgress = Mathf.Max(0f, _downedTeammateNearby.reviveProgress - Time.deltaTime * 0.4f);
+            }
+        }
+        else if (_downedRemotePlayerNearby != null)
+        {
+            bool reviveHeld = OasisKeybindManager.IsPressed(OasisAction.Revive);
+            if (reviveHeld)
+            {
+                _downedRemotePlayerNearby.reviveProgress += Time.deltaTime / 2.5f;
+                OasisNetworkManager.Instance?.BroadcastReviveProgress(_downedRemotePlayerNearby.id, _downedRemotePlayerNearby.reviveProgress);
+
+                if (_downedRemotePlayerNearby.reviveProgress >= 1.0f)
+                {
+                    OasisNetworkManager.Instance?.BroadcastPlayerRevived(_downedRemotePlayerNearby.id, OasisNetworkManager.Instance.myPlayerId);
+                    _downedRemotePlayerNearby.isDowned = false;
+                    _downedRemotePlayerNearby.reviveProgress = 0f;
+                    OasisNetworkManager.Instance?.ApplyOperativeSkinToRemotePlayer(_downedRemotePlayerNearby);
+                    OasisShooterManager.Instance?.AddPlayerScore(75);
+                    OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>SQUADMATE {_downedRemotePlayerNearby.name.ToUpper()} RESURRECTED! +75 PTS</color>", 3.0f);
+                    _downedRemotePlayerNearby = null;
+                }
+            }
+            else if (_downedRemotePlayerNearby.reviveProgress > 0f)
+            {
+                _downedRemotePlayerNearby.reviveProgress = Mathf.Max(0f, _downedRemotePlayerNearby.reviveProgress - Time.deltaTime * 0.4f);
+                OasisNetworkManager.Instance?.BroadcastReviveProgress(_downedRemotePlayerNearby.id, _downedRemotePlayerNearby.reviveProgress);
+            }
+        }
+    }
+
+    private void HandleCrouchInput()
+    {
+        bool crouchPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Crouch) ||
+                             OasisKeybindManager.WasKeyCodePressedThisFrame(KeyCode.LeftControl);
+        bool ctrlReleased = OasisKeybindManager.WasKeyCodeReleasedThisFrame(KeyCode.LeftControl);
+
+        if (crouchPressed)
+        {
+            isCrouching = !isCrouching;
+            ApplyCrouchSpeed();
+        }
+        else if (ctrlReleased && isCrouching)
+        {
+            isCrouching = false;
+            ApplyCrouchSpeed();
+        }
+    }
+
+    public void ApplyCrouchSpeed()
+    {
+        if (_fpc == null) return;
+        if (isCrouching)
+        {
+            _fpc.MoveSpeed = baseRunSpeed * crouchSpeedMultiplier; // ~3.5 m/s tactical crouch walk
+            _fpc.SprintSpeed = baseRunSpeed * crouchSpeedMultiplier; // disallow sprint during crouch
+        }
+        else
+        {
+            _fpc.MoveSpeed = baseRunSpeed;
+            _fpc.SprintSpeed = baseSprintSpeed;
+        }
+    }
+
+    /// <summary>
+    /// Resets all movement states to clean standing combat run posture (e.g. on match start, revive, or respawn).
+    /// </summary>
+    public void ResetMovementState()
+    {
+        isCrouching = false;
+        isSliding = false;
+        isDashing = false;
+        _currentHeight = standingHeight;
+        _currentCameraY = standingCameraY;
+        if (_characterController != null)
+        {
+            _characterController.height = standingHeight;
+            _characterController.center = _initialCenter;
+        }
+        if (_fpc != null)
+        {
+            _fpc.MoveSpeed = baseRunSpeed;
+            _fpc.SprintSpeed = baseSprintSpeed;
+            _origMoveSpeed = baseRunSpeed;
+            _origSprintSpeed = baseSprintSpeed;
+        }
+        ApplyCrouchSpeed();
+    }
+
+    private void HandleDashInput()
+    {
+        if (dashCooldownRemaining > 0f || isDashing) return;
+
+        bool dashTriggered = OasisKeybindManager.WasPressedThisFrame(OasisAction.Dash) ||
+                             OasisKeybindManager.WasKeyCodePressedThisFrame(KeyCode.LeftAlt);
+
+        if (dashTriggered)
+        {
+            StartDash();
+        }
+    }
+
+    private void StartDash()
+    {
+        isDashing = true;
+        dashCooldownRemaining = dashCooldown;
+        _dashTimeRemaining = dashDuration;
+
+        Vector3 dir = Vector3.zero;
+        if (_inputs != null && _inputs.move.sqrMagnitude > 0.1f)
+        {
+            dir = (transform.right * _inputs.move.x + transform.forward * _inputs.move.y).normalized;
+        }
+        else
+        {
+            dir = transform.forward;
+        }
+
+        _dashDirection = dir;
+
+        // Audio & Visual pulse
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetDashClip(), 0.85f);
+        }
+
+        BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.5f, -_dashDirection, false);
+    }
+
+    private void UpdateDash()
+    {
+        if (!isDashing) return;
+
+        _dashTimeRemaining -= Time.deltaTime;
+        if (_dashTimeRemaining > 0f)
+        {
+            float currentDashSpeed = dashForce * Mathf.Clamp01(_dashTimeRemaining / dashDuration);
+            _characterController.Move(_dashDirection * (currentDashSpeed * Time.deltaTime));
+        }
+        else
+        {
+            isDashing = false;
+        }
+    }
+
+    private void UpdateCrouchAndSlide()
+    {
+        isSliding = false;
+
+        // Smooth height and camera interpolation
+        float targetHeight = isCrouching ? crouchHeight : standingHeight;
+        float targetCamY = isCrouching ? crouchCameraY : standingCameraY;
+
+        _currentHeight = Mathf.Lerp(_currentHeight, targetHeight, Time.deltaTime * 10f);
+        _currentCameraY = Mathf.Lerp(_currentCameraY, targetCamY, Time.deltaTime * 10f);
+
+        _characterController.height = _currentHeight;
+        _characterController.center = new Vector3(_initialCenter.x, _initialCenter.y * (_currentHeight / standingHeight), _initialCenter.z);
+
+        if (_cameraTarget != null)
+        {
+            if (isThirdPerson)
+            {
+                // Third-person camera offset:
+                // Normal: comfortable over-the-shoulder view
+                // Right-Click 3rd Person Aim: tightened over-the-shoulder zoom
+                Vector3 targetCam = isAimingThirdPerson
+                    ? new Vector3(0.48f, _currentCameraY + 0.14f, -1.6f)
+                    : new Vector3(0.68f, _currentCameraY + 0.22f, -2.6f);
+                _cameraTarget.localPosition = Vector3.Lerp(_cameraTarget.localPosition, targetCam, Time.deltaTime * 14f);
+            }
+            else
+            {
+                // First-person eye level for controlled aimed shot (while holding left-click)
+                Vector3 camPos = _cameraTarget.localPosition;
+                camPos.x = Mathf.Lerp(camPos.x, 0f, Time.deltaTime * 18f);
+                camPos.y = _currentCameraY;
+                camPos.z = Mathf.Lerp(camPos.z, 0f, Time.deltaTime * 18f);
+                _cameraTarget.localPosition = camPos;
+            }
+        }
+    }
+
+    private void LateUpdate()
+    {
+        // In third person (or whenever character visual is active), rotate the upper body spine & gun arm to match aim pitch
+        if (isThirdPerson && Camera.main != null)
+        {
+            float pitch = Camera.main.transform.eulerAngles.x;
+            if (pitch > 180f) pitch -= 360f; // Range: -90 (looking up) to +90 (looking down)
+
+            // 1. Rotate spine along forward axis to match vertical look pitch
+            if (_spineBone != null)
+            {
+                _spineBone.Rotate(Vector3.forward, -pitch * 0.85f, Space.Self);
+            }
+
+            // 2. Rotate gun arm bone so rifle points directly along vertical look pitch
+            if (_gunArmBone != null)
+            {
+                _gunArmBone.Rotate(Vector3.forward, pitch * 0.85f, Space.Self);
+            }
+        }
+    }
+
+    private void HandleAimCameraInput()
+    {
+        bool leftHeld = false;
+        bool rightHeld = false;
+
+#if ENABLE_INPUT_SYSTEM
+        if (Mouse.current != null)
+        {
+            leftHeld = Mouse.current.leftButton.isPressed;
+            rightHeld = Mouse.current.rightButton.isPressed;
+        }
+#else
+        leftHeld = Input.GetMouseButton(0);
+        rightHeld = Input.GetMouseButton(1);
+#endif
+
+        isHoldingLeftClickAim = leftHeld;
+        isAimingThirdPerson = rightHeld && !leftHeld;
+
+        // Holding left-click enters 1st person mode for controlled precision shot.
+        // Releasing left-click immediately returns to 3rd person!
+        bool shouldBeFirstPerson = isHoldingLeftClickAim;
+        bool wasFirstPerson = !isThirdPerson;
+
+        if (shouldBeFirstPerson != wasFirstPerson)
+        {
+            isThirdPerson = !shouldBeFirstPerson;
+            SetMeshVisibility(shouldBeFirstPerson);
+        }
+    }
+
+    private void UpdateCharacterAnimation()
+    {
+        if (robotHeroAnimator == null) return;
+
+        float horizontalSpeed = _characterController != null 
+            ? new Vector3(_characterController.velocity.x, 0f, _characterController.velocity.z).magnitude 
+            : 0f;
+
+        if (isCrouching)
+        {
+            if (horizontalSpeed < 0.25f)
+            {
+                // Stationary crouch pose (Idle_Ducking_AR was imported facing backwards, so rotate visual mesh 180 deg to face aim)
+                if (robotHeroVisual != null)
+                {
+                    robotHeroVisual.transform.localRotation = Quaternion.Euler(0, 180f, 0);
+                }
+                robotHeroAnimator.speed = 1.0f;
+                robotHeroAnimator.Play("Idle_Ducking_AR");
+            }
+            else
+            {
+                // Actively walking while crouching: physically move legs and step!
+                if (robotHeroVisual != null)
+                {
+                    robotHeroVisual.transform.localRotation = Quaternion.identity;
+                }
+                robotHeroAnimator.speed = 0.85f;
+                robotHeroAnimator.Play("WalkFront_Shoot_AR");
+            }
+        }
+        else
+        {
+            robotHeroAnimator.speed = 1.0f;
+            if (robotHeroVisual != null)
+            {
+                robotHeroVisual.transform.localRotation = Quaternion.identity;
+            }
+
+            if (horizontalSpeed > 2.0f)
+            {
+                robotHeroAnimator.Play("Run_guard_AR");
+            }
+            else if (horizontalSpeed > 0.35f)
+            {
+                robotHeroAnimator.Play("WalkFront_Shoot_AR");
+            }
+            else
+            {
+                robotHeroAnimator.Play("Idle_Shoot_Ar");
+            }
+        }
+    }
+
+    private void SetupLocalRobotHero()
+    {
+        GameObject robotPrefab = Resources.Load<GameObject>("RobotHero");
+#if UNITY_EDITOR
+        if (robotPrefab == null)
+        {
+            robotPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/SciFiWarriorPBRHPPolyart/Prefabs/PBRCharacter.prefab");
+        }
+#endif
+        if (robotPrefab != null)
+        {
+            robotHeroVisual = Instantiate(robotPrefab, transform);
+            robotHeroVisual.name = "Local_RobotHero";
+            robotHeroVisual.transform.localPosition = Vector3.zero;
+            robotHeroVisual.transform.localRotation = Quaternion.identity;
+            robotHeroVisual.transform.localScale = Vector3.one;
+
+            var cols = robotHeroVisual.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++) Destroy(cols[i]);
+
+            Material urpMat = Resources.Load<Material>("RobotHero_URP");
+#if UNITY_EDITOR
+            if (urpMat == null) urpMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/SciFiWarriorPBRHPPolyart/Materials/RobotHero_URP.mat");
+#endif
+            if (urpMat != null)
+            {
+                var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < rends.Length; i++) rends[i].sharedMaterial = urpMat;
+            }
+
+            RuntimeAnimatorController animCtrl = Resources.Load<RuntimeAnimatorController>("RobotHero");
+            if (animCtrl == null) animCtrl = Resources.Load<RuntimeAnimatorController>("SciFiWarrior");
+#if UNITY_EDITOR
+            if (animCtrl == null) animCtrl = UnityEditor.AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Resources/RobotHero.controller");
+            if (animCtrl == null) animCtrl = UnityEditor.AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/SciFiWarriorPBRHPPolyart/Animators/SciFiWarrior.controller");
+#endif
+            robotHeroAnimator = robotHeroVisual.GetComponent<Animator>();
+            if (robotHeroAnimator == null) robotHeroAnimator = robotHeroVisual.AddComponent<Animator>();
+            if (robotHeroAnimator != null)
+            {
+                robotHeroAnimator.applyRootMotion = false;
+                if (animCtrl != null) robotHeroAnimator.runtimeAnimatorController = animCtrl;
+            }
+
+            // Find Spine / Chest bone to enable vertical aim pitch (aiming up/down)
+            _spineBone = null;
+            _gunArmBone = null;
+            var allBones = robotHeroVisual.GetComponentsInChildren<Transform>(true);
+            foreach (var b in allBones)
+            {
+                if (b.name == "ArmPosition_Right") _gunArmBone = b;
+                if (b.name == "Chest" && _spineBone == null) _spineBone = b;
+                if (b.name == "Spine" && _spineBone == null) _spineBone = b;
+            }
+
+            if (_spineBone == null && robotHeroAnimator != null && robotHeroAnimator.isHuman)
+            {
+                _spineBone = robotHeroAnimator.GetBoneTransform(HumanBodyBones.Chest) 
+                           ?? robotHeroAnimator.GetBoneTransform(HumanBodyBones.Spine);
+            }
+
+            SetMeshVisibility(!isThirdPerson);
+        }
+    }
+
+    public void SetMeshVisibility(bool firstPerson)
+    {
+        if (robotHeroVisual != null)
+        {
+            var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in rends)
+            {
+                // In First-Person, keep shadows casting onto the ground while hiding mesh from camera
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                r.enabled = !firstPerson;
+            }
+        }
+
+        // Toggle First-Person Blaster Weapon model visibility (hidden in 3rd person, visible in 1st person)
+        var weapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+        if (weapon == null) weapon = FindAnyObjectByType<BlasterWeapon>();
+        if (weapon != null)
+        {
+            weapon.SetWeaponVisualActive(firstPerson);
+        }
+    }
+
+    public void ApplyCharacterSkin(Texture2D texture, Color accentColor, string skinName)
+    {
+        if (robotHeroVisual == null) SetupLocalRobotHero();
+        if (robotHeroVisual == null) return;
+
+        Material baseMat = Resources.Load<Material>("RobotHero_URP");
+        if (baseMat == null) baseMat = new Material(OasisShaderHelper.GetLitShader());
+
+        Material customMat = new Material(baseMat);
+        customMat.name = $"{skinName}_RuntimeMat";
+
+        if (texture != null)
+        {
+            if (customMat.HasProperty("_BaseMap")) customMat.SetTexture("_BaseMap", texture);
+            if (customMat.HasProperty("_MainTex")) customMat.SetTexture("_MainTex", texture);
+        }
+        customMat.color = Color.white;
+
+        if (customMat.HasProperty("_EmissionColor"))
+        {
+            customMat.EnableKeyword("_EMISSION");
+            customMat.SetColor("_EmissionColor", accentColor * 1.5f);
+        }
+
+        var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in rends)
+        {
+            r.sharedMaterial = customMat;
+        }
+
+        SetMeshVisibility(!isThirdPerson);
+    }
+
+    public void SetThirdPersonMode(bool thirdPerson)
+    {
+        isThirdPerson = thirdPerson;
+        SetMeshVisibility(!isThirdPerson);
+        OasisShooterManager.Instance?.ShowNotificationBanner(
+            isThirdPerson ? "THIRD-PERSON CAMERA (PRESS V TO TOGGLE)" : "FIRST-PERSON CAMERA (PRESS V TO TOGGLE)", 2f);
+    }
+
+    private bool _wasGroundedLastFrame = true;
+    private void HandleJumpEffect()
+    {
+        if (_fpc == null) return;
+
+        // Ensure configured Jump key is directly captured and passed to StarterAssetsInputs jump flag
+        bool jumpKeyPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump);
+        if (jumpKeyPressed && _inputs != null)
+        {
+            _inputs.JumpInput(true);
+        }
+
+        if (_wasGroundedLastFrame && !_fpc.Grounded && _inputs != null && _inputs.jump)
+        {
+            // Just launched into a jump
+            if (_audioSource != null)
+            {
+                _audioSource.PlayOneShot(ProceduralAudio.GetJumpClip(), 0.6f);
+            }
+            if (robotHeroAnimator != null)
+            {
+                robotHeroAnimator.Play("Jump", 0, 0f);
+            }
+        }
+
+        _wasGroundedLastFrame = _fpc.Grounded;
+    }
+
+    private void HandleObstacleJumpAssist()
+    {
+        if (!enableObstacleJump || _characterController == null || _fpc == null) return;
+        if (!_characterController.isGrounded)
+        {
+            _playerStuckTimer = 0f;
+            return;
+        }
+
+        // Check if player is attempting forward movement
+        bool movingForward = (_inputs != null && _inputs.move.y > 0.25f) ||
+                             OasisKeybindManager.IsPressed(OasisAction.MoveForward) ||
+                             OasisKeybindManager.IsKeyCodePressed(KeyCode.UpArrow);
+
+        if (!movingForward)
+        {
+            _playerStuckTimer = 0f;
+            _playerLastSampledPos = transform.position;
+            return;
+        }
+
+        // Forward raycast at shin/knee level (0.35m up)
+        Vector3 kneePos = transform.position + Vector3.up * 0.35f;
+        bool lowObstacleHit = Physics.Raycast(kneePos, transform.forward, out RaycastHit hit, 0.95f);
+
+        // Check if head/chest level is clear (vaultable obstacle, not an enormous wall)
+        Vector3 chestPos = transform.position + Vector3.up * 1.5f;
+        bool chestClear = !Physics.Raycast(chestPos, transform.forward, 1.1f);
+
+        // Check if horizontal progress is blocked
+        float horizontalSpeed = new Vector2(_characterController.velocity.x, _characterController.velocity.z).magnitude;
+        bool isImpeded = (horizontalSpeed < 0.8f) && ((transform.position - _playerLastSampledPos).sqrMagnitude < 0.05f);
+
+        if (lowObstacleHit && chestClear && hit.collider != null && !hit.collider.isTrigger)
+        {
+            _playerStuckTimer += Time.deltaTime;
+            // Trigger vault jump if pushing against low obstacle for >0.25s or if impeded
+            if (_playerStuckTimer >= 0.25f || isImpeded)
+            {
+                if (_inputs != null)
+                {
+                    _inputs.JumpInput(true);
+                }
+                _characterController.Move(transform.forward * (obstacleVaultForwardBoost * Time.deltaTime));
+
+                _playerStuckTimer = 0f;
+                _playerLastSampledPos = transform.position;
+            }
+        }
+        else if (isImpeded)
+        {
+            // General stuck fallback (caught in rock crevices/terrain seams):
+            _playerStuckTimer += Time.deltaTime;
+            if (_playerStuckTimer >= 0.75f)
+            {
+                if (_inputs != null) _inputs.JumpInput(true);
+                _characterController.Move((transform.forward + Vector3.up * 0.5f) * (obstacleVaultForwardBoost * Time.deltaTime));
+                _playerStuckTimer = 0f;
+                _playerLastSampledPos = transform.position;
+            }
+        }
+        else
+        {
+            _playerStuckTimer = 0f;
+            _playerLastSampledPos = transform.position;
+        }
+    }
+
+    private Texture2D _crosshairWhiteTex;
+    private float _hitmarkerDisplayTimer = 0f;
+
+    public void TriggerHitmarker()
+    {
+        _hitmarkerDisplayTimer = 0.15f;
+    }
+
+    private void OnGUI()
+    {
+        // Only draw aiming reticle during active gameplay (not while character customizer or post-match modal is open)
+        var customizer = OasisCharacterCustomizer.Instance;
+        if (customizer != null && customizer.isSelectionActive) return;
+
+        var mgr = OasisShooterManager.Instance;
+        if (mgr != null && (mgr.isSimulationMode || mgr.isMatchFinished))
+        {
+            if (mgr.isSimulationMode && !mgr.isMatchFinished)
+            {
+                float cx = Screen.width * 0.5f;
+                DrawTopScoreboardHUD(cx);
+            }
+            return;
+        }
+
+        if (_crosshairWhiteTex == null)
+        {
+            _crosshairWhiteTex = new Texture2D(1, 1);
+            _crosshairWhiteTex.SetPixel(0, 0, Color.white);
+            _crosshairWhiteTex.Apply();
+        }
+
+        float centerX = Screen.width * 0.5f;
+        float centerY = Screen.height * 0.5f;
+
+        // If aiming (Right click 3rd person or Left click 1st person), color cyan/red, tighter reticle
+        Color reticleColor = isAimingThirdPerson 
+            ? new Color(1.0f, 0.35f, 0.25f, 0.95f) 
+            : new Color(0.2f, 0.95f, 1.0f, 0.85f);
+
+        if (_hitmarkerDisplayTimer > 0f)
+        {
+            _hitmarkerDisplayTimer -= Time.deltaTime;
+            reticleColor = Color.red;
+        }
+
+        GUI.color = reticleColor;
+
+        // 1. Center Aim Dot (4x4)
+        GUI.DrawTexture(new Rect(centerX - 2, centerY - 2, 4, 4), _crosshairWhiteTex);
+
+        // 2. Aiming Reticle Ticks / Ring (Circle aesthetic)
+        float radius = isAimingThirdPerson ? 12f : 18f;
+        float tickLen = isAimingThirdPerson ? 5f : 7f;
+        float tickThick = 2f;
+
+        // Top tick
+        GUI.DrawTexture(new Rect(centerX - (tickThick * 0.5f), centerY - radius - tickLen, tickThick, tickLen), _crosshairWhiteTex);
+        // Bottom tick
+        GUI.DrawTexture(new Rect(centerX - (tickThick * 0.5f), centerY + radius, tickThick, tickLen), _crosshairWhiteTex);
+        // Left tick
+        GUI.DrawTexture(new Rect(centerX - radius - tickLen, centerY - (tickThick * 0.5f), tickLen, tickThick), _crosshairWhiteTex);
+        // Right tick
+        GUI.DrawTexture(new Rect(centerX + radius, centerY - (tickThick * 0.5f), tickLen, tickThick), _crosshairWhiteTex);
+
+        // 3. Diagonal Hitmarker ticks if hit enemy
+        if (_hitmarkerDisplayTimer > 0f)
+        {
+            GUI.color = new Color(1f, 0.15f, 0.15f, 0.95f);
+            float hmDist = 10f;
+            float hmLen = 6f;
+            // Draw diagonal hit indicators
+            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY - hmDist - hmLen, hmLen, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX + hmDist, centerY - hmDist - hmLen, hmLen, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY + hmDist, hmLen, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX + hmDist, centerY + hmDist, hmLen, 2), _crosshairWhiteTex);
+        }
+
+        GUI.color = Color.white;
+
+        // 4. Downed Player HUD Overlay
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned)
+        {
+            float bw = 420f;
+            float bh = 95f;
+            float bx = centerX - (bw * 0.5f);
+            float by = Screen.height * 0.62f;
+
+            // Dark Backdrop
+            GUI.color = new Color(0.08f, 0.04f, 0.04f, 0.92f);
+            GUI.DrawTexture(new Rect(bx, by, bw, bh), _crosshairWhiteTex);
+
+            // Red glowing border
+            GUI.color = new Color(1f, 0.25f, 0.25f, 0.95f);
+            GUI.DrawTexture(new Rect(bx, by, bw, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(bx, by + bh - 2, bw, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(bx, by, 2, bh), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(bx + bw - 2, by, 2, bh), _crosshairWhiteTex);
+
+            GUIStyle downedStyle = new GUIStyle(GUI.skin.label);
+            downedStyle.alignment = TextAnchor.MiddleCenter;
+            downedStyle.fontSize = 16;
+            downedStyle.fontStyle = FontStyle.Bold;
+            downedStyle.normal.textColor = new Color(1f, 0.35f, 0.35f);
+
+            float remaining = Mathf.Max(0f, OasisShooterManager.Instance.playerDownedTimer);
+            GUI.Label(new Rect(bx, by + 8, bw, 24), $"CHASSIS CRITICAL // DOWNED ({remaining:F1}s)", downedStyle);
+
+            float pProg = OasisShooterManager.Instance.playerReviveProgress;
+            if (pProg > 0f)
+            {
+                downedStyle.fontSize = 13;
+                downedStyle.normal.textColor = new Color(0.25f, 0.95f, 1f);
+                GUI.Label(new Rect(bx, by + 34, bw, 20), $"BEING RESURRECTED BY SQUADMATE: {Mathf.RoundToInt(pProg * 100)}%", downedStyle);
+
+                // Progress Bar
+                float barW = bw - 40f;
+                GUI.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+                GUI.DrawTexture(new Rect(bx + 20, by + 60, barW, 16), _crosshairWhiteTex);
+                GUI.color = new Color(0.2f, 0.95f, 1f, 0.95f);
+                GUI.DrawTexture(new Rect(bx + 20, by + 60, barW * Mathf.Clamp01(pProg), 16), _crosshairWhiteTex);
+            }
+            else
+            {
+                downedStyle.fontSize = 12;
+                downedStyle.fontStyle = FontStyle.Normal;
+                downedStyle.normal.textColor = new Color(0.9f, 0.85f, 0.85f);
+                GUI.Label(new Rect(bx, by + 36, bw, 42), "AI SQUADMATE RUSHING TO YOUR AID\nHOLD FOR EXTRACTION AND RESURRECTION", downedStyle);
+            }
+
+            GUI.color = Color.white;
+            return;
+        }
+
+        // 5. Teammate Revival Prompt [HOLD E]
+        if (_downedTeammateNearby != null || _downedRemotePlayerNearby != null)
+        {
+            string downedName = _downedTeammateNearby != null ? _downedTeammateNearby.botName : _downedRemotePlayerNearby.name;
+            float downedTimer = _downedTeammateNearby != null ? _downedTeammateNearby.downedTimer : _downedRemotePlayerNearby.downedTimer;
+            float rProg = _downedTeammateNearby != null ? _downedTeammateNearby.reviveProgress : _downedRemotePlayerNearby.reviveProgress;
+
+            float pw = 380f;
+            float ph = 85f;
+            float px = centerX - (pw * 0.5f);
+            float py = centerY + 50f;
+
+            // Backdrop
+            GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.92f);
+            GUI.DrawTexture(new Rect(px, py, pw, ph), _crosshairWhiteTex);
+
+            // Cyan border
+            GUI.color = new Color(0.2f, 0.95f, 1f, 0.95f);
+            GUI.DrawTexture(new Rect(px, py, pw, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(px, py + ph - 2, pw, 2), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(px, py, 2, ph), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(px + pw - 2, py, 2, ph), _crosshairWhiteTex);
+
+            GUIStyle promptStyle = new GUIStyle(GUI.skin.label);
+            promptStyle.alignment = TextAnchor.MiddleCenter;
+            promptStyle.fontSize = 15;
+            promptStyle.fontStyle = FontStyle.Bold;
+            promptStyle.normal.textColor = new Color(0.2f, 0.95f, 1f);
+
+            string revKey = OasisKeybindManager.FormatKeyName(OasisKeybindManager.GetKey(OasisAction.Revive));
+            GUI.Label(new Rect(px, py + 8, pw, 22), $"[HOLD {revKey}] RESURRECT SQUADMATE", promptStyle);
+
+            promptStyle.fontSize = 12;
+            promptStyle.fontStyle = FontStyle.Normal;
+            promptStyle.normal.textColor = new Color(1f, 0.85f, 0.35f);
+            GUI.Label(new Rect(px, py + 30, pw, 18), $"{downedName} (Bleedout: {downedTimer:F1}s)", promptStyle);
+
+            float barW = pw - 30f;
+            GUI.color = new Color(0.15f, 0.2f, 0.25f, 0.8f);
+            GUI.DrawTexture(new Rect(px + 15, py + 54, barW, 14), _crosshairWhiteTex);
+
+            if (rProg > 0f)
+            {
+                GUI.color = new Color(0.2f, 0.95f, 1f, 0.95f);
+                GUI.DrawTexture(new Rect(px + 15, py + 54, barW * Mathf.Clamp01(rProg), 14), _crosshairWhiteTex);
+            }
+
+            GUI.color = Color.white;
+        }
+
+        // 6. Top Match Scoreboard Header
+        DrawTopScoreboardHUD(centerX);
+
+        // 7. Bottom Left Health & Shield Display
+        DrawBottomLeftHealthHUD();
+
+        // 8. Bottom Right Tactical Weapon & Ammo Display
+        DrawBottomRightAmmoHUD();
+
+        // 9. Floating Kill / Notification Banner
+        DrawNotificationBannerHUD(centerX);
+    }
+
+    private void DrawTopScoreboardHUD(float centerX)
+    {
+        var mgr = OasisShooterManager.Instance;
+        if (mgr == null || !mgr.isTeamBattleActive) return;
+
+        float sbW = 540f;
+        float sbH = 58f;
+        float sbX = centerX - (sbW * 0.5f);
+        float sbY = 16f;
+
+        // Dark tactical backdrop
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
+        GUI.DrawTexture(new Rect(sbX, sbY, sbW, sbH), _crosshairWhiteTex);
+
+        // Sleek top & bottom accent borders
+        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.7f);
+        GUI.DrawTexture(new Rect(sbX, sbY, sbW, 2), _crosshairWhiteTex);
+        GUI.color = new Color(0.12f, 0.20f, 0.28f, 0.9f);
+        GUI.DrawTexture(new Rect(sbX, sbY + sbH - 2, sbW, 2), _crosshairWhiteTex);
+
+        // Styles
+        GUIStyle teamStyle = new GUIStyle(GUI.skin.label);
+        teamStyle.fontSize = 19;
+        teamStyle.fontStyle = FontStyle.Bold;
+
+        // ALPHA Score (Left)
+        teamStyle.alignment = TextAnchor.MiddleLeft;
+        teamStyle.normal.textColor = new Color(0.15f, 0.85f, 1.0f);
+        GUI.Label(new Rect(sbX + 22, sbY + 6, 160, 26), $"ALPHA  {mgr.alphaKills}", teamStyle);
+
+        // BRAVO Score (Right)
+        teamStyle.alignment = TextAnchor.MiddleRight;
+        teamStyle.normal.textColor = new Color(1.0f, 0.35f, 0.25f);
+        GUI.Label(new Rect(sbX + sbW - 182, sbY + 6, 160, 26), $"{mgr.bravoKills}  BRAVO", teamStyle);
+
+        // Center Countdown Timer
+        int minutes = Mathf.FloorToInt(mgr.matchTimeRemaining / 60f);
+        int seconds = Mathf.FloorToInt(mgr.matchTimeRemaining % 60f);
+        string timeStr = $"{minutes:00}:{seconds:00}";
+
+        GUIStyle timerStyle = new GUIStyle(GUI.skin.label);
+        timerStyle.alignment = TextAnchor.MiddleCenter;
+        timerStyle.fontSize = 20;
+        timerStyle.fontStyle = FontStyle.Bold;
+        timerStyle.normal.textColor = mgr.matchTimeRemaining <= 30f ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.95f, 0.95f, 0.95f);
+        GUI.Label(new Rect(sbX + 180, sbY + 4, 180, 26), timeStr, timerStyle);
+
+        // Subtitle: Goal and Player's Score
+        int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        string myTeamStr = (myTeam == 0) ? "<color=#26D9FF>SQUAD ALPHA</color>" : "<color=#FF5544>SQUAD BRAVO</color>";
+
+        GUIStyle subStyle = new GUIStyle(GUI.skin.label);
+        subStyle.alignment = TextAnchor.MiddleCenter;
+        subStyle.fontSize = 12;
+        subStyle.fontStyle = FontStyle.Normal;
+        subStyle.richText = true;
+        subStyle.normal.textColor = new Color(0.85f, 0.88f, 0.92f);
+        GUI.Label(new Rect(sbX + 20, sbY + 32, sbW - 40, 20), $"{myTeamStr}   |   SCORE: <color=#FFD700>{mgr.score} PTS</color>   |   GOAL: {mgr.targetKills} KILLS", subStyle);
+
+        GUI.color = Color.white;
+    }
+
+    private void DrawBottomLeftHealthHUD()
+    {
+        var mgr = OasisShooterManager.Instance;
+        if (mgr == null) return;
+
+        float hpW = 280f;
+        float hpH = 68f;
+        float hpX = 36f;
+        float hpY = Screen.height - 96f;
+
+        // Dark tactical container
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
+        GUI.DrawTexture(new Rect(hpX, hpY, hpW, hpH), _crosshairWhiteTex);
+
+        // Cyan left accent bar
+        GUI.color = new Color(0.2f, 0.95f, 1.0f, 0.9f);
+        GUI.DrawTexture(new Rect(hpX, hpY, 3, hpH), _crosshairWhiteTex);
+
+        // 1. Shield Bar (Top)
+        float curHp = mgr.currentHealth;
+        float maxHp = mgr.maxHealth > 0f ? mgr.maxHealth : 100f;
+        float shieldPercent = Mathf.Clamp01(curHp / maxHp);
+
+        GUIStyle labelStyle = new GUIStyle(GUI.skin.label);
+        labelStyle.fontSize = 11;
+        labelStyle.fontStyle = FontStyle.Bold;
+        labelStyle.alignment = TextAnchor.MiddleLeft;
+        labelStyle.normal.textColor = new Color(0.3f, 0.85f, 1.0f);
+        GUI.Label(new Rect(hpX + 12, hpY + 8, 80, 16), "SHIELD", labelStyle);
+
+        labelStyle.alignment = TextAnchor.MiddleRight;
+        labelStyle.normal.textColor = Color.white;
+        GUI.Label(new Rect(hpX + hpW - 90, hpY + 8, 76, 16), $"{Mathf.CeilToInt(curHp)} / {Mathf.CeilToInt(maxHp)}", labelStyle);
+
+        // Shield Track & Fill
+        float barX = hpX + 12;
+        float barW = hpW - 26;
+        GUI.color = new Color(0.12f, 0.16f, 0.22f, 0.9f);
+        GUI.DrawTexture(new Rect(barX, hpY + 26, barW, 8), _crosshairWhiteTex);
+
+        GUI.color = new Color(0.15f, 0.85f, 1.0f, 0.95f);
+        GUI.DrawTexture(new Rect(barX, hpY + 26, barW * shieldPercent, 8), _crosshairWhiteTex);
+
+        // 2. Health Bar (Bottom)
+        labelStyle.alignment = TextAnchor.MiddleLeft;
+        Color hpColor = (curHp > 60f) ? new Color(0.2f, 0.95f, 0.45f) : ((curHp > 30f) ? new Color(1.0f, 0.8f, 0.2f) : new Color(1.0f, 0.25f, 0.25f));
+        labelStyle.normal.textColor = hpColor;
+        GUI.Label(new Rect(hpX + 12, hpY + 38, 80, 16), "HEALTH", labelStyle);
+
+        labelStyle.alignment = TextAnchor.MiddleRight;
+        labelStyle.normal.textColor = Color.white;
+        GUI.Label(new Rect(hpX + hpW - 90, hpY + 38, 76, 16), $"{Mathf.CeilToInt(curHp)}%", labelStyle);
+
+        // Health Track & Fill
+        GUI.color = new Color(0.12f, 0.16f, 0.22f, 0.9f);
+        GUI.DrawTexture(new Rect(barX, hpY + 54, barW, 6), _crosshairWhiteTex);
+
+        GUI.color = hpColor;
+        GUI.DrawTexture(new Rect(barX, hpY + 54, barW * (curHp / maxHp), 6), _crosshairWhiteTex);
+
+        GUI.color = Color.white;
+    }
+
+    private void DrawBottomRightAmmoHUD()
+    {
+        var weapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+        if (weapon == null) weapon = FindAnyObjectByType<BlasterWeapon>();
+        if (weapon == null) return;
+
+        float amW = 210f;
+        float amH = 68f;
+        float amX = Screen.width - amW - 36f;
+        float amY = Screen.height - 96f;
+
+        // Dark tactical container
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
+        GUI.DrawTexture(new Rect(amX, amY, amW, amH), _crosshairWhiteTex);
+
+        // Right accent bar
+        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.9f);
+        GUI.DrawTexture(new Rect(amX + amW - 3, amY, 3, amH), _crosshairWhiteTex);
+
+        // Weapon Label
+        GUIStyle wStyle = new GUIStyle(GUI.skin.label);
+        wStyle.fontSize = 11;
+        wStyle.fontStyle = FontStyle.Bold;
+        wStyle.alignment = TextAnchor.MiddleLeft;
+        wStyle.normal.textColor = new Color(0.3f, 0.85f, 1.0f);
+        GUI.Label(new Rect(amX + 14, amY + 8, 120, 16), "PULSE BLASTER", wStyle);
+
+        // Controls hint
+        GUIStyle hintStyle = new GUIStyle(GUI.skin.label);
+        hintStyle.fontSize = 10;
+        hintStyle.alignment = TextAnchor.MiddleRight;
+        hintStyle.normal.textColor = new Color(0.6f, 0.7f, 0.8f);
+        string relKey = OasisKeybindManager.FormatKeyName(OasisKeybindManager.GetKey(OasisAction.Reload));
+        GUI.Label(new Rect(amX + amW - 86, amY + 8, 72, 16), $"[{relKey}: RELOAD]", hintStyle);
+
+        // Ammo Numbers
+        GUIStyle ammoStyle = new GUIStyle(GUI.skin.label);
+        ammoStyle.alignment = TextAnchor.MiddleCenter;
+        ammoStyle.fontSize = 24;
+        ammoStyle.fontStyle = FontStyle.Bold;
+
+        if (weapon.isReloading)
+        {
+            ammoStyle.fontSize = 16;
+            ammoStyle.normal.textColor = new Color(1.0f, 0.4f, 0.3f);
+            GUI.Label(new Rect(amX + 14, amY + 28, amW - 28, 30), "RELOADING...", ammoStyle);
+        }
+        else
+        {
+            ammoStyle.normal.textColor = weapon.currentAmmo <= 3 ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.2f, 0.95f, 1.0f);
+            GUI.Label(new Rect(amX + 14, amY + 26, amW - 28, 32), $"{weapon.currentAmmo} / {weapon.maxAmmo}", ammoStyle);
+        }
+
+        GUI.color = Color.white;
+    }
+
+    private void DrawNotificationBannerHUD(float centerX)
+    {
+        var mgr = OasisShooterManager.Instance;
+        if (mgr == null || string.IsNullOrEmpty(mgr.ActiveNotificationBanner)) return;
+
+        float bnW = 560f;
+        float bnH = 48f;
+        float bnX = centerX - (bnW * 0.5f);
+        float bnY = 82f;
+
+        GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.92f);
+        GUI.DrawTexture(new Rect(bnX, bnY, bnW, bnH), _crosshairWhiteTex);
+
+        GUI.color = new Color(1.0f, 0.85f, 0.2f, 0.9f);
+        GUI.DrawTexture(new Rect(bnX, bnY, bnW, 2), _crosshairWhiteTex);
+        GUI.DrawTexture(new Rect(bnX, bnY + bnH - 2, bnW, 2), _crosshairWhiteTex);
+
+        GUIStyle bannerStyle = new GUIStyle(GUI.skin.label);
+        bannerStyle.alignment = TextAnchor.MiddleCenter;
+        bannerStyle.fontSize = 14;
+        bannerStyle.fontStyle = FontStyle.Bold;
+        bannerStyle.richText = true;
+        bannerStyle.normal.textColor = Color.white;
+
+        GUI.Label(new Rect(bnX + 10, bnY + 4, bnW - 20, bnH - 8), mgr.ActiveNotificationBanner, bannerStyle);
+        GUI.color = Color.white;
+    }
+}

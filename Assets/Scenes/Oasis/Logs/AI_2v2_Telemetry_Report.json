@@ -1,0 +1,2467 @@
+﻿{
+    "matchId": "SIM_20261018_172355",
+    "durationSeconds": 163.55780029296875,
+    "alphaScore": 0,
+    "bravoScore": 10,
+    "bots": [
+        {
+            "botName": "[BRAVO] VIPER",
+            "teamId": 1,
+            "operativeClass": "combat_medic",
+            "knockdownsInflicted": 0,
+            "eliminationsCompleted": 0,
+            "timesDowned": 0,
+            "fullDeaths": 0,
+            "revivesInitiated": 0,
+            "revivesCompleted": 0,
+            "revivesInterrupted": 0,
+            "shotsFired": 93,
+            "shotsHit": 0,
+            "totalDamageDealt": 0.0,
+            "totalDamageTaken": 0.0,
+            "reloadsPerformed": 5,
+            "stuckIncidents": 3,
+            "timeInAggressivePush": 0.0,
+            "timeInLateralFlank": 0.0,
+            "timeInTacticalFallback": 0.0,
+            "timeInReviveAction": 0.0,
+            "timeInDownedState": 0.0,
+            "totalDistanceMoved": 782.5281982421875,
+            "lastRecordedPosition": {
+                "x": -0.7161658406257629,
+                "y": -6.744495391845703,
+                "z": -167.55935668945313
+            },
+            "totalEngagementDistance": 0.0,
+            "engagementDistanceSamples": 0
+        },
+        {
+            "botName": "[BRAVO] RAZOR",
+            "teamId": 1,
+            "operativeClass": "cyber_outlaw",
+            "knockdownsInflicted": 0,
+            "eliminationsCompleted": 0,
+            "timesDowned": 1,
+            "fullDeaths": 1,
+            "revivesInitiated": 0,
+            "revivesCompleted": 0,
+            "revivesInterrupted": 0,
+            "shotsFired": 76,
+            "shotsHit": 0,
+            "totalDamageDealt": 0.0,
+            "totalDamageTaken": 0.0,
+            "reloadsPerformed": 4,
+            "stuckIncidents": 7,
+            "timeInAggressivePush": 0.0,
+            "timeInLateralFlank": 0.0,
+            "timeInTacticalFallback": 0.0,
+            "timeInReviveAction": 0.0,
+            "timeInDownedState": 1.0006601810455322,
+            "totalDistanceMoved": 804.35302734375,
+            "lastRecordedPosition": {
+                "x": -6.678941249847412,
+                "y": -6.744403839111328,
+                "z": -169.8555450439453
+            },
+            "totalEngagementDistance": 0.0,
+            "engagementDistanceSamples": 0
+        }
+    ],
+    "recentEvents": [
+        {
+            "matchTimestamp": 0.0,
+            "eventCategory": "SESSION_START",
+            "subjectBot": "SYSTEM",
+            "targetOrAlly": "ALL",
+            "range": 0.0,
+            "narrative": "2v2 AI Simulation Session Started (ID: SIM_20261018_172355)"
+        },
+        {
+            "matchTimestamp": 0.0,
+            "eventCategory": "SPAWN",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "WEST OUTPOST",
+            "range": 0.0,
+            "narrative": "Spawned at (-37.2, -2.6, -145.9) [WEST OUTPOST]"
+        },
+        {
+            "matchTimestamp": 0.0,
+            "eventCategory": "SPAWN",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "WEST OUTPOST",
+            "range": 0.0,
+            "narrative": "Spawned at (-37.0, -2.6, -145.4) [WEST OUTPOST]"
+        },
+        {
+            "matchTimestamp": 0.07921600341796875,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 0.07921600341796875,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 2.2686119079589844,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 2.574047088623047,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 4.347240447998047,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 4.812915802001953,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 6.104724884033203,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.9, -144.5). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 7.308780670166016,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.9, -144.4). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 7.791446685791016,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 8.513553619384766,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.9, -144.2). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 9.723758697509766,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.9, -144.3). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 10.355892181396484,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 10.930477142333984,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.9, -144.2). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 12.14792251586914,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-21.8, -144.5). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 20.627323150634766,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 22.112255096435547,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 23.965320587158203,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 24.084697723388672,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 24.731807708740234,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 27.16128921508789,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 28.236270904541016,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 28.45169448852539,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 29.524333953857422,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 39.925052642822266,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 40.407405853271484,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 43.6297721862793,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 44.025028228759766,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 45.964969635009766,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 46.08193588256836,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 48.08547592163086,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 48.29970169067383,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-15.2, -147.4). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 49.50704574584961,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-15.1, -147.4). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 59.489871978759766,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 59.560733795166016,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 61.849971771240234,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 62.43973922729492,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 62.6252326965332,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 64.16365051269531,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 65.0811767578125,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 65.95292663574219,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 67.79258728027344,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 68.25302124023438,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 78.66474914550781,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 79.65046691894531,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 81.06214904785156,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 82.18415832519531,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 84.68605041503906,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 85.52520751953125,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 86.74055480957031,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 96.67440795898438,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 98.49453735351563,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 98.69822692871094,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 99.68492126464844,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 100.70365905761719,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 102.01292419433594,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 103.00694274902344,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 103.44956970214844,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 104.40644836425781,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 105.12643432617188,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 107.72305297851563,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 107.91441345214844,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 111.05668640136719,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 111.43318176269531,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 113.50601196289063,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 114.27651977539063,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 117.02629089355469,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 117.18232727050781,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 118.32333374023438,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 119.46218872070313,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 119.53921508789063,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 122.04551696777344,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 122.11090087890625,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 122.65780639648438,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 125.55458068847656,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 125.92039489746094,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 128.28187561035156,
+            "eventCategory": "KNOCKDOWN",
+            "subjectBot": "OPPONENT",
+            "targetOrAlly": "[BRAVO] RAZOR",
+            "range": 0.0,
+            "narrative": "Knocked down [BRAVO] RAZOR at 0.0m! [DOWNED 8s]"
+        },
+        {
+            "matchTimestamp": 129.27297973632813,
+            "eventCategory": "BLEEDOUT",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "TIMER",
+            "range": 0.0,
+            "narrative": "Bleedout timer expired without revive. Full elimination."
+        },
+        {
+            "matchTimestamp": 129.9120330810547,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 132.20567321777344,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 134.26144409179688,
+            "eventCategory": "RELOAD",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Magazine depleted (16/16). Initiated tactical reload."
+        },
+        {
+            "matchTimestamp": 134.4234619140625,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 135.4694366455078,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 137.2905731201172,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 139.24497985839844,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 148.7288055419922,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 150.22421264648438,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 151.3778076171875,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Lateral Flank"
+        },
+        {
+            "matchTimestamp": 153.08998107910156,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Tactical Fallback"
+        },
+        {
+            "matchTimestamp": 153.6219940185547,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 156.20391845703125,
+            "eventCategory": "MANEUVER",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Switched behavior to Aggressive Push"
+        },
+        {
+            "matchTimestamp": 156.58493041992188,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] RAZOR",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-17.3, -147.3). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 160.6558837890625,
+            "eventCategory": "STUCK",
+            "subjectBot": "[BRAVO] VIPER",
+            "targetOrAlly": "",
+            "range": 0.0,
+            "narrative": "Impeded while advancing at (-2.2, -156.1). Executed Obstacle Jump over obstacle."
+        },
+        {
+            "matchTimestamp": 163.55780029296875,
+            "eventCategory": "SESSION_END",
+            "subjectBot": "SYSTEM",
+            "targetOrAlly": "ALL",
+            "range": 0.0,
+            "narrative": "Match Concluded. Result: DEFEAT"
+        }
+    ],
+    "heatmap": [
+        {
+            "timestamp": 2.505420684814453,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -17.5,
+                    "y": -3.9000000953674316,
+                    "z": -149.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -25.299999237060547,
+                    "y": -3.9000000953674316,
+                    "z": -148.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 5.007007598876953,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -5.800000190734863,
+                    "y": -3.299999952316284,
+                    "z": -146.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -21.899999618530273,
+                    "y": -3.9000000953674316,
+                    "z": -144.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 7.512332916259766,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 2.9000000953674316,
+                    "y": -4.199999809265137,
+                    "z": -149.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -21.899999618530273,
+                    "y": -3.0,
+                    "z": -144.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 10.024166107177734,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 12.899999618530273,
+                    "y": -5.400000095367432,
+                    "z": -143.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -21.899999618530273,
+                    "y": -2.9000000953674316,
+                    "z": -143.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 12.533466339111328,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 15.0,
+                    "y": -5.5,
+                    "z": -144.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -21.700000762939453,
+                    "y": -2.0999999046325684,
+                    "z": -146.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 15.038150787353516,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 11.399999618530273,
+                    "y": -6.699999809265137,
+                    "z": -153.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -16.299999237060547,
+                    "y": -4.0,
+                    "z": -155.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 17.538501739501953,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 7.900000095367432,
+                    "y": -6.699999809265137,
+                    "z": -163.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -11.300000190734863,
+                    "y": -6.699999809265137,
+                    "z": -164.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 20.05105209350586,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 4.400000095367432,
+                    "y": -6.699999809265137,
+                    "z": -172.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -6.300000190734863,
+                    "y": -6.699999809265137,
+                    "z": -173.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 22.556354522705078,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 0.6000000238418579,
+                    "y": -6.699999809265137,
+                    "z": -161.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -0.800000011920929,
+                    "y": -6.699999809265137,
+                    "z": -162.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 25.057262420654297,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -1.600000023841858,
+                    "y": -6.699999809265137,
+                    "z": -161.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -6.699999809265137,
+                    "y": -3.799999952316284,
+                    "z": -152.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 27.562793731689453,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 3.4000000953674316,
+                    "y": -6.699999809265137,
+                    "z": -158.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -12.100000381469727,
+                    "y": -3.799999952316284,
+                    "z": -143.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 30.066364288330078,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -3.0,
+                    "y": -3.9000000953674316,
+                    "z": -149.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -11.199999809265137,
+                    "y": -3.799999952316284,
+                    "z": -151.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                }
+            ]
+        },
+        {
+            "timestamp": 32.593318939208984,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -2.5,
+                    "y": -6.5,
+                    "z": -158.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -7.900000095367432,
+                    "y": -6.699999809265137,
+                    "z": -161.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 35.10048294067383,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -1.5,
+                    "y": -6.699999809265137,
+                    "z": -168.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -4.599999904632568,
+                    "y": -6.699999809265137,
+                    "z": -170.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 37.60683059692383,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -0.5,
+                    "y": -5.800000190734863,
+                    "z": -178.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -1.2000000476837158,
+                    "y": -4.800000190734863,
+                    "z": -180.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 40.11110305786133,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -5.099999904632568,
+                    "y": -6.699999809265137,
+                    "z": -172.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 2.0999999046325684,
+                    "y": -6.699999809265137,
+                    "z": -173.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 42.61293411254883,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -9.899999618530273,
+                    "y": -6.400000095367432,
+                    "z": -160.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -4.199999809265137,
+                    "y": -6.699999809265137,
+                    "z": -162.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 45.12504959106445,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -14.100000381469727,
+                    "y": -3.9000000953674316,
+                    "z": -148.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -5.099999904632568,
+                    "y": -3.799999952316284,
+                    "z": -152.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 47.62826919555664,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -15.100000381469727,
+                    "y": -3.9000000953674316,
+                    "z": -147.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 4.400000095367432,
+                    "y": -4.099999904632568,
+                    "z": -146.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 50.129207611083984,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -14.899999618530273,
+                    "y": -3.799999952316284,
+                    "z": -147.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 9.100000381469727,
+                    "y": -4.199999809265137,
+                    "z": -142.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 52.63730239868164,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -11.100000381469727,
+                    "y": -4.800000190734863,
+                    "z": -156.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 6.900000095367432,
+                    "y": -6.300000190734863,
+                    "z": -152.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 55.13753128051758,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -7.300000190734863,
+                    "y": -6.699999809265137,
+                    "z": -166.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 4.800000190734863,
+                    "y": -6.699999809265137,
+                    "z": -162.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 57.64500045776367,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -3.5,
+                    "y": -6.5,
+                    "z": -175.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 2.5999999046325684,
+                    "y": -6.699999809265137,
+                    "z": -172.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 60.145755767822266,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -0.5,
+                    "y": -6.699999809265137,
+                    "z": -167.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 4.0,
+                    "y": -6.699999809265137,
+                    "z": -163.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 62.64920425415039,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -7.400000095367432,
+                    "y": -4.900000095367432,
+                    "z": -156.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -4.400000095367432,
+                    "y": -4.599999904632568,
+                    "z": -156.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                }
+            ]
+        },
+        {
+            "timestamp": 65.14927673339844,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -13.399999618530273,
+                    "y": -3.700000047683716,
+                    "z": -151.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -14.0,
+                    "y": -5.300000190734863,
+                    "z": -158.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 67.65602111816406,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -10.199999809265137,
+                    "y": -3.9000000953674316,
+                    "z": -149.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -4.0,
+                    "y": -3.9000000953674316,
+                    "z": -149.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 70.16691589355469,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -4.900000095367432,
+                    "y": -3.700000047683716,
+                    "z": -153.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 1.899999976158142,
+                    "y": -4.400000095367432,
+                    "z": -151.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 72.7061767578125,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -3.4000000953674316,
+                    "y": -6.699999809265137,
+                    "z": -163.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 1.5,
+                    "y": -6.699999809265137,
+                    "z": -161.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 75.21318054199219,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -1.7999999523162842,
+                    "y": -6.699999809265137,
+                    "z": -173.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 0.800000011920929,
+                    "y": -6.699999809265137,
+                    "z": -171.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 77.72026062011719,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 0.8999999761581421,
+                    "y": -5.900000095367432,
+                    "z": -177.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 2.0,
+                    "y": -6.5,
+                    "z": -175.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 80.230712890625,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 2.700000047683716,
+                    "y": -6.699999809265137,
+                    "z": -166.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -0.5,
+                    "y": -6.699999809265137,
+                    "z": -164.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 82.73970031738281,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 4.300000190734863,
+                    "y": -6.5,
+                    "z": -155.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -7.800000190734863,
+                    "y": -3.9000000953674316,
+                    "z": -154.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 85.24813842773438,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -5.0,
+                    "y": -3.9000000953674316,
+                    "z": -148.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -8.699999809265137,
+                    "y": -4.0,
+                    "z": -146.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 87.75242614746094,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 1.899999976158142,
+                    "y": -4.0,
+                    "z": -148.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -5.800000190734863,
+                    "y": -3.0999999046325684,
+                    "z": -146.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 90.25492858886719,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 1.7999999523162842,
+                    "y": -6.699999809265137,
+                    "z": -158.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -4.699999809265137,
+                    "y": -4.099999904632568,
+                    "z": -155.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 92.76799011230469,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 1.100000023841858,
+                    "y": -6.699999809265137,
+                    "z": -168.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -3.0999999046325684,
+                    "y": -6.699999809265137,
+                    "z": -165.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 95.28219604492188,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 0.4000000059604645,
+                    "y": -5.699999809265137,
+                    "z": -178.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -1.399999976158142,
+                    "y": -6.5,
+                    "z": -175.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 97.79032897949219,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 4.900000095367432,
+                    "y": -6.699999809265137,
+                    "z": -172.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -5.099999904632568,
+                    "y": -6.699999809265137,
+                    "z": -168.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 100.2977294921875,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 11.100000381469727,
+                    "y": -6.699999809265137,
+                    "z": -165.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -0.30000001192092896,
+                    "y": -6.599999904632568,
+                    "z": -157.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 102.80387878417969,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 15.300000190734863,
+                    "y": -6.699999809265137,
+                    "z": -166.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 9.899999618530273,
+                    "y": -6.699999809265137,
+                    "z": -160.39999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 105.30477905273438,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 16.100000381469727,
+                    "y": -6.699999809265137,
+                    "z": -163.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 1.0,
+                    "y": -6.5,
+                    "z": -156.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                }
+            ]
+        },
+        {
+            "timestamp": 107.80928039550781,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 20.799999237060547,
+                    "y": -6.699999809265137,
+                    "z": -170.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 12.0,
+                    "y": -6.699999809265137,
+                    "z": -161.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 110.31027221679688,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 15.800000190734863,
+                    "y": -6.699999809265137,
+                    "z": -163.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 14.0,
+                    "y": -6.699999809265137,
+                    "z": -152.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 112.81146240234375,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 15.699999809265137,
+                    "y": -6.699999809265137,
+                    "z": -164.6999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 15.100000381469727,
+                    "y": -6.699999809265137,
+                    "z": -157.10000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 115.31336975097656,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 21.100000381469727,
+                    "y": -6.599999904632568,
+                    "z": -171.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 19.700000762939453,
+                    "y": -6.699999809265137,
+                    "z": -152.3000030517578,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 117.82113647460938,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 30.0,
+                    "y": -5.400000095367432,
+                    "z": -165.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 29.299999237060547,
+                    "y": -5.900000095367432,
+                    "z": -152.0,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 120.32725524902344,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 29.200000762939453,
+                    "y": -6.0,
+                    "z": -155.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "RELOAD"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 29.200000762939453,
+                    "y": -5.900000095367432,
+                    "z": -151.0,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 122.83103942871094,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 32.29999923706055,
+                    "y": -4.699999809265137,
+                    "z": -153.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 27.600000381469727,
+                    "y": -6.099999904632568,
+                    "z": -150.39999389648438,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "RELOAD"
+                }
+            ]
+        },
+        {
+            "timestamp": 125.33363342285156,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 29.399999618530273,
+                    "y": -5.900000095367432,
+                    "z": -150.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 27.700000762939453,
+                    "y": -6.300000190734863,
+                    "z": -158.0,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 127.83392333984375,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 31.799999237060547,
+                    "y": -5.199999809265137,
+                    "z": -163.1999969482422,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 36.79999923706055,
+                    "y": -4.0,
+                    "z": -160.60000610351563,
+                    "hp": 75.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 130.3363037109375,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 37.400001525878906,
+                    "y": -3.299999952316284,
+                    "z": -165.5,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 37.0,
+                    "y": -4.0,
+                    "z": -160.8000030517578,
+                    "hp": 0.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 132.84381103515625,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 40.5,
+                    "y": -2.4000000953674316,
+                    "z": -171.5,
+                    "hp": 100.0,
+                    "shield": 25.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": 37.0,
+                    "y": -4.0,
+                    "z": -160.8000030517578,
+                    "hp": 0.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 135.3585968017578,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 36.400001525878906,
+                    "y": -1.399999976158142,
+                    "z": -166.10000610351563,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "RELOAD"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -23.200000762939453,
+                    "y": -3.4000000953674316,
+                    "z": -152.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 137.86004638671875,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 32.20000076293945,
+                    "y": -4.099999904632568,
+                    "z": -173.5,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -9.5,
+                    "y": -3.9000000953674316,
+                    "z": -150.0,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 140.36053466796875,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 33.0,
+                    "y": -3.0999999046325684,
+                    "z": -177.10000610351563,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -1.600000023841858,
+                    "y": -3.9000000953674316,
+                    "z": -152.89999389648438,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 142.8623809814453,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 23.5,
+                    "y": -3.700000047683716,
+                    "z": -178.3000030517578,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -1.100000023841858,
+                    "y": -6.699999809265137,
+                    "z": -162.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 145.37039184570313,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 14.100000381469727,
+                    "y": -4.099999904632568,
+                    "z": -181.1999969482422,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -0.6000000238418579,
+                    "y": -6.699999809265137,
+                    "z": -172.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 147.87155151367188,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": 4.699999809265137,
+                    "y": -5.099999904632568,
+                    "z": -180.60000610351563,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -1.5,
+                    "y": -5.400000095367432,
+                    "z": -179.1999969482422,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 150.39361572265625,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -2.5,
+                    "y": -6.699999809265137,
+                    "z": -169.6999969482422,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -7.400000095367432,
+                    "y": -6.699999809265137,
+                    "z": -167.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 152.89755249023438,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -9.100000381469727,
+                    "y": -5.400000095367432,
+                    "z": -158.39999389648438,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -12.699999809265137,
+                    "y": -4.099999904632568,
+                    "z": -155.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 155.40457153320313,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -2.200000047683716,
+                    "y": -3.9000000953674316,
+                    "z": -150.89999389648438,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -17.299999237060547,
+                    "y": -3.9000000953674316,
+                    "z": -147.3000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 157.905029296875,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -2.4000000953674316,
+                    "y": -3.9000000953674316,
+                    "z": -153.39999389648438,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -16.600000381469727,
+                    "y": -3.9000000953674316,
+                    "z": -148.8000030517578,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 160.40988159179688,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -2.200000047683716,
+                    "y": -0.800000011920929,
+                    "z": -156.10000610351563,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -12.0,
+                    "y": -5.5,
+                    "z": -158.5,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        },
+        {
+            "timestamp": 162.9126434326172,
+            "bots": [
+                {
+                    "name": "[BRAVO] VIPER",
+                    "team": 1,
+                    "x": -0.800000011920929,
+                    "y": -6.699999809265137,
+                    "z": -165.0,
+                    "hp": 50.0,
+                    "shield": 0.0,
+                    "state": "COMBAT"
+                },
+                {
+                    "name": "[BRAVO] RAZOR",
+                    "team": 1,
+                    "x": -7.800000190734863,
+                    "y": -6.699999809265137,
+                    "z": -167.60000610351563,
+                    "hp": 100.0,
+                    "shield": 50.0,
+                    "state": "COMBAT"
+                }
+            ]
+        }
+    ]
+}
