@@ -1069,6 +1069,11 @@ public class OasisShooterManager : MonoBehaviour
         }
     }
 
+    public void TriggerCameraShake(float duration = 0.2f, float magnitude = 0.2f)
+    {
+        StartCoroutine(CameraHitShake(duration, magnitude));
+    }
+
     private IEnumerator CameraHitShake(float duration, float magnitude)
     {
         Camera cam = Camera.main;

@@ -8,6 +8,10 @@ using UnityEngine;
 public static class ProceduralAudio
 {
     private static AudioClip _blasterShotClip;
+    private static AudioClip _shotgunShotClip;
+    private static AudioClip _bombLaunchClip;
+    private static AudioClip _bombExplosionClip;
+    private static AudioClip _beamHumClip;
     private static AudioClip _hitTargetClip;
     private static AudioClip _hitWorldClip;
     private static AudioClip _droneExplosionClip;
@@ -23,6 +27,54 @@ public static class ProceduralAudio
             _blasterShotClip = CreateSoftThud("BlasterShot", 0.08f, 210f, 75f, 0.22f);
         }
         return _blasterShotClip;
+    }
+
+    /// <summary>
+    /// Heavy punchy scatter shotgun blast with deep bass and high crackle.
+    /// </summary>
+    public static AudioClip GetShotgunShotClip()
+    {
+        if (_shotgunShotClip == null)
+        {
+            _shotgunShotClip = CreateShotgunBlast("ShotgunShot", 0.16f, 0.42f);
+        }
+        return _shotgunShotClip;
+    }
+
+    /// <summary>
+    /// Pneumatic mortar thump for launching plasma bombs.
+    /// </summary>
+    public static AudioClip GetBombLaunchClip()
+    {
+        if (_bombLaunchClip == null)
+        {
+            _bombLaunchClip = CreatePneumaticLaunch("BombLaunch", 0.14f, 160f, 45f, 0.45f);
+        }
+        return _bombLaunchClip;
+    }
+
+    /// <summary>
+    /// Massive rolling sub-bass explosion shockwave for bomb detonation.
+    /// </summary>
+    public static AudioClip GetBombExplosionClip()
+    {
+        if (_bombExplosionClip == null)
+        {
+            _bombExplosionClip = CreateWarmExplosion("BombExplosion", 0.65f, 0.65f);
+        }
+        return _bombExplosionClip;
+    }
+
+    /// <summary>
+    /// Continuous sci-fi resonant phase beam energy hum.
+    /// </summary>
+    public static AudioClip GetBeamHumClip()
+    {
+        if (_beamHumClip == null)
+        {
+            _beamHumClip = CreateBeamHum("PhaseBeamHum", 0.5f, 0.28f);
+        }
+        return _beamHumClip;
     }
 
     /// <summary>
@@ -318,4 +370,86 @@ public static class ProceduralAudio
         clip.SetData(samples, 0);
         return clip;
     }
+
+    /// <summary>
+    /// Heavy punchy shotgun blast with explosive noise + deep bass pitch drop.
+    /// </summary>
+    private static AudioClip CreateShotgunBlast(string name, float duration, float volume)
+    {
+        int sampleRate = 44100;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        float phase = 0f;
+        float lowPass = 0f;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t = (float)i / sampleCount;
+            float freq = Mathf.Lerp(140f, 38f, t);
+            phase += 2f * Mathf.PI * freq / sampleRate;
+
+            float sub = Mathf.Sin(phase);
+            float noise = Random.value * 2f - 1f;
+            lowPass += (noise - lowPass) * 0.25f;
+
+            float env = Mathf.Exp(-14f * t);
+            samples[i] = (sub * 0.55f + lowPass * 0.45f) * env * volume;
+        }
+
+        AudioClip clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    /// <summary>
+    /// Heavy pneumatic mortar thump for launching plasma bombs.
+    /// </summary>
+    private static AudioClip CreatePneumaticLaunch(string name, float duration, float startFreq, float endFreq, float volume)
+    {
+        int sampleRate = 44100;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        float phase = 0f;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t = (float)i / sampleCount;
+            float freq = Mathf.Lerp(startFreq, endFreq, t);
+            phase += 2f * Mathf.PI * freq / sampleRate;
+
+            float tone = Mathf.Sin(phase);
+            float env = Mathf.Sin(t * Mathf.PI * 0.5f) * Mathf.Exp(-9f * t);
+            samples[i] = tone * env * volume;
+        }
+
+        AudioClip clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    /// <summary>
+    /// Resonant buzzing phase laser beam loop.
+    /// </summary>
+    private static AudioClip CreateBeamHum(string name, float duration, float volume)
+    {
+        int sampleRate = 44100;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        float phase1 = 0f;
+        float phase2 = 0f;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            phase1 += 2f * Mathf.PI * 180f / sampleRate;
+            phase2 += 2f * Mathf.PI * 360f / sampleRate;
+
+            float tone = Mathf.Sin(phase1) * 0.6f + Mathf.Sin(phase2) * 0.4f;
+            samples[i] = tone * volume;
+        }
+
+        AudioClip clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
 }
+

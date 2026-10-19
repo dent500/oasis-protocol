@@ -62,28 +62,28 @@ public class OasisCharacterCustomizer : MonoBehaviour
             "Reinforced titanium chassis engineered for intense frontline breaches. High kinetic resistance with balanced assault firepower.", 
             "RobotHero_URP", new Color(0.25f, 0.75f, 1.0f),
             0.95f, 0.60f, 0.85f, 0.75f,
-            "Heavy Kinetic Auto-Rifle", "Nanotech Plating", "Absorbs 25% of incoming explosive damage."),
+            "Micro-Bomb Flak Mortar", "Nanotech Plating", "Absorbs 25% of incoming explosive damage."),
 
         new OperativeProfile(
             "desert_commando", "Desert Tactical Commando", "DEMOLITIONS / INFANTRY", 
             "Specialized desert warfare rig with high-traction dune boots and blast-resistant ballistic weave armor.", 
             "Characters/Textures/skin_soldier", new Color(0.95f, 0.72f, 0.28f),
             0.80f, 0.80f, 0.90f, 0.65f,
-            "High-Velocity Battle Rifle", "Dune Sprinter", "Increased sprint endurance across desert terrain."),
+            "Plasma Scatter Shotgun", "Dune Sprinter", "Increased sprint endurance across desert terrain."),
 
         new OperativeProfile(
             "cyborg_specops", "Cyborg Special Operative", "INFILTRATOR / AGILITY", 
             "Cybernetically augmented operative equipped with nanotech fiber suit for rapid slide evasion and precision targeting.", 
             "Characters/Textures/cyborgFemaleA", new Color(0.20f, 0.95f, 0.90f),
             0.65f, 0.95f, 0.85f, 0.80f,
-            "Precision Burst Carbine", "Neural Overdrive", "Instant slide recovery and 20% faster weapon switch."),
+            "Continuous Phase Laser Beam", "Neural Overdrive", "Instant slide recovery and 20% faster weapon switch."),
 
         new OperativeProfile(
             "unit07_android", "Unit-07 Combat Android", "HEAVY MECH / VANGUARD", 
             "Autonomous heavy military android with reinforced chassis, internal auto-repair units, and recoil dampeners.", 
             "Characters/Textures/skin_robot", new Color(0.35f, 1.0f, 0.55f),
             0.90f, 0.68f, 0.85f, 0.90f,
-            "Overcharged Plasma Rifle", "Automated Core Matrix", "Passively initiates shield regeneration 1.5s faster."),
+            "Continuous Phase Laser Beam", "Automated Core Matrix", "Passively initiates shield regeneration 1.5s faster."),
 
         new OperativeProfile(
             "wasteland_nomad", "Wasteland Nomad Adventurer", "RECON / SURVIVAL", 
