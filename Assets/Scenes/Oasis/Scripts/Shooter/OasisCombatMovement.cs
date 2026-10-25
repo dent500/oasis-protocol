@@ -1,5 +1,7 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -193,6 +195,7 @@ public class OasisCombatMovement : MonoBehaviour
     private void Update()
     {
         HandleFullscreenToggle();
+        HandleUpscalerToggle();
 
         bool menuOrMatchEnded =
             (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isSimulationMode || OasisShooterManager.Instance.isMatchFinished)) ||
@@ -1694,6 +1697,46 @@ public class OasisCombatMovement : MonoBehaviour
         string status = ready ? "[SPACE x2] JET BOOST READY" : $"JET CHARGING {_fpc.thrusterCooldownRemaining:F1}s";
         GUI.Label(new Rect(jX, jY + 1, jW, 16), status, jetStyle);
         GUI.color = Color.white;
+    }
+
+    private string _upscalerToastText = "";
+    private float _upscalerToastTimer = 0f;
+
+    private void HandleUpscalerToggle()
+    {
+        bool f10Pressed = false;
+#if ENABLE_INPUT_SYSTEM
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null) f10Pressed = kb.f10Key.wasPressedThisFrame;
+#else
+        f10Pressed = Input.GetKeyDown(KeyCode.F10);
+#endif
+        if (!f10Pressed) return;
+
+        var urpAsset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+        if (urpAsset == null) return;
+
+        if (urpAsset.upscalingFilter == UpscalingFilterSelection.STP)
+        {
+            urpAsset.upscalingFilter = UpscalingFilterSelection.FSR;
+            urpAsset.renderScale = 0.77f;
+            urpAsset.fsrSharpness = 0.92f;
+            _upscalerToastText = "[F10] UPSCALER: AMD FSR 1.0 (77% -> NATIVE)";
+        }
+        else if (urpAsset.upscalingFilter == UpscalingFilterSelection.FSR)
+        {
+            urpAsset.upscalingFilter = UpscalingFilterSelection.Auto;
+            urpAsset.renderScale = 1.0f;
+            _upscalerToastText = "[F10] UPSCALER: OFF / NATIVE 1:1 (100%)";
+        }
+        else
+        {
+            urpAsset.upscalingFilter = UpscalingFilterSelection.STP;
+            urpAsset.renderScale = 0.77f;
+            _upscalerToastText = "[F10] UPSCALER: UNITY 6 STP (77% -> NATIVE)";
+        }
+
+        _upscalerToastTimer = 2.5f;
     }
 
     private void HandleFullscreenToggle()
