@@ -45,7 +45,7 @@ public class OasisCombatMovement : MonoBehaviour
     [Header("Robot Hero Character Model")]
     public GameObject robotHeroVisual;
     public Animator robotHeroAnimator;
-    public bool isThirdPerson = true;
+    public bool isThirdPerson = false;
     public bool isAimingThirdPerson = false;
     public bool isHoldingLeftClickAim = false;
 
@@ -175,7 +175,19 @@ public class OasisCombatMovement : MonoBehaviour
         if (Camera.main != null)
         {
             Camera.main.nearClipPlane = 0.05f;
+            var brain = Camera.main.GetComponent<Unity.Cinemachine.CinemachineBrain>();
+            if (brain != null) brain.enabled = false;
         }
+
+        SetMeshVisibility(!isThirdPerson);
+
+        Transform capsuleChild = transform.Find("Capsule");
+        if (capsuleChild != null)
+        {
+            var r = capsuleChild.GetComponent<Renderer>();
+            if (r != null) r.enabled = false;
+        }
+
         var cmCam = UnityEngine.Object.FindAnyObjectByType<Unity.Cinemachine.CinemachineCamera>();
         if (cmCam != null)
         {
@@ -191,6 +203,7 @@ public class OasisCombatMovement : MonoBehaviour
 
     private OasisCombatAI _downedTeammateNearby = null;
     private OasisNetworkManager.RemotePlayerInstance _downedRemotePlayerNearby = null;
+    private bool _wasMenuOrMatchEnded = false;
 
     private void Update()
     {
@@ -203,13 +216,9 @@ public class OasisCombatMovement : MonoBehaviour
 
         if (menuOrMatchEnded)
         {
+            _wasMenuOrMatchEnded = true;
             isHoldingLeftClickAim = false;
             isAimingThirdPerson = false;
-            if (!isThirdPerson)
-            {
-                isThirdPerson = true;
-                SetMeshVisibility(false);
-            }
             if (_inputs != null)
             {
                 _inputs.SetCursorState(false);
@@ -220,6 +229,13 @@ public class OasisCombatMovement : MonoBehaviour
             Cursor.visible = true;
             return;
         }
+        else if (_wasMenuOrMatchEnded)
+        {
+            _wasMenuOrMatchEnded = false;
+            SetThirdPersonMode(false); // Seamlessly enter gameplay in unobstructed first-person mode
+        }
+
+        HandleCameraViewToggle();
 
         // Trap and lock cursor inside game window to prevent leaking onto other monitors
         if (Cursor.lockState != CursorLockMode.Locked)
@@ -813,32 +829,81 @@ public class OasisCombatMovement : MonoBehaviour
 
         if (_cameraTarget != null)
         {
-            if (isThirdPerson)
-            {
-                // Third-person camera offset:
-                // Normal: comfortable over-the-shoulder view
-                // Right-Click 3rd Person Aim: tightened over-the-shoulder zoom
-                Vector3 targetCam = isAimingThirdPerson
-                    ? new Vector3(0.50f, _currentCameraY + 0.12f, -1.7f)
-                    : new Vector3(0.60f, _currentCameraY + 0.15f, -2.5f);
-                _cameraTarget.localPosition = Vector3.Lerp(_cameraTarget.localPosition, targetCam, Time.deltaTime * 14f);
-            }
-            else
-            {
-                // First-person eye level for standard first-person mode
-                Vector3 camPos = _cameraTarget.localPosition;
-                camPos.x = Mathf.Lerp(camPos.x, 0f, Time.deltaTime * 18f);
-                camPos.y = _currentCameraY;
-                camPos.z = Mathf.Lerp(camPos.z, 0f, Time.deltaTime * 18f);
-                _cameraTarget.localPosition = camPos;
-            }
+            Vector3 camPos = _cameraTarget.localPosition;
+            camPos.x = 0f;
+            camPos.y = _currentCameraY;
+            camPos.z = 0f;
+            _cameraTarget.localPosition = camPos;
         }
     }
 
     private void LateUpdate()
     {
-        // Torso orientation and rifle aim angle are handled naturally by the player's root rotation and camera target.
-        // We preserve bones in their authentic animated firing/running poses to avoid twisting geometry into the camera.
+        Camera cam = Camera.main;
+        if (cam == null || _cameraTarget == null) return;
+
+        if (!isThirdPerson)
+        {
+            // First-person view: place camera directly at eye-level target
+            cam.transform.position = _cameraTarget.position;
+            cam.transform.rotation = _cameraTarget.rotation;
+        }
+        else
+        {
+            // Third-person over-the-shoulder view:
+            Vector3 shoulderOffset = isAimingThirdPerson
+                ? new Vector3(0.48f, 0.10f, -1.6f)
+                : new Vector3(0.58f, 0.18f, -2.5f);
+
+            Vector3 desiredPos = _cameraTarget.position + _cameraTarget.rotation * shoulderOffset;
+            Vector3 origin = _cameraTarget.position;
+            Vector3 dir = desiredPos - origin;
+            float maxDist = dir.magnitude;
+
+            int mask = Physics.AllLayers & ~((1 << LayerMask.NameToLayer("Ignore Raycast")) | (1 << gameObject.layer) | (1 << 8));
+            if (Physics.SphereCast(origin, 0.20f, dir.normalized, out RaycastHit hit, maxDist, mask, QueryTriggerInteraction.Ignore))
+            {
+                cam.transform.position = origin + dir.normalized * Mathf.Max(0.45f, hit.distance - 0.15f);
+            }
+            else
+            {
+                cam.transform.position = desiredPos;
+            }
+
+            cam.transform.rotation = _cameraTarget.rotation;
+
+            // Failsafe: If camera gets too close to the character's head, hide mesh so it never blocks the screen
+            float distToHead = Vector3.Distance(cam.transform.position, _cameraTarget.position);
+            bool tooClose = distToHead < 0.75f;
+            if (robotHeroVisual != null)
+            {
+                var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < rends.Length; i++)
+                {
+                    rends[i].enabled = !tooClose;
+                }
+            }
+        }
+    }
+
+    private void HandleCameraViewToggle()
+    {
+        bool vPressed = false;
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame)
+        {
+            vPressed = true;
+        }
+#else
+        if (Input.GetKeyDown(KeyCode.V))
+        {
+            vPressed = true;
+        }
+#endif
+        if (vPressed)
+        {
+            SetThirdPersonMode(!isThirdPerson);
+        }
     }
 
     private void HandleAimCameraInput()
@@ -1019,10 +1084,27 @@ public class OasisCombatMovement : MonoBehaviour
             var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
             foreach (var r in rends)
             {
-                // In First-Person, keep shadows casting onto the ground while hiding mesh from camera
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
-                r.enabled = !firstPerson;
+                if (firstPerson)
+                {
+                    // In First-Person: completely disable character body mesh so it NEVER blocks the forward camera
+                    r.enabled = false;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                }
+                else
+                {
+                    // In Third-Person: enable full body mesh and cast shadows
+                    r.enabled = true;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                }
             }
+        }
+
+        // Disable default primitive capsule mesh if any exists on the player hierarchy
+        Transform capsuleChild = transform.Find("Capsule");
+        if (capsuleChild != null)
+        {
+            var cr = capsuleChild.GetComponent<Renderer>();
+            if (cr != null) cr.enabled = false;
         }
 
         // Toggle First-Person Blaster Weapon model visibility (hidden in 3rd person, visible in 1st person)

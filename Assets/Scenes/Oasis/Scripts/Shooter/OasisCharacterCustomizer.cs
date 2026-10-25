@@ -1558,6 +1558,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         {
             OasisCombatMovement.Instance.ApplyCharacterSkin(skinTex, teamAccent, chosen.id);
             OasisCombatMovement.Instance.ConfigureOperativeAbility(selectedOperativeIndex);
+            OasisCombatMovement.Instance.SetThirdPersonMode(false);
             var pWeapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
             if (pWeapon == null) pWeapon = FindAnyObjectByType<BlasterWeapon>();
             if (pWeapon != null) pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
