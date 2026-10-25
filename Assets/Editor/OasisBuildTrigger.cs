@@ -19,12 +19,24 @@ public static class OasisBuildTrigger
     [MenuItem("Oasis/Scenes/Open Oasis Scene (Combat Map)", priority = 10)]
     public static void OpenOasisScene()
     {
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
         {
             EditorSceneManager.OpenScene("Assets/Scenes/Oasis/OasisScene.unity");
             FocusSceneCameraOnArena();
             Debug.Log("<color=cyan><b>[Oasis]</b> OasisScene successfully opened in Editor Scene view.</color>");
         }
+    }
+
+    [MenuItem("Oasis/Reimport All Shaders and Materials", priority = 2)]
+    public static void ReimportShadersAndMaterials()
+    {
+        AssetDatabase.ImportAsset("Assets/Scenes/Oasis/Shaders", ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
+        AssetDatabase.ImportAsset("Assets/Scenes/Oasis/Art", ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        var sceneView = SceneView.lastActiveSceneView ?? (SceneView.sceneViews.Count > 0 ? SceneView.sceneViews[0] as SceneView : null);
+        if (sceneView != null) sceneView.Repaint();
+        Debug.Log("<color=cyan><b>[Oasis]</b> Shaders and materials forcefully reimported.</color>");
     }
 
     [MenuItem("Oasis/Focus Scene Camera on Combat Arena", priority = 1)]
@@ -85,7 +97,26 @@ public static class OasisBuildTrigger
 
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         BuildReport report = BuildPipeline.BuildPlayer(options);
-        Debug.Log($"[OasisBuildTrigger] Windows build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
+        string resultMsg = $"Result: {report.summary.result}, Errors: {report.summary.totalErrors}, Warnings: {report.summary.totalWarnings}, Time: {report.summary.totalTime.TotalSeconds:F1}s";
+        Debug.Log($"[OasisBuildTrigger] Windows build completed with {resultMsg}");
+        try
+        {
+            using (var sw = new StreamWriter("Temp/build_result.txt"))
+            {
+                sw.WriteLine(resultMsg);
+                foreach (var step in report.steps)
+                {
+                    foreach (var msg in step.messages)
+                    {
+                        if (msg.type == LogType.Error || msg.type == LogType.Exception || msg.type == LogType.Warning)
+                        {
+                            sw.WriteLine($"[{msg.type}] {msg.content}");
+                        }
+                    }
+                }
+            }
+        }
+        catch {}
     }
 
     private static void PollTrigger()
