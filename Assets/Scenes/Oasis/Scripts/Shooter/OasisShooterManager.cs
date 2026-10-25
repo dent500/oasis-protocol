@@ -441,6 +441,12 @@ public class OasisShooterManager : MonoBehaviour
                 currentHealth = maxHealth;
                 UpdateHealthUI();
 
+                if (_playerTransform != null)
+                {
+                    var move = _playerTransform.GetComponent<OasisCombatMovement>();
+                    if (move != null) move.ResetMovementState();
+                }
+
                 if (OasisSpawnSystem.Instance != null && _playerTransform != null)
                 {
                     OasisSpawnSystem.Instance.RespawnCombatant(_playerTransform, myTeam);

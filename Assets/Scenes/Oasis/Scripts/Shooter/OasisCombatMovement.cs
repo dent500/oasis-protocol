@@ -258,6 +258,7 @@ public class OasisCombatMovement : MonoBehaviour
         if (robotHeroVisual != null)
         {
             robotHeroVisual.transform.localPosition = Vector3.Lerp(robotHeroVisual.transform.localPosition, Vector3.zero, Time.deltaTime * 12f);
+            robotHeroVisual.transform.localRotation = Quaternion.Slerp(robotHeroVisual.transform.localRotation, Quaternion.identity, Time.deltaTime * 12f);
         }
 
         HandleRevivalInteractions();
@@ -398,6 +399,7 @@ public class OasisCombatMovement : MonoBehaviour
     /// </summary>
     public void ResetMovementState()
     {
+        _wasDowned = false;
         isCrouching = false;
         isSliding = false;
         isDashing = false;
@@ -407,6 +409,22 @@ public class OasisCombatMovement : MonoBehaviour
         {
             _characterController.height = standingHeight;
             _characterController.center = _initialCenter;
+        }
+        if (_cameraTarget != null)
+        {
+            Vector3 camPos = _cameraTarget.localPosition;
+            camPos.y = standingCameraY;
+            _cameraTarget.localPosition = camPos;
+        }
+        if (robotHeroVisual != null)
+        {
+            robotHeroVisual.transform.localPosition = Vector3.zero;
+            robotHeroVisual.transform.localRotation = Quaternion.identity;
+        }
+        if (robotHeroAnimator != null)
+        {
+            robotHeroAnimator.speed = 1.0f;
+            robotHeroAnimator.Play("Idle_Shoot_Ar");
         }
         if (_fpc != null)
         {
@@ -529,11 +547,18 @@ public class OasisCombatMovement : MonoBehaviour
         if (abilityCooldownRemaining > 0f) return;
         if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned) return;
 
-        bool abilityPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Ability) ||
+        bool abilityPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Ability);
 #if ENABLE_INPUT_SYSTEM
-            (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame) ||
+        if (!abilityPressed && Keyboard.current != null)
+        {
+            abilityPressed = Keyboard.current.fKey.wasPressedThisFrame;
+        }
+#else
+        if (!abilityPressed)
+        {
+            abilityPressed = Input.GetKeyDown(KeyCode.F);
+        }
 #endif
-            Input.GetKeyDown(KeyCode.F);
 
         if (abilityPressed)
         {
