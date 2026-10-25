@@ -345,8 +345,6 @@ public class MainMenuManager : MonoBehaviour
 {
     [Header("Scene Names")]
     public string oasisSceneName = "OasisScene";
-    public string gardenSceneName = "GardenScene";
-    public string cockpitSceneName = "CockpitScene";
 
     [Header("UI Panels")]
     public GameObject mainPanel;
@@ -1539,17 +1537,7 @@ public class MainMenuManager : MonoBehaviour
         LoadGameScene(oasisSceneName);
     }
 
-    public void PlayGarden()
-    {
-        if (_isLoading) return;
-        LoadGameScene(gardenSceneName);
-    }
 
-    public void PlayCockpit()
-    {
-        if (_isLoading) return;
-        LoadGameScene(cockpitSceneName);
-    }
 
     public void LoadGameScene(string sceneName)
     {

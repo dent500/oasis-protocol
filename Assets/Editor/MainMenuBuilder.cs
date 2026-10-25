@@ -81,8 +81,6 @@ public class MainMenuBuilder : Editor
 
         MainMenuManager menuManager = canvasObj.AddComponent<MainMenuManager>();
         menuManager.oasisSceneName = "OasisScene";
-        menuManager.gardenSceneName = "GardenScene";
-        menuManager.cockpitSceneName = "CockpitScene";
 
         // Build complete styled UI (faded background artwork, styled header, Host & Join cards, Settings & Credits modals)
         menuManager.BuildOrUpgradeHomeMenuUI();
