@@ -910,7 +910,8 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     /// <summary>
-    /// Constructs procedural 3D blaster gun models customized per weapon archetype.
+    /// Loads and displays the authentic weapon mesh held by the character model.
+    /// Completely avoids blocky primitive cubes/cylinders ("polygon gun").
     /// </summary>
     private void BuildProceduralGunModel()
     {
@@ -934,200 +935,73 @@ public class BlasterWeapon : MonoBehaviour
                             currentArchetype == WeaponArchetype.DualPistols ? new Color(1f, 0.85f, 0.2f) :
                             new Color(0.1f, 0.95f, 1f);
 
-        Material gunMetalMat = OasisShaderHelper.CreateLitMaterial(new Color(0.18f, 0.2f, 0.25f), 0.9f, 0.8f);
-        Material neonMat = OasisShaderHelper.CreateUnlitMaterial(energyColor);
+        // Find authentic AssaultRifle mesh from character model / RobotHero
+        Mesh rifleMesh = null;
+        Material rifleMat = null;
 
-        // 1. Receiver / Body
-        GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        body.name = "Receiver";
-        body.transform.SetParent(_weaponRoot, false);
-        body.transform.localPosition = new Vector3(0, 0, 0);
-
-        if (currentArchetype == WeaponArchetype.BombMortar)
-            body.transform.localScale = new Vector3(0.11f, 0.15f, 0.32f);
-        else if (currentArchetype == WeaponArchetype.ScatterShotgun)
-            body.transform.localScale = new Vector3(0.09f, 0.13f, 0.30f);
-        else if (currentArchetype == WeaponArchetype.StandardRifle)
-            body.transform.localScale = new Vector3(0.065f, 0.10f, 0.32f);
-        else if (currentArchetype == WeaponArchetype.DualPistols)
-            body.transform.localScale = new Vector3(0.055f, 0.09f, 0.20f);
-        else
-            body.transform.localScale = new Vector3(0.07f, 0.11f, 0.28f);
-
-        body.GetComponent<MeshRenderer>().material = gunMetalMat;
-        Destroy(body.GetComponent<Collider>());
-
-        Vector3 muzzleLocalPos = new Vector3(0, 0.02f, 0.42f);
-
-        // 2. Barrels & Distinctive Archetype Geometry
-        if (currentArchetype == WeaponArchetype.BombMortar)
+        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.robotHeroVisual != null)
         {
-            // Massive heavy cylindrical mortar cannon shroud
-            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            barrel.transform.SetParent(_weaponRoot, false);
-            barrel.transform.localPosition = new Vector3(0, 0.03f, 0.26f);
-            barrel.transform.localScale = new Vector3(0.095f, 0.14f, 0.095f);
-            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
-            Destroy(barrel.GetComponent<Collider>());
-
-            // Orange muzzle ring
-            GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            ring.transform.SetParent(_weaponRoot, false);
-            ring.transform.localPosition = new Vector3(0, 0.03f, 0.40f);
-            ring.transform.localScale = new Vector3(0.105f, 0.02f, 0.105f);
-            ring.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            ring.GetComponent<MeshRenderer>().material = neonMat;
-            Destroy(ring.GetComponent<Collider>());
-
-            muzzleLocalPos = new Vector3(0, 0.03f, 0.44f);
-        }
-        else if (currentArchetype == WeaponArchetype.ScatterShotgun)
-        {
-            // Dual wide-bore heavy barrels
-            for (int b = -1; b <= 1; b += 2)
+            var smrs = OasisCombatMovement.Instance.robotHeroVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            foreach (var smr in smrs)
             {
-                GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                barrel.transform.SetParent(_weaponRoot, false);
-                barrel.transform.localPosition = new Vector3(b * 0.022f, 0.025f, 0.26f);
-                barrel.transform.localScale = new Vector3(0.042f, 0.14f, 0.042f);
-                barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
-                barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
-                Destroy(barrel.GetComponent<Collider>());
+                if (smr.name == "AssaultRifle" || smr.name.Contains("Rifle"))
+                {
+                    rifleMesh = smr.sharedMesh;
+                    rifleMat = smr.sharedMaterial;
+                    break;
+                }
             }
-            muzzleLocalPos = new Vector3(0, 0.025f, 0.41f);
         }
-        else if (currentArchetype == WeaponArchetype.ContinuousBeam)
+
+        if (rifleMesh == null)
         {
-            // Twin magnetic focus crystal prongs
-            for (int p = -1; p <= 1; p += 2)
+            GameObject robotPrefab = Resources.Load<GameObject>("RobotHero");
+            if (robotPrefab != null)
             {
-                GameObject prong = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                prong.transform.SetParent(_weaponRoot, false);
-                prong.transform.localPosition = new Vector3(p * 0.030f, 0.025f, 0.28f);
-                prong.transform.localScale = new Vector3(0.015f, 0.035f, 0.18f);
-                prong.GetComponent<MeshRenderer>().material = gunMetalMat;
-                Destroy(prong.GetComponent<Collider>());
-
-                // Glowing crystal tip on each prong
-                GameObject tip = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                tip.transform.SetParent(_weaponRoot, false);
-                tip.transform.localPosition = new Vector3(p * 0.030f, 0.025f, 0.38f);
-                tip.transform.localScale = new Vector3(0.018f, 0.040f, 0.035f);
-                tip.GetComponent<MeshRenderer>().material = neonMat;
-                Destroy(tip.GetComponent<Collider>());
+                var smrs = robotPrefab.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                foreach (var smr in smrs)
+                {
+                    if (smr.name == "AssaultRifle" || smr.name.Contains("Rifle"))
+                    {
+                        rifleMesh = smr.sharedMesh;
+                        rifleMat = smr.sharedMaterial;
+                        break;
+                    }
+                }
             }
-            // Direct central bore emitter
-            muzzleLocalPos = new Vector3(0, 0.025f, 0.39f);
         }
-        else if (currentArchetype == WeaponArchetype.StandardRifle)
+
+        if (rifleMat == null)
         {
-            // Long-Range Marksman precision barrel
-            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            barrel.transform.SetParent(_weaponRoot, false);
-            barrel.transform.localPosition = new Vector3(0, 0.02f, 0.32f);
-            barrel.transform.localScale = new Vector3(0.036f, 0.20f, 0.036f);
-            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
-            Destroy(barrel.GetComponent<Collider>());
-
-            // Muzzle brake
-            GameObject brake = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            brake.transform.SetParent(_weaponRoot, false);
-            brake.transform.localPosition = new Vector3(0, 0.02f, 0.52f);
-            brake.transform.localScale = new Vector3(0.045f, 0.025f, 0.045f);
-            brake.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            brake.GetComponent<MeshRenderer>().material = neonMat;
-            Destroy(brake.GetComponent<Collider>());
-
-            // Long-range optical scope chassis mounted on top
-            GameObject scopeBody = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            scopeBody.name = "MarksmanOptic";
-            scopeBody.transform.SetParent(_weaponRoot, false);
-            scopeBody.transform.localPosition = new Vector3(0, 0.09f, 0.06f);
-            scopeBody.transform.localScale = new Vector3(0.038f, 0.12f, 0.038f);
-            scopeBody.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            scopeBody.GetComponent<MeshRenderer>().material = gunMetalMat;
-            Destroy(scopeBody.GetComponent<Collider>());
-
-            // Scope objective lens (front)
-            GameObject scopeLens = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            scopeLens.name = "OpticLens";
-            scopeLens.transform.SetParent(_weaponRoot, false);
-            scopeLens.transform.localPosition = new Vector3(0, 0.09f, 0.18f);
-            scopeLens.transform.localScale = new Vector3(0.042f, 0.015f, 0.042f);
-            scopeLens.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            scopeLens.GetComponent<MeshRenderer>().material = neonMat;
-            Destroy(scopeLens.GetComponent<Collider>());
-
-            muzzleLocalPos = new Vector3(0, 0.02f, 0.54f);
+            rifleMat = Resources.Load<Material>("RobotHero_URP");
         }
-        else if (currentArchetype == WeaponArchetype.DualPistols)
+
+        Vector3 muzzleLocalPos = new Vector3(0.02f, 0.04f, 0.58f);
+
+        if (rifleMesh != null)
         {
-            // Compact pistol barrel
-            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            barrel.transform.SetParent(_weaponRoot, false);
-            barrel.transform.localPosition = new Vector3(0, 0.015f, 0.18f);
-            barrel.transform.localScale = new Vector3(0.032f, 0.09f, 0.032f);
-            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
-            Destroy(barrel.GetComponent<Collider>());
+            GameObject authenticRifle = new GameObject("Authentic_AssaultRifle");
+            authenticRifle.transform.SetParent(_weaponRoot, false);
+            // Position the authentic rifle cleanly in the lower-right first person view
+            authenticRifle.transform.localPosition = new Vector3(0.06f, -0.14f, 0.18f);
+            authenticRifle.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
+            authenticRifle.transform.localScale = Vector3.one * 0.01f;
 
-            muzzleLocalPos = new Vector3(0, 0.015f, 0.28f);
-        }
-        else
-        {
-            // Tactical Defense Carbine barrel
-            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            barrel.transform.SetParent(_weaponRoot, false);
-            barrel.transform.localPosition = new Vector3(0, 0.02f, 0.24f);
-            barrel.transform.localScale = new Vector3(0.042f, 0.12f, 0.042f);
-            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
-            Destroy(barrel.GetComponent<Collider>());
+            MeshFilter mf = authenticRifle.AddComponent<MeshFilter>();
+            mf.sharedMesh = rifleMesh;
 
-            muzzleLocalPos = new Vector3(0, 0.02f, 0.38f);
+            MeshRenderer mr = authenticRifle.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = rifleMat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
-        // 3. Glowing Energy Core
-        GameObject core = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        core.name = "EnergyCore";
-        core.transform.SetParent(_weaponRoot, false);
-        core.transform.localPosition = new Vector3(0, -0.01f, 0.02f);
-        core.transform.localScale = new Vector3(0.055f, 0.08f, 0.055f);
-        core.transform.localRotation = Quaternion.Euler(90, 0, 0);
-        core.GetComponent<MeshRenderer>().material = neonMat;
-        Destroy(core.GetComponent<Collider>());
-
-        // 4. Handle / Grip
-        GameObject grip = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        grip.name = "Grip";
-        grip.transform.SetParent(_weaponRoot, false);
-        grip.transform.localPosition = new Vector3(0, -0.1f, -0.06f);
-        grip.transform.localScale = new Vector3(0.05f, 0.12f, 0.06f);
-        grip.transform.localRotation = Quaternion.Euler(18, 0, 0);
-        grip.GetComponent<MeshRenderer>().material = gunMetalMat;
-        Destroy(grip.GetComponent<Collider>());
-
-        // 5. Sight (for non-sniper weapons; sniper already has high-power marksman optic)
-        if (currentArchetype != WeaponArchetype.StandardRifle)
-        {
-            GameObject sight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            sight.name = "Sight";
-            sight.transform.SetParent(_weaponRoot, false);
-            sight.transform.localPosition = new Vector3(0, 0.07f, 0.08f);
-            sight.transform.localScale = new Vector3(0.015f, 0.025f, 0.04f);
-            sight.GetComponent<MeshRenderer>().material = neonMat;
-            Destroy(sight.GetComponent<Collider>());
-        }
-
-        // 6. Muzzle Point
+        // Muzzle Point
         GameObject muzzle = new GameObject("MuzzlePoint");
         muzzle.transform.SetParent(_weaponRoot, false);
         muzzle.transform.localPosition = muzzleLocalPos;
         _muzzleTransform = muzzle.transform;
 
-        // 7. Muzzle Flash Point Light
+        // Muzzle Flash Point Light
         GameObject flashLightObj = new GameObject("MuzzleFlashLight");
         flashLightObj.transform.SetParent(muzzle.transform, false);
         _muzzleFlashLight = flashLightObj.AddComponent<Light>();

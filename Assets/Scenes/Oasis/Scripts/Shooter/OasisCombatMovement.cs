@@ -45,7 +45,7 @@ public class OasisCombatMovement : MonoBehaviour
     [Header("Robot Hero Character Model")]
     public GameObject robotHeroVisual;
     public Animator robotHeroAnimator;
-    public bool isThirdPerson = false;
+    public bool isThirdPerson = true;
     public bool isAimingThirdPerson = false;
     public bool isHoldingLeftClickAim = false;
 
@@ -232,7 +232,7 @@ public class OasisCombatMovement : MonoBehaviour
         else if (_wasMenuOrMatchEnded)
         {
             _wasMenuOrMatchEnded = false;
-            SetThirdPersonMode(false); // Seamlessly enter gameplay in unobstructed first-person mode
+            SetThirdPersonMode(true); // Seamlessly enter gameplay in authentic third-person over-the-shoulder mode
         }
 
         HandleCameraViewToggle();
@@ -852,8 +852,8 @@ public class OasisCombatMovement : MonoBehaviour
         {
             // Third-person over-the-shoulder view:
             Vector3 shoulderOffset = isAimingThirdPerson
-                ? new Vector3(0.48f, 0.10f, -1.6f)
-                : new Vector3(0.58f, 0.18f, -2.5f);
+                ? new Vector3(0.55f, 0.12f, -1.6f)
+                : new Vector3(0.65f, 0.16f, -2.4f);
 
             Vector3 desiredPos = _cameraTarget.position + _cameraTarget.rotation * shoulderOffset;
             Vector3 origin = _cameraTarget.position;
@@ -1086,13 +1086,23 @@ public class OasisCombatMovement : MonoBehaviour
             {
                 if (firstPerson)
                 {
-                    // In First-Person: completely disable character body mesh so it NEVER blocks the forward camera
-                    r.enabled = false;
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                    // In First-Person: disable head and backpack so they never block forward camera sightline,
+                    // while preserving the character's arms and authentic weapon in view!
+                    string rName = r.name.ToLower();
+                    if (rName.Contains("head") || rName.Contains("pack") || rName.Contains("body"))
+                    {
+                        r.enabled = false;
+                        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                    }
+                    else
+                    {
+                        r.enabled = true;
+                        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                    }
                 }
                 else
                 {
-                    // In Third-Person: enable full body mesh and cast shadows
+                    // In Third-Person: enable full authentic body mesh, weapon, and cast shadows
                     r.enabled = true;
                     r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
                 }
