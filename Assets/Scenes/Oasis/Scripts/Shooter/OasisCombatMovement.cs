@@ -158,6 +158,12 @@ public class OasisCombatMovement : MonoBehaviour
 
         SetupLocalRobotHero();
         ConfigureOperativeAbility(PlayerPrefs.GetInt("OasisSelectedOperative", 0));
+
+        if (!Application.isEditor)
+        {
+            Screen.fullScreenMode = FullScreenMode.ExclusiveFullScreen;
+            Screen.fullScreen = true;
+        }
     }
 
     private OasisCombatAI _downedTeammateNearby = null;
@@ -165,6 +171,8 @@ public class OasisCombatMovement : MonoBehaviour
 
     private void Update()
     {
+        HandleFullscreenToggle();
+
         bool menuOrMatchEnded =
             (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isSimulationMode || OasisShooterManager.Instance.isMatchFinished)) ||
             (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive);
@@ -187,6 +195,16 @@ public class OasisCombatMovement : MonoBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             return;
+        }
+
+        // Trap and lock cursor inside game window to prevent leaking onto other monitors
+        if (Cursor.lockState != CursorLockMode.Locked)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+        }
+        if (Cursor.visible)
+        {
+            Cursor.visible = false;
         }
 
         if (_characterController == null) return;
@@ -547,7 +565,7 @@ public class OasisCombatMovement : MonoBehaviour
                 // Concussive shockwave (deal 45 damage to all enemy bots within 9m)
                 foreach (var bot in OasisCombatAI.ActiveBots)
                 {
-                    if (bot == null || bot._isDead || bot.isDowned || bot.teamId == localTeam) continue;
+                    if (bot == null || bot.isDead || bot.isDowned || bot.teamId == localTeam) continue;
                     float d = Vector3.Distance(transform.position, bot.transform.position);
                     if (d <= 9.0f)
                     {
@@ -612,7 +630,7 @@ public class OasisCombatMovement : MonoBehaviour
                 int stunnedCount = 0;
                 foreach (var bot in OasisCombatAI.ActiveBots)
                 {
-                    if (bot == null || bot._isDead || bot.isDowned || bot.teamId == localTeam) continue;
+                    if (bot == null || bot.isDead || bot.isDowned || bot.teamId == localTeam) continue;
                     float d = Vector3.Distance(transform.position, bot.transform.position);
                     if (d <= 14.0f)
                     {
@@ -712,7 +730,7 @@ public class OasisCombatMovement : MonoBehaviour
             int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
             foreach (var bot in OasisCombatAI.ActiveBots)
             {
-                if (bot == null || bot._isDead || bot.teamId != localTeam) continue;
+                if (bot == null || bot.isDead || bot.teamId != localTeam) continue;
                 float d = Vector3.Distance(transform.position, bot.transform.position);
                 if (d <= 8.0f)
                 {
@@ -727,7 +745,6 @@ public class OasisCombatMovement : MonoBehaviour
                     }
                 }
             }
-        }
         }
     }
 
@@ -753,8 +770,8 @@ public class OasisCombatMovement : MonoBehaviour
                 // Normal: comfortable over-the-shoulder view
                 // Right-Click 3rd Person Aim: tightened over-the-shoulder zoom
                 Vector3 targetCam = isAimingThirdPerson
-                    ? new Vector3(0.48f, _currentCameraY + 0.14f, -1.6f)
-                    : new Vector3(0.68f, _currentCameraY + 0.22f, -2.6f);
+                    ? new Vector3(0.72f, _currentCameraY + 0.28f, -1.8f)
+                    : new Vector3(0.85f, _currentCameraY + 0.35f, -3.2f);
                 _cameraTarget.localPosition = Vector3.Lerp(_cameraTarget.localPosition, targetCam, Time.deltaTime * 14f);
             }
             else
@@ -808,18 +825,8 @@ public class OasisCombatMovement : MonoBehaviour
 #endif
 
         isHoldingLeftClickAim = leftHeld;
-        isAimingThirdPerson = rightHeld && !leftHeld;
+        isAimingThirdPerson = rightHeld;
 
-        // Holding left-click enters 1st person mode for controlled precision shot.
-        // Releasing left-click immediately returns to 3rd person!
-        bool shouldBeFirstPerson = isHoldingLeftClickAim;
-        bool wasFirstPerson = !isThirdPerson;
-
-        if (shouldBeFirstPerson != wasFirstPerson)
-        {
-            isThirdPerson = !shouldBeFirstPerson;
-            SetMeshVisibility(shouldBeFirstPerson);
-        }
     }
 
     private void UpdateCharacterAnimation()
@@ -1293,6 +1300,9 @@ public class OasisCombatMovement : MonoBehaviour
         // 8. Bottom Right Tactical Weapon & Ammo Display
         DrawBottomRightAmmoHUD();
 
+        // Mech Thruster Jet Boost HUD
+        DrawThrusterJetHUD(centerX);
+
         // Operative Special Ability HUD
         DrawBottomCenterAbilityHUD(centerX);
 
@@ -1305,35 +1315,35 @@ public class OasisCombatMovement : MonoBehaviour
         var mgr = OasisShooterManager.Instance;
         if (mgr == null || !mgr.isTeamBattleActive) return;
 
-        float sbW = 540f;
-        float sbH = 58f;
+        float sbW = 440f;
+        float sbH = 44f;
         float sbX = centerX - (sbW * 0.5f);
         float sbY = 16f;
 
         // Dark tactical backdrop
-        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.90f);
         GUI.DrawTexture(new Rect(sbX, sbY, sbW, sbH), _crosshairWhiteTex);
 
         // Sleek top & bottom accent borders
-        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.7f);
+        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.8f);
         GUI.DrawTexture(new Rect(sbX, sbY, sbW, 2), _crosshairWhiteTex);
         GUI.color = new Color(0.12f, 0.20f, 0.28f, 0.9f);
         GUI.DrawTexture(new Rect(sbX, sbY + sbH - 2, sbW, 2), _crosshairWhiteTex);
 
         // Styles
         GUIStyle teamStyle = new GUIStyle(GUI.skin.label);
-        teamStyle.fontSize = 19;
+        teamStyle.fontSize = 18;
         teamStyle.fontStyle = FontStyle.Bold;
 
         // ALPHA Score (Left)
         teamStyle.alignment = TextAnchor.MiddleLeft;
         teamStyle.normal.textColor = new Color(0.15f, 0.85f, 1.0f);
-        GUI.Label(new Rect(sbX + 22, sbY + 6, 160, 26), $"ALPHA  {mgr.alphaKills}", teamStyle);
+        GUI.Label(new Rect(sbX + 18, sbY + 4, 130, 24), $"ALPHA  {mgr.alphaKills}", teamStyle);
 
         // BRAVO Score (Right)
         teamStyle.alignment = TextAnchor.MiddleRight;
         teamStyle.normal.textColor = new Color(1.0f, 0.35f, 0.25f);
-        GUI.Label(new Rect(sbX + sbW - 182, sbY + 6, 160, 26), $"{mgr.bravoKills}  BRAVO", teamStyle);
+        GUI.Label(new Rect(sbX + sbW - 148, sbY + 4, 130, 24), $"{mgr.bravoKills}  BRAVO", teamStyle);
 
         // Center Countdown Timer
         int minutes = Mathf.FloorToInt(mgr.matchTimeRemaining / 60f);
@@ -1342,22 +1352,19 @@ public class OasisCombatMovement : MonoBehaviour
 
         GUIStyle timerStyle = new GUIStyle(GUI.skin.label);
         timerStyle.alignment = TextAnchor.MiddleCenter;
-        timerStyle.fontSize = 20;
+        timerStyle.fontSize = 19;
         timerStyle.fontStyle = FontStyle.Bold;
         timerStyle.normal.textColor = mgr.matchTimeRemaining <= 30f ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.95f, 0.95f, 0.95f);
-        GUI.Label(new Rect(sbX + 180, sbY + 4, 180, 26), timeStr, timerStyle);
+        GUI.Label(new Rect(sbX + (sbW * 0.5f) - 60, sbY + 3, 120, 24), timeStr, timerStyle);
 
-        // Subtitle: Goal and Player's Score
-        int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-        string myTeamStr = (myTeam == 0) ? "<color=#26D9FF>SQUAD ALPHA</color>" : "<color=#FF5544>SQUAD BRAVO</color>";
-
+        // Subtitle: Goal
         GUIStyle subStyle = new GUIStyle(GUI.skin.label);
         subStyle.alignment = TextAnchor.MiddleCenter;
-        subStyle.fontSize = 12;
-        subStyle.fontStyle = FontStyle.Normal;
+        subStyle.fontSize = 10;
+        subStyle.fontStyle = FontStyle.Bold;
         subStyle.richText = true;
-        subStyle.normal.textColor = new Color(0.85f, 0.88f, 0.92f);
-        GUI.Label(new Rect(sbX + 20, sbY + 32, sbW - 40, 20), $"{myTeamStr}   |   SCORE: <color=#FFD700>{mgr.score} PTS</color>   |   GOAL: {mgr.targetKills} KILLS", subStyle);
+        subStyle.normal.textColor = new Color(0.65f, 0.75f, 0.85f);
+        GUI.Label(new Rect(sbX + 20, sbY + 25, sbW - 40, 16), $"FIRST TO {mgr.targetKills} ELIMINATIONS", subStyle);
 
         GUI.color = Color.white;
     }
@@ -1585,7 +1592,7 @@ public class OasisCombatMovement : MonoBehaviour
         else if (ready)
         {
             GUI.color = new Color(0.2f, 0.95f, 1.0f, 0.95f);
-            GUI.DrawTexture(new Rect(barX, barY, barW * pct, barH), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(barX, barY, barW, barH), _crosshairWhiteTex);
         }
         else
         {
@@ -1597,7 +1604,66 @@ public class OasisCombatMovement : MonoBehaviour
         GUI.color = Color.white;
     }
 
-        GUI.Label(new Rect(bnX + 10, bnY + 4, bnW - 20, bnH - 8), mgr.ActiveNotificationBanner, bannerStyle);
+    private void DrawThrusterJetHUD(float centerX)
+    {
+        if (_fpc == null) return;
+
+        float jW = 190f;
+        float jH = 22f;
+        float jX = centerX - (jW * 0.5f);
+        float jY = Screen.height - 108f;
+
+        bool ready = _fpc.thrusterCooldownRemaining <= 0f;
+        float cdPct = ready ? 1f : Mathf.Clamp01(1f - (_fpc.thrusterCooldownRemaining / _fpc.ThrusterCooldown));
+
+        // Background
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
+        GUI.DrawTexture(new Rect(jX, jY, jW, jH), _crosshairWhiteTex);
+
+        // Progress line
+        GUI.color = ready ? new Color(0.2f, 0.95f, 1.0f, 0.95f) : new Color(0.95f, 0.55f, 0.15f, 0.85f);
+        GUI.DrawTexture(new Rect(jX + 4, jY + jH - 3, (jW - 8) * cdPct, 2), _crosshairWhiteTex);
+
+        GUIStyle jetStyle = new GUIStyle(GUI.skin.label);
+        jetStyle.fontSize = 10;
+        jetStyle.fontStyle = FontStyle.Bold;
+        jetStyle.alignment = TextAnchor.MiddleCenter;
+        jetStyle.normal.textColor = ready ? new Color(0.2f, 0.95f, 1.0f) : new Color(0.7f, 0.75f, 0.8f);
+
+        string status = ready ? "[SPACE x2] JET BOOST READY" : $"JET CHARGING {_fpc.thrusterCooldownRemaining:F1}s";
+        GUI.Label(new Rect(jX, jY + 1, jW, 16), status, jetStyle);
         GUI.color = Color.white;
+    }
+
+    private void HandleFullscreenToggle()
+    {
+        bool f11Pressed = false;
+        bool altEnterPressed = false;
+
+#if ENABLE_INPUT_SYSTEM
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null)
+        {
+            f11Pressed = kb.f11Key.wasPressedThisFrame;
+            altEnterPressed = (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed) && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame);
+        }
+#else
+        f11Pressed = Input.GetKeyDown(KeyCode.F11);
+        altEnterPressed = (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter));
+#endif
+
+        if (f11Pressed || altEnterPressed)
+        {
+            if (Screen.fullScreenMode == FullScreenMode.ExclusiveFullScreen || Screen.fullScreen)
+            {
+                Screen.fullScreenMode = FullScreenMode.Windowed;
+                Screen.fullScreen = false;
+            }
+            else
+            {
+                Screen.fullScreenMode = FullScreenMode.ExclusiveFullScreen;
+                Screen.fullScreen = true;
+            }
+        }
     }
 }

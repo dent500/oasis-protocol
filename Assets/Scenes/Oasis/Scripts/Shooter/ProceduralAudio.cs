@@ -49,6 +49,14 @@ public static class ProceduralAudio
         return _scanPingClip;
     }
 
+    private static AudioClip _thrusterClip;
+    public static AudioClip GetThrusterBoostClip()
+    {
+        if (_thrusterClip == null)
+            _thrusterClip = CreatePneumaticLaunch("ThrusterBoost", 0.40f, 130f, 420f, 0.55f);
+        return _thrusterClip;
+    }
+
     /// <summary>
     /// Soft, low-profile suppressed laser pulse / thud. No harsh saw-wave screech.
     /// </summary>

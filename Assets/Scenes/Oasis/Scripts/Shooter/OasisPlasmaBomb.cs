@@ -69,6 +69,28 @@ public class OasisPlasmaBomb : MonoBehaviour
         return bomb;
     }
 
+    public static OasisPlasmaBomb SpawnBomb(Vector3 position, Vector3 velocity, float dmg, float radius, int teamId, int playerId, float fuseSeconds = 6f)
+    {
+        var bomb = SpawnBomb(position, velocity, teamId, playerId);
+        bomb.directDamage = dmg;
+        bomb.splashDamage = dmg * 0.7f;
+        bomb.explosionRadius = radius;
+        if (fuseSeconds > 0f)
+        {
+            bomb.StartCoroutine(bomb.TimedFuseRoutine(fuseSeconds));
+        }
+        return bomb;
+    }
+
+    private IEnumerator TimedFuseRoutine(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (!_hasExploded)
+        {
+            Explode(transform.position);
+        }
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
         if (_hasExploded) return;

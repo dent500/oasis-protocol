@@ -232,6 +232,23 @@ public class OasisCombatAI : MonoBehaviour
                 r.sharedMaterial = customMat;
             }
 
+            // 4b. Attach glowing Holographic Team Beacon Ring to torso for instantaneous squad identification
+            GameObject teamRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            teamRing.name = "Team_HoloBeacon";
+            teamRing.transform.SetParent(visual.transform, false);
+            teamRing.transform.localPosition = new Vector3(0f, 1.35f, 0f);
+            teamRing.transform.localScale = new Vector3(0.65f, 0.035f, 0.65f);
+            var ringCol = teamRing.GetComponent<Collider>();
+            if (ringCol != null) Destroy(ringCol);
+            Material ringMat = new Material(OasisShaderHelper.GetLitShader());
+            ringMat.color = teamColor;
+            if (ringMat.HasProperty("_EmissionColor"))
+            {
+                ringMat.EnableKeyword("_EMISSION");
+                ringMat.SetColor("_EmissionColor", teamColor * 2.5f);
+            }
+            teamRing.GetComponent<Renderer>().sharedMaterial = ringMat;
+
             // 5. Attach 3D Blaster Rifle to the right gun arm bone
             Transform attachParent = _gunArmBone != null ? _gunArmBone : visual.transform;
             GameObject rifle = BuildProceduralRifle(attachParent);
@@ -484,7 +501,8 @@ public class OasisCombatAI : MonoBehaviour
 
         _overheadNameText = nameObj.GetComponent<Text>();
         _overheadNameText.font = font;
-        _overheadNameText.text = botName;
+        string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
+        _overheadNameText.text = teamPrefix + botName;
         _overheadNameText.fontSize = 14;
         _overheadNameText.fontStyle = FontStyle.Bold;
         _overheadNameText.alignment = TextAnchor.MiddleCenter;
@@ -659,20 +677,38 @@ public class OasisCombatAI : MonoBehaviour
                 _overheadShieldSlider.value = reviveProgress * maxShield;
             }
 
-            // Prone crawl posture & slow ground crawl toward nearest living squadmate (or away from danger)
-            if (_visualRoot != null)
-            {
-                float crawlSway = (reviveProgress <= 0.01f) ? Mathf.Sin(Time.time * 4.8f) * 5.5f : 0f;
-                _visualRoot.localPosition = Vector3.Lerp(_visualRoot.localPosition, new Vector3(0f, 0.22f, -0.40f), Time.deltaTime * 10f);
-                _visualRoot.localRotation = Quaternion.Slerp(_visualRoot.localRotation, Quaternion.Euler(82f, 0f, crawlSway), Time.deltaTime * 10f);
-            }
-
+            // Downed collapse / prone posture handling
             if (_animator != null && _animator.runtimeAnimatorController != null)
             {
-                _animator.speed = (reviveProgress <= 0.01f) ? 0.55f : 0.12f;
-                if (_animator.HasState(0, Animator.StringToHash("WalkFront_Shoot_AR")))
+                if (_animator.HasState(0, Animator.StringToHash("Die")))
                 {
-                    _animator.Play("WalkFront_Shoot_AR");
+                    var st = _animator.GetCurrentAnimatorStateInfo(0);
+                    if (st.IsName("Die"))
+                    {
+                        if (st.normalizedTime >= 0.95f)
+                        {
+                            _animator.speed = 0f; // Freeze fallen flat on ground
+                        }
+                    }
+                    else
+                    {
+                        _animator.Play("Die");
+                    }
+                    if (_visualRoot != null)
+                    {
+                        _visualRoot.localPosition = Vector3.zero;
+                        _visualRoot.localRotation = Quaternion.identity;
+                    }
+                }
+                else
+                {
+                    _animator.speed = (reviveProgress <= 0.01f) ? 0.35f : 0f;
+                    if (_visualRoot != null)
+                    {
+                        float crawlSway = (reviveProgress <= 0.01f) ? Mathf.Sin(Time.time * 4.8f) * 5.5f : 0f;
+                        _visualRoot.localPosition = Vector3.Lerp(_visualRoot.localPosition, new Vector3(0f, 0.22f, -0.40f), Time.deltaTime * 10f);
+                        _visualRoot.localRotation = Quaternion.Slerp(_visualRoot.localRotation, Quaternion.Euler(82f, 0f, crawlSway), Time.deltaTime * 10f);
+                    }
                 }
             }
 
@@ -727,7 +763,8 @@ public class OasisCombatAI : MonoBehaviour
                 currentAmmo = maxAmmo;
                 if (_overheadNameText != null)
                 {
-                    _overheadNameText.text = botName;
+                    string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
+        _overheadNameText.text = teamPrefix + botName;
                     _overheadNameText.color = teamColor;
                 }
             }
@@ -1429,22 +1466,35 @@ public class OasisCombatAI : MonoBehaviour
         reviveProgress = 0f;
         _lastAttackerId = attackerId;
 
-        // Transition visual root into a prone ground crawl posture and play crawling animation
-        if (_visualRoot != null)
-        {
-            _visualRoot.localPosition = new Vector3(0f, 0.22f, -0.40f);
-            _visualRoot.localRotation = Quaternion.Euler(82f, 0f, 0f);
-        }
+        // Transition visual root and play Die collapse animation (or prone posture)
         if (_animator != null && _animator.runtimeAnimatorController != null)
         {
-            _animator.speed = 0.55f;
-            if (_animator.HasState(0, Animator.StringToHash("WalkFront_Shoot_AR")))
+            if (_animator.HasState(0, Animator.StringToHash("Die")))
             {
-                _animator.Play("WalkFront_Shoot_AR");
+                _animator.speed = 1.0f;
+                _animator.Play("Die");
+                if (_visualRoot != null)
+                {
+                    _visualRoot.localPosition = Vector3.zero;
+                    _visualRoot.localRotation = Quaternion.identity;
+                }
             }
-            else if (_animator.HasState(0, Animator.StringToHash("Idle_Ducking_AR")))
+            else
             {
-                _animator.Play("Idle_Ducking_AR");
+                _animator.speed = 0.35f;
+                if (_animator.HasState(0, Animator.StringToHash("Idle_Ducking_AR")))
+                {
+                    _animator.Play("Idle_Ducking_AR");
+                }
+                else
+                {
+                    _animator.Play("WalkFront_Shoot_AR");
+                }
+                if (_visualRoot != null)
+                {
+                    _visualRoot.localPosition = new Vector3(0f, 0.22f, -0.40f);
+                    _visualRoot.localRotation = Quaternion.Euler(82f, 0f, 0f);
+                }
             }
         }
 
@@ -1544,7 +1594,8 @@ public class OasisCombatAI : MonoBehaviour
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
-                _overheadNameText.text = botName;
+                string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
+        _overheadNameText.text = teamPrefix + botName;
                 _overheadNameText.color = teamColor;
             }
             if (_overheadShieldSlider != null)
@@ -1651,7 +1702,8 @@ public class OasisCombatAI : MonoBehaviour
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
-                _overheadNameText.text = botName;
+                string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
+        _overheadNameText.text = teamPrefix + botName;
                 _overheadNameText.color = teamColor;
             }
             if (_overheadShieldSlider != null) _overheadShieldSlider.value = maxShield;

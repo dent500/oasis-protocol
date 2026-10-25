@@ -32,6 +32,10 @@ namespace StarterAssets
         public float JumpTimeout = 0.1f;
         [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
         public float FallTimeout = 0.15f;
+        [Header("Mech Thruster Jump Boost")]
+        public float ThrusterBoostForce = 10.5f;
+        public float ThrusterCooldown = 3.5f;
+        public float thrusterCooldownRemaining { get; private set; } = 0f;
 
         [Header("Player Grounded")]
         [Tooltip("If the character is grounded or not. Not part of the CharacterController built in grounded check")]
@@ -154,6 +158,7 @@ namespace StarterAssets
 
         private void Update()
         {
+            if (thrusterCooldownRemaining > 0f) thrusterCooldownRemaining -= Time.deltaTime;
             GroundedCheck();
             JumpAndGravity();
             Move();
@@ -214,7 +219,7 @@ namespace StarterAssets
             if (_input.look.sqrMagnitude >= _threshold)
             {
                 // Mouse look: Calibrated 0.045 degrees per pixel for smooth, controllable turning
-                float baseLookScale = 0.045f;
+                float baseLookScale = 0.105f;
 
                 // Gamepad look: 120 degrees per second scaled by delta time.
                 // Multiplied by RotationSpeed (which ADS aim drops for steady sniping).
@@ -374,7 +379,7 @@ namespace StarterAssets
                     // the square root of H * -2 * G = how much velocity needed to reach desired height
                     _verticalVelocity = Mathf.Sqrt(safeJumpHeight * -2f * Gravity);
                     Grounded = false;
-                    _jumpTimeoutDelta = JumpTimeout;
+                _jumpTimeoutDelta = JumpTimeout;
                     if (_input != null) _input.jump = false;
                 }
 
@@ -387,6 +392,24 @@ namespace StarterAssets
             else
             {
                 // reset the jump timeout timer
+                bool thrusterJumpPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
+#if ENABLE_INPUT_SYSTEM
+                    (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+#endif
+                    (_input != null && _input.jump);
+
+                if (thrusterJumpPressed && thrusterCooldownRemaining <= 0f && _verticalVelocity < 6.0f)
+                {
+                    thrusterCooldownRemaining = ThrusterCooldown;
+                    _verticalVelocity = ThrusterBoostForce;
+                    if (_input != null) _input.jump = false;
+
+                    var aSrc = GetComponent<AudioSource>();
+                    if (aSrc != null) aSrc.PlayOneShot(ProceduralAudio.GetThrusterBoostClip(), 0.85f);
+                    BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.15f, -Vector3.up, false);
+                    OasisShooterManager.Instance?.ShowNotificationBanner("<color=#26D9FF>THRUSTER BOOST ENGAGED</color>", 1.5f);
+                }
+
                 _jumpTimeoutDelta = JumpTimeout;
 
                 // fall timeout

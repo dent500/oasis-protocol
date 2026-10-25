@@ -179,34 +179,34 @@ public class OasisSpawnSystem : MonoBehaviour
             case SpawnSector.SouthCanyonPass:
                 return new Vector3[]
                 {
-                    new Vector3(-6f, 0f, -124f),
-                    new Vector3(-2f, 0f, -126f),
-                    new Vector3( 2f, 0f, -126f),
-                    new Vector3( 6f, 0f, -124f)
+                    new Vector3(-16f, 0f, -121f),
+                    new Vector3(-5f, 0f, -125f),
+                    new Vector3( 5f, 0f, -125f),
+                    new Vector3( 16f, 0f, -121f)
                 };
             case SpawnSector.NorthDunes:
                 return new Vector3[]
                 {
-                    new Vector3(-6f, 0f, -180f),
-                    new Vector3(-2f, 0f, -178f),
-                    new Vector3( 2f, 0f, -178f),
-                    new Vector3( 6f, 0f, -180f)
+                    new Vector3(-16f, 0f, -183f),
+                    new Vector3(-5f, 0f, -180f),
+                    new Vector3( 5f, 0f, -180f),
+                    new Vector3( 16f, 0f, -183f)
                 };
             case SpawnSector.WestOutpost:
                 return new Vector3[]
                 {
-                    new Vector3(-36f, 0f, -146f),
-                    new Vector3(-40f, 0f, -150f),
-                    new Vector3(-36f, 0f, -154f),
-                    new Vector3(-33f, 0f, -150f)
+                    new Vector3(-44f, 0f, -142f),
+                    new Vector3(-48f, 0f, -150f),
+                    new Vector3(-45f, 0f, -158f),
+                    new Vector3(-41f, 0f, -150f)
                 };
             case SpawnSector.EastGorge:
                 return new Vector3[]
                 {
-                    new Vector3( 36f, 0f, -146f),
-                    new Vector3( 40f, 0f, -150f),
-                    new Vector3( 36f, 0f, -154f),
-                    new Vector3( 33f, 0f, -150f)
+                    new Vector3( 44f, 0f, -142f),
+                    new Vector3( 48f, 0f, -150f),
+                    new Vector3( 45f, 0f, -158f),
+                    new Vector3( 41f, 0f, -150f)
                 };
             case SpawnSector.OasisCore:
             default:
@@ -279,7 +279,7 @@ public class OasisSpawnSystem : MonoBehaviour
             }
             else if (combatant.GetComponent<OasisCombatAI>() != null)
             {
-                squadSlot = Mathf.Abs(combatant.name.GetHashCode()) % 4;
+                squadSlot = Random.Range(0, 4);
             }
             else
             {

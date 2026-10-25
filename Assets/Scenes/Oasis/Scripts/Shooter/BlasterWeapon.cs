@@ -297,7 +297,7 @@ public class BlasterWeapon : MonoBehaviour
         bool is3rdPerson = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
         bool is3rdAiming = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isAimingThirdPerson;
 
-        isScoped = (!is3rdPerson && fireHeld) || (!is3rdPerson && scopeHeld);
+        isScoped = scopeHeld;
 
         if (reloadPressed && currentAmmo < maxAmmo && !_isReloading)
         {
@@ -380,7 +380,7 @@ public class BlasterWeapon : MonoBehaviour
 
         if (_scopeCanvas != null)
         {
-            _scopeCanvas.SetActive(!is3rdPerson);
+            _scopeCanvas.SetActive(!is3rdPerson && isScoped);
             if (!is3rdPerson && _scopeRangeText != null && _camera != null)
             {
                 Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));

@@ -29,7 +29,26 @@ public class RobotHeroSetup
     {
         try
         {
-            if (!File.Exists(TargetPrefabPath) || !File.Exists(ControllerPath))
+            bool needsSetup = !File.Exists(TargetPrefabPath) || !File.Exists(ControllerPath);
+            if (!needsSetup)
+            {
+                var ctrl = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+                if (ctrl == null || ctrl.layers.Length == 0)
+                {
+                    needsSetup = true;
+                }
+                else
+                {
+                    bool hasDie = false;
+                    foreach (var s in ctrl.layers[0].stateMachine.states)
+                    {
+                        if (s.state.name == "Die") { hasDie = true; break; }
+                    }
+                    if (!hasDie) needsSetup = true;
+                }
+            }
+
+            if (needsSetup)
             {
                 SetupCharacter();
             }
@@ -204,7 +223,8 @@ public class RobotHeroSetup
             ("Idle_Ducking_AR", "Idle_Ducking_ar.fbx"),
             ("Shoot_Autoshot_AR", "Shoot_AutoShot_AR.fbx"),
             ("Jump", "Jump.fbx"),
-            ("Reload", "Reload.fbx")
+            ("Reload", "Reload.fbx"),
+            ("Die", "Die.fbx")
         };
 
         AnimatorState defaultState = null;
