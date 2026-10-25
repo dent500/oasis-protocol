@@ -8,16 +8,40 @@ using UnityEngine;
 public class OasisPlasmaBomb : MonoBehaviour
 {
     [Header("Explosive Stats")]
-    public float directDamage = 85f;
-    public float splashDamage = 55f;
-    public float explosionRadius = 6.5f;
-    public float explosionForce = 450f;
+    public float directDamage = 110f;
+    public float splashDamage = 75f;
+    public float explosionRadius = 8.5f;
+    public float explosionForce = 550f;
     public int shooterTeamId = 0;
     public int shooterPlayerId = 0;
 
     private Rigidbody _rb;
     private bool _hasExploded = false;
     private Light _glowLight;
+
+    private void Update()
+    {
+        if (_hasExploded) return;
+
+        // Proximity Airburst Sensor: Detonates automatically when passing within 4.0m of any hostile enemy or drone
+        Collider[] nearby = Physics.OverlapSphere(transform.position, 4.0f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < nearby.Length; i++)
+        {
+            var ai = nearby[i].GetComponentInParent<OasisCombatAI>();
+            if (ai != null && !ai.isDead && ai.teamId != shooterTeamId)
+            {
+                Explode(transform.position);
+                return;
+            }
+
+            var drone = nearby[i].GetComponentInParent<TargetDrone>();
+            if (drone != null)
+            {
+                Explode(transform.position);
+                return;
+            }
+        }
+    }
 
     public static OasisPlasmaBomb SpawnBomb(Vector3 position, Vector3 velocity, int teamId, int playerId)
     {
@@ -51,10 +75,11 @@ public class OasisPlasmaBomb : MonoBehaviour
 
         // Physics
         SphereCollider col = bombObj.AddComponent<SphereCollider>();
-        col.radius = 0.2f;
+        col.radius = 0.35f;
 
         Rigidbody rb = bombObj.AddComponent<Rigidbody>();
-        rb.mass = 1.2f;
+        rb.mass = 0.8f;
+        rb.useGravity = false; // Fast, direct rocket-assisted flak trajectory
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.linearVelocity = velocity;
 
@@ -102,8 +127,14 @@ public class OasisPlasmaBomb : MonoBehaviour
         if (_hasExploded) return;
         _hasExploded = true;
 
-        // 1. VFX
+        // 1. Primary & Secondary Cluster Airburst VFX
         BlasterVFX.SpawnExplosion(center);
+        for (int k = 0; k < 3; k++)
+        {
+            Vector3 clusterPos = center + Random.insideUnitSphere * 2.8f;
+            clusterPos.y = Mathf.Max(center.y, clusterPos.y);
+            BlasterVFX.SpawnExplosion(clusterPos);
+        }
 
         // 2. Audio
         AudioSource.PlayClipAtPoint(ProceduralAudio.GetBombExplosionClip(), center, 0.75f);
@@ -139,6 +170,12 @@ public class OasisPlasmaBomb : MonoBehaviour
                 if (dist < 1.8f) dmg = directDamage; // Direct hit bonus
 
                 ai.TakeDamage(dmg, c.ClosestPoint(center), Vector3.up, shooterPlayerId, shooterTeamId);
+                int localId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
+                if (shooterPlayerId == localId)
+                {
+                    OasisCombatMovement.Instance?.TriggerHitmarker();
+                    OasisShooterManager.Instance?.OnTargetHit(dmg, ai.isDowned);
+                }
             }
 
             // Damage drones

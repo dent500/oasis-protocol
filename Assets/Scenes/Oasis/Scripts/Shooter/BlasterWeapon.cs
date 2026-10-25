@@ -22,11 +22,13 @@ public class BlasterWeapon : MonoBehaviour
         StandardRifle,
         ScatterShotgun,
         ContinuousBeam,
-        BombMortar
+        BombMortar,
+        DefenseCarbine,
+        DualPistols
     }
 
     [System.NonSerialized] public WeaponArchetype currentArchetype = WeaponArchetype.StandardRifle;
-    [System.NonSerialized] public string weaponDisplayName = "Kinetic Auto-Rifle";
+    [System.NonSerialized] public string weaponDisplayName = "Long-Range Marksman Rifle";
 
     [Header("Weapon Stats")]
     public float damage = 25f;
@@ -174,28 +176,52 @@ public class BlasterWeapon : MonoBehaviour
                 break;
 
             case WeaponArchetype.BombMortar:
-                weaponDisplayName = "Micro-Bomb Flak Mortar";
-                damage = 85f;
-                fireRate = 0.85f;
-                range = 120f;
-                maxAmmo = 8;
-                reloadTime = 1.5f;
-                recoilKickback = 0.24f;
-                recoilRotation = 8.5f;
-                recoilRecovery = 9f;
+                weaponDisplayName = "High-Velocity Flak Cannon";
+                damage = 110f; // High-velocity direct impact + airburst AoE
+                fireRate = 0.65f;
+                range = 160f;
+                maxAmmo = 10;
+                reloadTime = 1.3f;
+                recoilKickback = 0.18f;
+                recoilRotation = 6.0f;
+                recoilRecovery = 12f;
+                break;
+
+            case WeaponArchetype.DefenseCarbine:
+                weaponDisplayName = "Tactical Defense Carbine";
+                damage = 24f;
+                fireRate = 0.12f; // Rapid suppressive fire
+                range = 160f;
+                maxAmmo = 32;
+                reloadTime = 0.95f;
+                recoilKickback = 0.04f;
+                recoilRotation = 2.0f;
+                recoilRecovery = 16f;
+                break;
+
+            case WeaponArchetype.DualPistols:
+                weaponDisplayName = "High-Caliber Dual Pistols";
+                damage = 34f;
+                fireRate = 0.14f;
+                range = 110f;
+                maxAmmo = 24;
+                reloadTime = 0.85f;
+                recoilKickback = 0.06f;
+                recoilRotation = 3.0f;
+                recoilRecovery = 18f;
                 break;
 
             case WeaponArchetype.StandardRifle:
             default:
-                weaponDisplayName = "Kinetic Auto-Rifle";
-                damage = 25f;
-                fireRate = 0.18f;
-                range = 150f;
-                maxAmmo = 24;
-                reloadTime = 1.1f;
-                recoilKickback = 0.08f;
-                recoilRotation = 4f;
-                recoilRecovery = 12f;
+                weaponDisplayName = "Long-Range Marksman Rifle";
+                damage = 38f; // Heavy precision marksman caliber
+                fireRate = 0.16f;
+                range = 350f;
+                maxAmmo = 28;
+                reloadTime = 1.05f;
+                recoilKickback = 0.05f;
+                recoilRotation = 2.2f;
+                recoilRecovery = 15f;
                 break;
         }
 
@@ -266,11 +292,18 @@ public class BlasterWeapon : MonoBehaviour
             case 2: // Cyborg Special Operative -> Continuous Phase Laser
                 SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
                 break;
-            case 3: // Unit-07 Combat Android -> Continuous Beam
+            case 3: // Unit-07 Combat Android -> Continuous Phase Laser
                 SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
                 break;
-            case 4: // Wasteland Nomad -> Standard Rifle
-            case 5: // Combat Medic -> Standard Rifle
+            case 4: // Wasteland Nomad -> Long-Range Precision Marksman Rifle
+                SetWeaponArchetype(WeaponArchetype.StandardRifle, false);
+                break;
+            case 5: // Combat Medic -> Tactical Defense Carbine
+                SetWeaponArchetype(WeaponArchetype.DefenseCarbine, false);
+                break;
+            case 6: // Cyber Outlaw Specialist -> High-Caliber Dual Pistols
+                SetWeaponArchetype(WeaponArchetype.DualPistols, false);
+                break;
             default:
                 SetWeaponArchetype(WeaponArchetype.StandardRifle, false);
                 break;
@@ -354,12 +387,35 @@ public class BlasterWeapon : MonoBehaviour
         float targetFOV = defaultFOV;
         if (!is3rdPerson)
         {
-            targetFOV = currentArchetype == WeaponArchetype.BombMortar ? 40f :
-                        currentArchetype == WeaponArchetype.ScatterShotgun ? 42f : 34f;
+            if (isScoped)
+            {
+                switch (currentArchetype)
+                {
+                    case WeaponArchetype.StandardRifle:
+                        targetFOV = 18f; // High-powered 6x marksman optic magnification!
+                        break;
+                    case WeaponArchetype.DefenseCarbine:
+                        targetFOV = 36f;
+                        break;
+                    case WeaponArchetype.BombMortar:
+                        targetFOV = 42f;
+                        break;
+                    case WeaponArchetype.ScatterShotgun:
+                        targetFOV = 45f;
+                        break;
+                    case WeaponArchetype.DualPistols:
+                        targetFOV = 42f;
+                        break;
+                    case WeaponArchetype.ContinuousBeam:
+                    default:
+                        targetFOV = 35f;
+                        break;
+                }
+            }
         }
         else if (is3rdAiming)
         {
-            targetFOV = 48f;
+            targetFOV = currentArchetype == WeaponArchetype.StandardRifle ? 36f : 48f;
         }
 
         if (_camera != null)
@@ -375,15 +431,18 @@ public class BlasterWeapon : MonoBehaviour
             }
             if (!is3rdPerson)
             {
-                Vector3 targetPos = aimPosition;
+                Vector3 targetPos = isScoped
+                    ? (currentArchetype == WeaponArchetype.StandardRifle ? new Vector3(0f, -0.42f, 0.40f) : aimPosition)
+                    : hipPosition;
                 _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, targetPos, Time.deltaTime * scopeZoomSpeed);
             }
         }
 
         if (_fpc != null)
         {
-            bool isPrecisionAim = !is3rdPerson || is3rdAiming;
-            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * 0.40f) : _origRotationSpeed;
+            bool isPrecisionAim = (!is3rdPerson && isScoped) || (is3rdPerson && is3rdAiming);
+            float aimSensitivity = currentArchetype == WeaponArchetype.StandardRifle ? 0.25f : 0.45f;
+            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * aimSensitivity) : _origRotationSpeed;
         }
 
         if (_scopeCanvas != null)
@@ -392,7 +451,7 @@ public class BlasterWeapon : MonoBehaviour
             if (!is3rdPerson && _scopeRangeText != null && _camera != null)
             {
                 Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-                if (Physics.Raycast(ray, out RaycastHit hit, 250f))
+                if (Physics.Raycast(ray, out RaycastHit hit, 350f))
                 {
                     _scopeRangeText.text = $"RANGE: {hit.distance:F1}M";
                 }
@@ -400,6 +459,12 @@ public class BlasterWeapon : MonoBehaviour
                 {
                     _scopeRangeText.text = "RANGE: ---";
                 }
+            }
+            if (_scopeWeaponLabel != null)
+            {
+                _scopeWeaponLabel.text = currentArchetype == WeaponArchetype.StandardRifle
+                    ? "[ 6X LONG-RANGE PRECISION OPTIC // CALIBRATED ]"
+                    : $"[ TACTICAL HOLOSIGHT // {weaponDisplayName.ToUpper()} ]";
             }
         }
     }
@@ -441,6 +506,14 @@ public class BlasterWeapon : MonoBehaviour
                 FireBombMortar(ray, muzzlePos, localTeam, localId);
                 break;
 
+            case WeaponArchetype.DefenseCarbine:
+                FireDefenseCarbine(ray, muzzlePos, playerRoot, localTeam, localId);
+                break;
+
+            case WeaponArchetype.DualPistols:
+                FireDualPistols(ray, muzzlePos, playerRoot, localTeam, localId);
+                break;
+
             case WeaponArchetype.StandardRifle:
             default:
                 FireStandardRifle(ray, muzzlePos, playerRoot, localTeam, localId);
@@ -459,17 +532,17 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 1: Standard Kinetic Rifle
+    // ARCHETYPE 1: Long-Range Precision Marksman Rifle
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireStandardRifle(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.38f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.44f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
-        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.15f, 0.9f, 1f));
+        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.25f, 0.95f, 1f));
         OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
     }
 
@@ -502,19 +575,50 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 3: Micro-Bomb Flak Mortar
+    // ARCHETYPE 3: High-Velocity Flak Cannon (Airburst & Cluster Fragmentation)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireBombMortar(Ray ray, Vector3 muzzlePos, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.65f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.75f);
         }
 
-        Vector3 launchVel = (ray.direction + Vector3.up * 0.05f).normalized * 42f;
+        // High-velocity rocket-assisted flak trajectory (80 m/s) with proximity airburst
+        Vector3 launchVel = ray.direction * 80f;
         OasisPlasmaBomb.SpawnBomb(muzzlePos, launchVel, localTeam, localId);
 
-        OasisShooterManager.Instance?.TriggerCameraShake(0.18f, 0.12f);
+        OasisShooterManager.Instance?.TriggerCameraShake(0.22f, 0.15f);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ARCHETYPE 5: Tactical Defense Carbine (Rapid Fire Support)
+    // ─────────────────────────────────────────────────────────────────────────────
+    private void FireDefenseCarbine(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
+    {
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.32f);
+        }
+
+        Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
+        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.2f, 0.95f, 0.5f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ARCHETYPE 6: High-Caliber Dual Pistols (High Mobility Gunslinger)
+    // ─────────────────────────────────────────────────────────────────────────────
+    private void FireDualPistols(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
+    {
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.42f);
+        }
+
+        Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
+        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.92f, 0.35f, 0.95f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -529,12 +633,12 @@ public class BlasterWeapon : MonoBehaviour
                 _isBeamActive = false;
                 if (_continuousBeamLine != null) _continuousBeamLine.enabled = false;
                 if (_beamAudioSource != null && _beamAudioSource.isPlaying) _beamAudioSource.Stop();
+                if (_weaponRoot != null) _weaponRoot.localRotation = Quaternion.identity;
             }
             return;
         }
 
         _isBeamActive = true;
-        Vector3 muzzlePos = GetMuzzlePosition();
         Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
         int localId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
         int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
@@ -578,7 +682,21 @@ public class BlasterWeapon : MonoBehaviour
             BlasterVFX.SpawnImpact(bestHit.point, bestHit.normal, bestHit.collider.GetComponentInParent<OasisCombatAI>() != null);
         }
 
-        // Update LineRenderer
+        // Align weapon model bore straight at targetPoint so laser shoots dead straight along the gun
+        bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
+        Vector3 muzzlePos;
+        if (!is3rd && _weaponRoot != null && _muzzleTransform != null)
+        {
+            Vector3 aimDir = (targetPoint - _weaponRoot.position).normalized;
+            _weaponRoot.rotation = Quaternion.LookRotation(aimDir, _camera.transform.up);
+            muzzlePos = _muzzleTransform.position;
+        }
+        else
+        {
+            muzzlePos = GetMuzzlePosition();
+        }
+
+        // Update LineRenderer directly from muzzle point along the physical gun line
         if (_continuousBeamLine != null)
         {
             _continuousBeamLine.enabled = true;
@@ -812,6 +930,8 @@ public class BlasterWeapon : MonoBehaviour
         Color energyColor = currentArchetype == WeaponArchetype.BombMortar ? new Color(1f, 0.45f, 0.1f) :
                             currentArchetype == WeaponArchetype.ContinuousBeam ? new Color(0.2f, 0.95f, 1f) :
                             currentArchetype == WeaponArchetype.ScatterShotgun ? new Color(1f, 0.35f, 0.15f) :
+                            currentArchetype == WeaponArchetype.DefenseCarbine ? new Color(0.3f, 1f, 0.6f) :
+                            currentArchetype == WeaponArchetype.DualPistols ? new Color(1f, 0.85f, 0.2f) :
                             new Color(0.1f, 0.95f, 1f);
 
         Material gunMetalMat = OasisShaderHelper.CreateLitMaterial(new Color(0.18f, 0.2f, 0.25f), 0.9f, 0.8f);
@@ -827,11 +947,17 @@ public class BlasterWeapon : MonoBehaviour
             body.transform.localScale = new Vector3(0.11f, 0.15f, 0.32f);
         else if (currentArchetype == WeaponArchetype.ScatterShotgun)
             body.transform.localScale = new Vector3(0.09f, 0.13f, 0.30f);
+        else if (currentArchetype == WeaponArchetype.StandardRifle)
+            body.transform.localScale = new Vector3(0.065f, 0.10f, 0.32f);
+        else if (currentArchetype == WeaponArchetype.DualPistols)
+            body.transform.localScale = new Vector3(0.055f, 0.09f, 0.20f);
         else
             body.transform.localScale = new Vector3(0.07f, 0.11f, 0.28f);
 
         body.GetComponent<MeshRenderer>().material = gunMetalMat;
         Destroy(body.GetComponent<Collider>());
+
+        Vector3 muzzleLocalPos = new Vector3(0, 0.02f, 0.42f);
 
         // 2. Barrels & Distinctive Archetype Geometry
         if (currentArchetype == WeaponArchetype.BombMortar)
@@ -853,6 +979,8 @@ public class BlasterWeapon : MonoBehaviour
             ring.transform.localRotation = Quaternion.Euler(90, 0, 0);
             ring.GetComponent<MeshRenderer>().material = neonMat;
             Destroy(ring.GetComponent<Collider>());
+
+            muzzleLocalPos = new Vector3(0, 0.03f, 0.44f);
         }
         else if (currentArchetype == WeaponArchetype.ScatterShotgun)
         {
@@ -867,6 +995,7 @@ public class BlasterWeapon : MonoBehaviour
                 barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
                 Destroy(barrel.GetComponent<Collider>());
             }
+            muzzleLocalPos = new Vector3(0, 0.025f, 0.41f);
         }
         else if (currentArchetype == WeaponArchetype.ContinuousBeam)
         {
@@ -875,22 +1004,89 @@ public class BlasterWeapon : MonoBehaviour
             {
                 GameObject prong = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 prong.transform.SetParent(_weaponRoot, false);
-                prong.transform.localPosition = new Vector3(p * 0.032f, 0.025f, 0.28f);
+                prong.transform.localPosition = new Vector3(p * 0.030f, 0.025f, 0.28f);
                 prong.transform.localScale = new Vector3(0.015f, 0.035f, 0.18f);
                 prong.GetComponent<MeshRenderer>().material = gunMetalMat;
                 Destroy(prong.GetComponent<Collider>());
+
+                // Glowing crystal tip on each prong
+                GameObject tip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                tip.transform.SetParent(_weaponRoot, false);
+                tip.transform.localPosition = new Vector3(p * 0.030f, 0.025f, 0.38f);
+                tip.transform.localScale = new Vector3(0.018f, 0.040f, 0.035f);
+                tip.GetComponent<MeshRenderer>().material = neonMat;
+                Destroy(tip.GetComponent<Collider>());
             }
+            // Direct central bore emitter
+            muzzleLocalPos = new Vector3(0, 0.025f, 0.39f);
         }
-        else
+        else if (currentArchetype == WeaponArchetype.StandardRifle)
         {
-            // Standard sleek single rifle barrel
+            // Long-Range Marksman precision barrel
             GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             barrel.transform.SetParent(_weaponRoot, false);
-            barrel.transform.localPosition = new Vector3(0, 0.02f, 0.24f);
-            barrel.transform.localScale = new Vector3(0.045f, 0.12f, 0.045f);
+            barrel.transform.localPosition = new Vector3(0, 0.02f, 0.32f);
+            barrel.transform.localScale = new Vector3(0.036f, 0.20f, 0.036f);
             barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
             barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
             Destroy(barrel.GetComponent<Collider>());
+
+            // Muzzle brake
+            GameObject brake = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            brake.transform.SetParent(_weaponRoot, false);
+            brake.transform.localPosition = new Vector3(0, 0.02f, 0.52f);
+            brake.transform.localScale = new Vector3(0.045f, 0.025f, 0.045f);
+            brake.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            brake.GetComponent<MeshRenderer>().material = neonMat;
+            Destroy(brake.GetComponent<Collider>());
+
+            // Long-range optical scope chassis mounted on top
+            GameObject scopeBody = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            scopeBody.name = "MarksmanOptic";
+            scopeBody.transform.SetParent(_weaponRoot, false);
+            scopeBody.transform.localPosition = new Vector3(0, 0.09f, 0.06f);
+            scopeBody.transform.localScale = new Vector3(0.038f, 0.12f, 0.038f);
+            scopeBody.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            scopeBody.GetComponent<MeshRenderer>().material = gunMetalMat;
+            Destroy(scopeBody.GetComponent<Collider>());
+
+            // Scope objective lens (front)
+            GameObject scopeLens = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            scopeLens.name = "OpticLens";
+            scopeLens.transform.SetParent(_weaponRoot, false);
+            scopeLens.transform.localPosition = new Vector3(0, 0.09f, 0.18f);
+            scopeLens.transform.localScale = new Vector3(0.042f, 0.015f, 0.042f);
+            scopeLens.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            scopeLens.GetComponent<MeshRenderer>().material = neonMat;
+            Destroy(scopeLens.GetComponent<Collider>());
+
+            muzzleLocalPos = new Vector3(0, 0.02f, 0.54f);
+        }
+        else if (currentArchetype == WeaponArchetype.DualPistols)
+        {
+            // Compact pistol barrel
+            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            barrel.transform.SetParent(_weaponRoot, false);
+            barrel.transform.localPosition = new Vector3(0, 0.015f, 0.18f);
+            barrel.transform.localScale = new Vector3(0.032f, 0.09f, 0.032f);
+            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
+            Destroy(barrel.GetComponent<Collider>());
+
+            muzzleLocalPos = new Vector3(0, 0.015f, 0.28f);
+        }
+        else
+        {
+            // Tactical Defense Carbine barrel
+            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            barrel.transform.SetParent(_weaponRoot, false);
+            barrel.transform.localPosition = new Vector3(0, 0.02f, 0.24f);
+            barrel.transform.localScale = new Vector3(0.042f, 0.12f, 0.042f);
+            barrel.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            barrel.GetComponent<MeshRenderer>().material = gunMetalMat;
+            Destroy(barrel.GetComponent<Collider>());
+
+            muzzleLocalPos = new Vector3(0, 0.02f, 0.38f);
         }
 
         // 3. Glowing Energy Core
@@ -913,19 +1109,22 @@ public class BlasterWeapon : MonoBehaviour
         grip.GetComponent<MeshRenderer>().material = gunMetalMat;
         Destroy(grip.GetComponent<Collider>());
 
-        // 5. Sight
-        GameObject sight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        sight.name = "Sight";
-        sight.transform.SetParent(_weaponRoot, false);
-        sight.transform.localPosition = new Vector3(0, 0.07f, 0.08f);
-        sight.transform.localScale = new Vector3(0.015f, 0.025f, 0.04f);
-        sight.GetComponent<MeshRenderer>().material = neonMat;
-        Destroy(sight.GetComponent<Collider>());
+        // 5. Sight (for non-sniper weapons; sniper already has high-power marksman optic)
+        if (currentArchetype != WeaponArchetype.StandardRifle)
+        {
+            GameObject sight = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            sight.name = "Sight";
+            sight.transform.SetParent(_weaponRoot, false);
+            sight.transform.localPosition = new Vector3(0, 0.07f, 0.08f);
+            sight.transform.localScale = new Vector3(0.015f, 0.025f, 0.04f);
+            sight.GetComponent<MeshRenderer>().material = neonMat;
+            Destroy(sight.GetComponent<Collider>());
+        }
 
         // 6. Muzzle Point
         GameObject muzzle = new GameObject("MuzzlePoint");
         muzzle.transform.SetParent(_weaponRoot, false);
-        muzzle.transform.localPosition = new Vector3(0, 0.02f, 0.42f);
+        muzzle.transform.localPosition = muzzleLocalPos;
         _muzzleTransform = muzzle.transform;
 
         // 7. Muzzle Flash Point Light
