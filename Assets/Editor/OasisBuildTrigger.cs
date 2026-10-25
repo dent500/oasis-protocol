@@ -2,19 +2,41 @@
 using System.IO;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 [InitializeOnLoad]
 public static class OasisBuildTrigger
 {
     private const string TriggerFile = "Temp/trigger_build.txt";
+    private const string OpenOasisTrigger = "Temp/open_oasis_scene.txt";
 
     static OasisBuildTrigger()
     {
         EditorApplication.update += PollTrigger;
     }
 
-    [MenuItem("Oasis/Build Windows Standalone")]
+    [MenuItem("Oasis/Scenes/Open Oasis Scene (Combat Map)", priority = 10)]
+    public static void OpenOasisScene()
+    {
+        if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+        {
+            EditorSceneManager.OpenScene("Assets/Scenes/Oasis/OasisScene.unity");
+            Debug.Log("<color=cyan><b>[Oasis]</b> OasisScene successfully opened in Editor Scene view.</color>");
+        }
+    }
+
+    [MenuItem("Oasis/Scenes/Open Main Menu", priority = 11)]
+    public static void OpenMainMenuScene()
+    {
+        if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+        {
+            EditorSceneManager.OpenScene("Assets/Scenes/MainMenu/MainMenu.unity");
+            Debug.Log("<color=cyan><b>[Oasis]</b> MainMenu successfully opened in Editor Scene view.</color>");
+        }
+    }
+
+    [MenuItem("Oasis/Build Windows Standalone", priority = 20)]
     public static void BuildStandalone()
     {
         Debug.Log("[OasisBuildTrigger] Starting Windows Standalone build...");
@@ -47,7 +69,12 @@ public static class OasisBuildTrigger
 
     private static void PollTrigger()
     {
-        if (File.Exists(TriggerFile))
+        if (File.Exists(OpenOasisTrigger))
+        {
+            try { File.Delete(OpenOasisTrigger); } catch {}
+            OpenOasisScene();
+        }
+        else if (File.Exists(TriggerFile))
         {
             try { File.Delete(TriggerFile); } catch {}
             BuildStandalone();
