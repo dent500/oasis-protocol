@@ -22,7 +22,28 @@ public static class OasisBuildTrigger
         if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
         {
             EditorSceneManager.OpenScene("Assets/Scenes/Oasis/OasisScene.unity");
+            FocusSceneCameraOnArena();
             Debug.Log("<color=cyan><b>[Oasis]</b> OasisScene successfully opened in Editor Scene view.</color>");
+        }
+    }
+
+    [MenuItem("Oasis/Focus Scene Camera on Combat Arena", priority = 1)]
+    public static void FocusSceneCameraOnArena()
+    {
+        var sceneView = SceneView.lastActiveSceneView ?? (SceneView.sceneViews.Count > 0 ? SceneView.sceneViews[0] as SceneView : null);
+        if (sceneView != null)
+        {
+            sceneView.pivot = new Vector3(0f, 2.5f, -145f);
+            sceneView.rotation = Quaternion.Euler(8f, 180f, 0f);
+            sceneView.size = 28f;
+            sceneView.Repaint();
+            Debug.Log("<color=cyan><b>[Oasis]</b> Scene view camera focused on combat arena.</color>");
+        }
+
+        var player = GameObject.FindWithTag("Player") ?? GameObject.Find("FPS_Controller");
+        if (player != null)
+        {
+            Selection.activeGameObject = player;
         }
     }
 

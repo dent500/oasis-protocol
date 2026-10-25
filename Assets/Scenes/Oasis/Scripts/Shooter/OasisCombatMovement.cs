@@ -119,6 +119,17 @@ public class OasisCombatMovement : MonoBehaviour
         _fpc = GetComponent<StarterAssets.FirstPersonController>();
         _inputs = GetComponent<StarterAssets.StarterAssetsInputs>();
 
+        // Ensure player is positioned inside the tactical canyon map rather than outside in the desert
+        if (transform.position.z > -50f)
+        {
+            if (_characterController != null) _characterController.enabled = false;
+            transform.position = new Vector3(0f, -1.8f, -124f);
+            transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            if (_fpc != null) _fpc.ResetCameraPitch(0f);
+            if (_characterController != null) _characterController.enabled = true;
+            Physics.SyncTransforms();
+        }
+
         if (_fpc != null)
         {
             _fpc.MoveSpeed = baseRunSpeed;
