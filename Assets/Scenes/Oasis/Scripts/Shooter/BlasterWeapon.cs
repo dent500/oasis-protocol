@@ -25,9 +25,8 @@ public class BlasterWeapon : MonoBehaviour
         BombMortar
     }
 
-    [Header("Active Archetype")]
-    public WeaponArchetype currentArchetype = WeaponArchetype.StandardRifle;
-    public string weaponDisplayName = "Kinetic Auto-Rifle";
+    [System.NonSerialized] public WeaponArchetype currentArchetype = WeaponArchetype.StandardRifle;
+    [System.NonSerialized] public string weaponDisplayName = "Kinetic Auto-Rifle";
 
     [Header("Weapon Stats")]
     public float damage = 25f;
@@ -37,13 +36,10 @@ public class BlasterWeapon : MonoBehaviour
     public int currentAmmo;
     public float reloadTime = 1.1f;
 
-    [Header("Shotgun Config")]
-    public int shotgunPelletCount = 8;
-    public float shotgunSpreadAngle = 0.055f;
-
-    [Header("Continuous Beam Config")]
-    public float beamTickInterval = 0.08f;
-    public float beamTickDamage = 11f;
+    private const int shotgunPelletCount = 8;
+    private const float shotgunSpreadAngle = 0.055f;
+    private const float beamTickInterval = 0.08f;
+    private const float beamTickDamage = 11f;
 
     [Header("Weapon Positioning")]
     public Vector3 hipPosition = new Vector3(0.28f, -0.24f, 0.55f);
@@ -129,26 +125,7 @@ public class BlasterWeapon : MonoBehaviour
 
         // Configure initial archetype based on selected operative chassis
         int opIndex = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
-        switch (opIndex)
-        {
-            case 0: // Titanium Heavy Warrior -> Bomb Mortar
-                SetWeaponArchetype(WeaponArchetype.BombMortar, false);
-                break;
-            case 1: // Desert Tactical Commando -> Scatter Shotgun
-                SetWeaponArchetype(WeaponArchetype.ScatterShotgun, false);
-                break;
-            case 2: // Cyborg Special Operative -> Continuous Phase Laser
-                SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
-                break;
-            case 3: // Unit-07 Combat Android -> Continuous Beam
-                SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
-                break;
-            case 4: // Wasteland Nomad -> Standard Rifle
-            case 5: // Combat Medic -> Standard Rifle
-            default:
-                SetWeaponArchetype(WeaponArchetype.StandardRifle, false);
-                break;
-        }
+        ApplyOperativeWeapon(opIndex);
 
         // Build scope overlay
         BuildScopeOverlayUI();
@@ -275,24 +252,32 @@ public class BlasterWeapon : MonoBehaviour
         RecoverRecoil();
     }
 
+    public void ApplyOperativeWeapon(int opIndex)
+    {
+        switch (opIndex)
+        {
+            case 0: // Titanium Heavy Warrior -> Micro-Bomb Flak Mortar
+                SetWeaponArchetype(WeaponArchetype.BombMortar, false);
+                break;
+            case 1: // Desert Tactical Commando -> Plasma Scatter Shotgun
+                SetWeaponArchetype(WeaponArchetype.ScatterShotgun, false);
+                break;
+            case 2: // Cyborg Special Operative -> Continuous Phase Laser
+                SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
+                break;
+            case 3: // Unit-07 Combat Android -> Continuous Beam
+                SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
+                break;
+            case 4: // Wasteland Nomad -> Standard Rifle
+            case 5: // Combat Medic -> Standard Rifle
+            default:
+                SetWeaponArchetype(WeaponArchetype.StandardRifle, false);
+                break;
+        }
+    }
+
     private void HandleInput()
     {
-        // 1. Hotkey Weapon Swapping [1, 2, 3, 4] for testing & dynamic tactical versatility
-#if ENABLE_INPUT_SYSTEM
-        if (Keyboard.current != null)
-        {
-            if (Keyboard.current.digit1Key.wasPressedThisFrame) SetWeaponArchetype(WeaponArchetype.StandardRifle);
-            else if (Keyboard.current.digit2Key.wasPressedThisFrame) SetWeaponArchetype(WeaponArchetype.ScatterShotgun);
-            else if (Keyboard.current.digit3Key.wasPressedThisFrame) SetWeaponArchetype(WeaponArchetype.ContinuousBeam);
-            else if (Keyboard.current.digit4Key.wasPressedThisFrame) SetWeaponArchetype(WeaponArchetype.BombMortar);
-        }
-#else
-        if (Input.GetKeyDown(KeyCode.Alpha1)) SetWeaponArchetype(WeaponArchetype.StandardRifle);
-        else if (Input.GetKeyDown(KeyCode.Alpha2)) SetWeaponArchetype(WeaponArchetype.ScatterShotgun);
-        else if (Input.GetKeyDown(KeyCode.Alpha3)) SetWeaponArchetype(WeaponArchetype.ContinuousBeam);
-        else if (Input.GetKeyDown(KeyCode.Alpha4)) SetWeaponArchetype(WeaponArchetype.BombMortar);
-#endif
-
         bool fireHeld = false;
         bool reloadPressed = false;
         bool scopeHeld = false;
@@ -636,6 +621,10 @@ public class BlasterWeapon : MonoBehaviour
     private Vector3 PerformRaycastShot(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId, float dmg, out bool hitHostile, bool isPellet = false)
     {
         hitHostile = false;
+        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.scanReconTimeRemaining > 0f)
+        {
+            dmg *= 1.25f;
+        }
         Vector3 targetPoint;
         RaycastHit[] hits = Physics.RaycastAll(ray, range, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         RaycastHit bestHit = default;

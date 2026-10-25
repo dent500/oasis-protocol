@@ -16,6 +16,38 @@ public static class ProceduralAudio
     private static AudioClip _hitWorldClip;
     private static AudioClip _droneExplosionClip;
     private static AudioClip _reloadClip;
+    private static AudioClip _abilityChargeClip;
+    private static AudioClip _empClip;
+    private static AudioClip _healPulseClip;
+    private static AudioClip _scanPingClip;
+
+    public static AudioClip GetAbilityChargeClip()
+    {
+        if (_abilityChargeClip == null)
+            _abilityChargeClip = CreatePneumaticLaunch("AbilityCharge", 0.28f, 180f, 620f, 0.45f);
+        return _abilityChargeClip;
+    }
+
+    public static AudioClip GetEMPClip()
+    {
+        if (_empClip == null)
+            _empClip = CreateFilteredNoise("EMPDischarge", 0.45f, 0.5f);
+        return _empClip;
+    }
+
+    public static AudioClip GetHealPulseClip()
+    {
+        if (_healPulseClip == null)
+            _healPulseClip = CreatePneumaticLaunch("HealPulse", 0.35f, 440f, 880f, 0.40f);
+        return _healPulseClip;
+    }
+
+    public static AudioClip GetScanPingClip()
+    {
+        if (_scanPingClip == null)
+            _scanPingClip = CreateSoftTick("ScanPing", 0.12f, 1100f, 0.35f);
+        return _scanPingClip;
+    }
 
     /// <summary>
     /// Soft, low-profile suppressed laser pulse / thud. No harsh saw-wave screech.

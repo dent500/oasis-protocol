@@ -90,6 +90,14 @@ public class OasisCombatAI : MonoBehaviour
 
     // Blaster Muzzle
     private Transform _muzzleTransform;
+    public float stunTimer = 0f;
+    public void ApplyEMPStun(float duration)
+    {
+        stunTimer = Mathf.Max(stunTimer, duration);
+        currentShield = Mathf.Max(0f, currentShield - 50f);
+        if (_overheadShieldSlider != null) _overheadShieldSlider.value = currentShield;
+        BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, Vector3.up, false);
+    }
 
     // List of active AI bots for cross-targeting
     public static readonly List<OasisCombatAI> ActiveBots = new List<OasisCombatAI>();
@@ -610,6 +618,14 @@ public class OasisCombatAI : MonoBehaviour
             {
                 _overheadCanvasObj.transform.rotation = Camera.main.transform.rotation;
             }
+            return;
+        }
+
+        if (stunTimer > 0f)
+        {
+            stunTimer -= Time.deltaTime;
+            if (_animator != null) _animator.speed = 0.2f;
+            if (_overheadCanvasObj != null && Camera.main != null) _overheadCanvasObj.transform.rotation = Camera.main.transform.rotation;
             return;
         }
 
@@ -1669,7 +1685,8 @@ public class OasisCombatAI : MonoBehaviour
         if (localPlayerTeam != this.teamId && (OasisShooterManager.Instance == null || !OasisShooterManager.Instance.isSimulationMode))
         {
             bool playerDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
-            if (!playerDowned)
+            bool playerCloaked = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.cloakTimeRemaining > 0f;
+            if (!playerDowned && !playerCloaked)
             {
                 Transform player = OasisPlayerHelper.FindPlayerTransform();
                 if (player != null)

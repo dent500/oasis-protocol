@@ -241,10 +241,22 @@ namespace StarterAssets
             Vector2 moveInput = Vector2.zero;
             float customX = 0f;
             float customY = 0f;
+#if ENABLE_INPUT_SYSTEM
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) customY += 1f;
+                if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) customY -= 1f;
+                if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) customX += 1f;
+                if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) customX -= 1f;
+            }
+#endif
             if (OasisKeybindManager.IsPressed(OasisAction.MoveForward) || OasisKeybindManager.IsKeyCodePressed(KeyCode.UpArrow)) customY += 1f;
             if (OasisKeybindManager.IsPressed(OasisAction.MoveBack) || OasisKeybindManager.IsKeyCodePressed(KeyCode.DownArrow)) customY -= 1f;
             if (OasisKeybindManager.IsPressed(OasisAction.MoveRight) || OasisKeybindManager.IsKeyCodePressed(KeyCode.RightArrow)) customX += 1f;
             if (OasisKeybindManager.IsPressed(OasisAction.MoveLeft) || OasisKeybindManager.IsKeyCodePressed(KeyCode.LeftArrow)) customX -= 1f;
+
+            customX = Mathf.Clamp(customX, -1f, 1f);
+            customY = Mathf.Clamp(customY, -1f, 1f);
 
             if (customX != 0f || customY != 0f)
             {
@@ -266,6 +278,9 @@ namespace StarterAssets
             }
 
             bool sprintInput = OasisKeybindManager.IsPressed(OasisAction.Sprint) ||
+#if ENABLE_INPUT_SYSTEM
+                (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed) ||
+#endif
                 (_input != null && _input.sprint && OasisKeybindManager.GetKey(OasisAction.Sprint) == KeyCode.LeftShift);
 
             // set target speed based on move speed, sprint speed and if sprint is pressed
@@ -348,6 +363,9 @@ namespace StarterAssets
 
                 // Jump: check custom keybind or _input.jump trigger
                 bool jumpPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
+#if ENABLE_INPUT_SYSTEM
+                    (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+#endif
                     (_input != null && _input.jump && OasisKeybindManager.GetKey(OasisAction.Jump) == KeyCode.Space);
 
                 if (jumpPressed && _jumpTimeoutDelta <= 0.0f)

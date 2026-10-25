@@ -42,6 +42,7 @@ public static class OasisBuildTrigger
             options = BuildOptions.None
         };
 
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         BuildReport report = BuildPipeline.BuildPlayer(options);
         Debug.Log($"[OasisBuildTrigger] Build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
     }
@@ -72,6 +73,7 @@ public static class OasisBuildTrigger
             options = BuildOptions.None
         };
 
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         BuildReport report = BuildPipeline.BuildPlayer(options);
         Debug.Log($"[OasisBuildTrigger] Linux build completed with result: {report.summary.result} in {report.summary.totalTime.TotalSeconds:F1}s ({report.summary.totalErrors} errors)");
     }

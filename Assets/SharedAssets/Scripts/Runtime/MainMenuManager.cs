@@ -22,7 +22,8 @@ public enum OasisAction
     Reload = 8,
     Revive = 9,
     Map = 10,
-    Scoreboard = 11
+    Scoreboard = 11,
+    Ability = 12
 }
 
 /// <summary>
@@ -52,6 +53,7 @@ public static class OasisKeybindManager
             case OasisAction.Revive: return KeyCode.E;
             case OasisAction.Map: return KeyCode.M;
             case OasisAction.Scoreboard: return KeyCode.Tab;
+            case OasisAction.Ability: return KeyCode.F;
             default: return KeyCode.None;
         }
     }
@@ -72,6 +74,7 @@ public static class OasisKeybindManager
             case OasisAction.Revive: return "REVIVE ALLY";
             case OasisAction.Map: return "TACTICAL MAP";
             case OasisAction.Scoreboard: return "SCOREBOARD";
+            case OasisAction.Ability: return "SPECIAL ABILITY";
             default: return action.ToString().ToUpperInvariant();
         }
     }
@@ -248,6 +251,16 @@ public static class OasisKeybindManager
 
         switch (keyCode)
         {
+            case KeyCode.W: control = kb.wKey; return true;
+            case KeyCode.A: control = kb.aKey; return true;
+            case KeyCode.S: control = kb.sKey; return true;
+            case KeyCode.D: control = kb.dKey; return true;
+            case KeyCode.F: control = kb.fKey; return true;
+            case KeyCode.Q: control = kb.qKey; return true;
+            case KeyCode.E: control = kb.eKey; return true;
+            case KeyCode.R: control = kb.rKey; return true;
+            case KeyCode.C: control = kb.cKey; return true;
+            case KeyCode.M: control = kb.mKey; return true;
             case KeyCode.Space: control = kb.spaceKey; return true;
             case KeyCode.LeftShift: control = kb.leftShiftKey; return true;
             case KeyCode.RightShift: control = kb.rightShiftKey; return true;

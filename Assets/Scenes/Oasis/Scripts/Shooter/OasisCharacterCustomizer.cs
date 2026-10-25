@@ -62,42 +62,42 @@ public class OasisCharacterCustomizer : MonoBehaviour
             "Reinforced titanium chassis engineered for intense frontline breaches. High kinetic resistance with balanced assault firepower.", 
             "RobotHero_URP", new Color(0.25f, 0.75f, 1.0f),
             0.95f, 0.60f, 0.85f, 0.75f,
-            "Micro-Bomb Flak Mortar", "Nanotech Plating", "Absorbs 25% of incoming explosive damage."),
+            "Micro-Bomb Flak Mortar", "[F] TITANIUM SLAM", "Discharges kinetic shockwave (45 AoE dmg) & grants +60 HP temporary overshield."),
 
         new OperativeProfile(
             "desert_commando", "Desert Tactical Commando", "DEMOLITIONS / INFANTRY", 
             "Specialized desert warfare rig with high-traction dune boots and blast-resistant ballistic weave armor.", 
             "Characters/Textures/skin_soldier", new Color(0.95f, 0.72f, 0.28f),
             0.80f, 0.80f, 0.90f, 0.65f,
-            "Plasma Scatter Shotgun", "Dune Sprinter", "Increased sprint endurance across desert terrain."),
+            "Plasma Scatter Shotgun", "[F] CLUSTER MORTAR", "Launches a 4-fragment high-explosive incendiary cluster barrage."),
 
         new OperativeProfile(
             "cyborg_specops", "Cyborg Special Operative", "INFILTRATOR / AGILITY", 
             "Cybernetically augmented operative equipped with nanotech fiber suit for rapid slide evasion and precision targeting.", 
             "Characters/Textures/cyborgFemaleA", new Color(0.20f, 0.95f, 0.90f),
             0.65f, 0.95f, 0.85f, 0.80f,
-            "Continuous Phase Laser Beam", "Neural Overdrive", "Instant slide recovery and 20% faster weapon switch."),
+            "Continuous Phase Laser Beam", "[F] TACTICAL CLOAK", "Active camouflage (breaks enemy AI target lock), +35% speed & instant weapon recharge."),
 
         new OperativeProfile(
             "unit07_android", "Unit-07 Combat Android", "HEAVY MECH / VANGUARD", 
             "Autonomous heavy military android with reinforced chassis, internal auto-repair units, and recoil dampeners.", 
             "Characters/Textures/skin_robot", new Color(0.35f, 1.0f, 0.55f),
             0.90f, 0.68f, 0.85f, 0.90f,
-            "Continuous Phase Laser Beam", "Automated Core Matrix", "Passively initiates shield regeneration 1.5s faster."),
+            "Continuous Phase Laser Beam", "[F] CORE EMP PULSE", "14m electromagnetic wave stuns hostiles (3.5s), strips shields & maxes beam ammo."),
 
         new OperativeProfile(
             "wasteland_nomad", "Wasteland Nomad Adventurer", "RECON / SURVIVAL", 
             "Seasoned desert scout wearing temperature-regulating dune silks, moisture seals, and lightweight tactical armor.", 
             "Characters/Textures/skin_adventurer", new Color(1.0f, 0.60f, 0.25f),
             0.70f, 0.90f, 0.80f, 0.85f,
-            "Long-Range Scout Carbine", "Oasis Acclimation", "Expanded radar detection range (+35% scanner sweep)."),
+            "Long-Range Scout Carbine", "[F] ORBITAL RECON", "Exposes all enemy locations through dunes/cover (8s) with +25% blaster damage buff."),
 
         new OperativeProfile(
             "combat_medic", "Oasis Combat Medic", "SUPPORT / BIO-SHIELD", 
             "Field operative in sterile hazardous-environment armor equipped with rapid regenerative trauma patches.", 
             "Characters/Textures/survivorFemaleA", new Color(0.98f, 0.40f, 0.45f),
             0.75f, 0.85f, 0.70f, 0.95f,
-            "Tactical Defense Carbine", "Bio-Regen Field", "Doubles passive health recovery rate when taking shelter."),
+            "Tactical Defense Carbine", "[F] NANO-MENDER FIELD", "Deployable nanotech aura regenerates 18 HP/s for 6s and instantly revives nearby squadmates."),
 
         new OperativeProfile(
             "cyber_outlaw", "Cyber Outlaw Specialist", "GUNSLINGER / SHARPSHOOTER", 
@@ -1557,6 +1557,10 @@ public class OasisCharacterCustomizer : MonoBehaviour
         if (OasisCombatMovement.Instance != null)
         {
             OasisCombatMovement.Instance.ApplyCharacterSkin(skinTex, teamAccent, chosen.id);
+            OasisCombatMovement.Instance.ConfigureOperativeAbility(selectedOperativeIndex);
+            var pWeapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+            if (pWeapon == null) pWeapon = FindAnyObjectByType<BlasterWeapon>();
+            if (pWeapon != null) pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
         }
 
         // 2. Teleport player to a random grounded spawn point for their selected team
