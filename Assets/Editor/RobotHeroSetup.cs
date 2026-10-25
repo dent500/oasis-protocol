@@ -195,6 +195,24 @@ public class RobotHeroSetup
             anim.avatar = avatar;
         }
 
+        // Ensure Player tag and Ignore Raycast layer so Cinemachine AvoidObstacles ignores character mesh
+        int ignoreRay = LayerMask.NameToLayer("Ignore Raycast");
+        if (ignoreRay < 0) ignoreRay = 2;
+        foreach (var t in instance.GetComponentsInChildren<Transform>(true))
+        {
+            t.gameObject.tag = "Player";
+            t.gameObject.layer = ignoreRay;
+        }
+
+        // Ensure default weapon (AssaultRifle) is active and visible
+        var rifle = instance.transform.Find("AssaultRifle");
+        if (rifle != null)
+        {
+            rifle.gameObject.SetActive(true);
+            var r = rifle.GetComponent<Renderer>();
+            if (r != null) r.enabled = true;
+        }
+
         // Save as clean Unity 6 prefab in Assets/Resources/RobotHero.prefab
         PrefabUtility.SaveAsPrefabAsset(instance, TargetPrefabPath);
         Object.DestroyImmediate(instance);

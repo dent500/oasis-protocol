@@ -159,6 +159,16 @@ public class OasisCombatMovement : MonoBehaviour
         SetupLocalRobotHero();
         ConfigureOperativeAbility(PlayerPrefs.GetInt("OasisSelectedOperative", 0));
 
+        if (Camera.main != null)
+        {
+            Camera.main.nearClipPlane = 0.05f;
+        }
+        var cmCam = UnityEngine.Object.FindAnyObjectByType<Unity.Cinemachine.CinemachineCamera>();
+        if (cmCam != null)
+        {
+            cmCam.Lens.NearClipPlane = 0.05f;
+        }
+
         if (!Application.isEditor)
         {
             Screen.fullScreenMode = FullScreenMode.ExclusiveFullScreen;
@@ -795,13 +805,13 @@ public class OasisCombatMovement : MonoBehaviour
                 // Normal: comfortable over-the-shoulder view
                 // Right-Click 3rd Person Aim: tightened over-the-shoulder zoom
                 Vector3 targetCam = isAimingThirdPerson
-                    ? new Vector3(0.72f, _currentCameraY + 0.28f, -1.8f)
-                    : new Vector3(0.85f, _currentCameraY + 0.35f, -3.2f);
+                    ? new Vector3(0.50f, _currentCameraY + 0.12f, -1.7f)
+                    : new Vector3(0.60f, _currentCameraY + 0.15f, -2.5f);
                 _cameraTarget.localPosition = Vector3.Lerp(_cameraTarget.localPosition, targetCam, Time.deltaTime * 14f);
             }
             else
             {
-                // First-person eye level for controlled aimed shot (while holding left-click)
+                // First-person eye level for standard first-person mode
                 Vector3 camPos = _cameraTarget.localPosition;
                 camPos.x = Mathf.Lerp(camPos.x, 0f, Time.deltaTime * 18f);
                 camPos.y = _currentCameraY;
@@ -813,24 +823,8 @@ public class OasisCombatMovement : MonoBehaviour
 
     private void LateUpdate()
     {
-        // In third person (or whenever character visual is active), rotate the upper body spine & gun arm to match aim pitch
-        if (isThirdPerson && Camera.main != null)
-        {
-            float pitch = Camera.main.transform.eulerAngles.x;
-            if (pitch > 180f) pitch -= 360f; // Range: -90 (looking up) to +90 (looking down)
-
-            // 1. Rotate spine along forward axis to match vertical look pitch
-            if (_spineBone != null)
-            {
-                _spineBone.Rotate(Vector3.forward, -pitch * 0.85f, Space.Self);
-            }
-
-            // 2. Rotate gun arm bone so rifle points directly along vertical look pitch
-            if (_gunArmBone != null)
-            {
-                _gunArmBone.Rotate(Vector3.forward, pitch * 0.85f, Space.Self);
-            }
-        }
+        // Torso orientation and rifle aim angle are handled naturally by the player's root rotation and camera target.
+        // We preserve bones in their authentic animated firing/running poses to avoid twisting geometry into the camera.
     }
 
     private void HandleAimCameraInput()
@@ -927,6 +921,37 @@ public class OasisCombatMovement : MonoBehaviour
 
             var cols = robotHeroVisual.GetComponentsInChildren<Collider>(true);
             for (int i = 0; i < cols.Length; i++) Destroy(cols[i]);
+
+            // Set tag to "Player" and layer to "Ignore Raycast" so Cinemachine AvoidObstacles ignores the player mesh
+            int ignoreRayLayer = LayerMask.NameToLayer("Ignore Raycast");
+            if (ignoreRayLayer < 0) ignoreRayLayer = 2;
+
+            var allTransforms = robotHeroVisual.GetComponentsInChildren<Transform>(true);
+            foreach (var t in allTransforms)
+            {
+                t.gameObject.tag = "Player";
+                t.gameObject.layer = ignoreRayLayer;
+            }
+
+            // Ensure character's authentic sci-fi blaster (AssaultRifle) is active and visible
+            Transform rifleTransform = robotHeroVisual.transform.Find("AssaultRifle");
+            if (rifleTransform == null)
+            {
+                foreach (var t in allTransforms)
+                {
+                    if (t.name == "AssaultRifle")
+                    {
+                        rifleTransform = t;
+                        break;
+                    }
+                }
+            }
+            if (rifleTransform != null)
+            {
+                rifleTransform.gameObject.SetActive(true);
+                var rRend = rifleTransform.GetComponent<Renderer>();
+                if (rRend != null) rRend.enabled = true;
+            }
 
             Material urpMat = Resources.Load<Material>("RobotHero_URP");
 #if UNITY_EDITOR

@@ -88,7 +88,8 @@ public class BlasterWeapon : MonoBehaviour
     {
         if (_weaponRoot != null)
         {
-            _weaponRoot.gameObject.SetActive(active);
+            bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
+            _weaponRoot.gameObject.SetActive(active && !is3rd);
         }
     }
 
@@ -366,10 +367,17 @@ public class BlasterWeapon : MonoBehaviour
             _camera.fieldOfView = Mathf.Lerp(_camera.fieldOfView, targetFOV, Time.deltaTime * scopeZoomSpeed);
         }
 
-        if (_weaponRoot != null && !is3rdPerson)
+        if (_weaponRoot != null)
         {
-            Vector3 targetPos = aimPosition;
-            _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, targetPos, Time.deltaTime * scopeZoomSpeed);
+            if (_weaponRoot.gameObject.activeSelf == is3rdPerson)
+            {
+                _weaponRoot.gameObject.SetActive(!is3rdPerson);
+            }
+            if (!is3rdPerson)
+            {
+                Vector3 targetPos = aimPosition;
+                _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, targetPos, Time.deltaTime * scopeZoomSpeed);
+            }
         }
 
         if (_fpc != null)
@@ -749,7 +757,7 @@ public class BlasterWeapon : MonoBehaviour
 
     private void HandleSwayAndBob()
     {
-        if (_weaponRoot == null) return;
+        if (_weaponRoot == null || !_weaponRoot.gameObject.activeInHierarchy) return;
 
         float mouseX = 0f;
         float mouseY = 0f;
@@ -797,6 +805,9 @@ public class BlasterWeapon : MonoBehaviour
         root.transform.SetParent(transform, false);
         root.transform.localPosition = hipPosition;
         _weaponRoot = root.transform;
+
+        bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
+        _weaponRoot.gameObject.SetActive(!is3rd);
 
         Color energyColor = currentArchetype == WeaponArchetype.BombMortar ? new Color(1f, 0.45f, 0.1f) :
                             currentArchetype == WeaponArchetype.ContinuousBeam ? new Color(0.2f, 0.95f, 1f) :
