@@ -521,14 +521,20 @@ public class BlasterWeapon : MonoBehaviour
         }
     }
 
-    private Vector3 GetMuzzlePosition()
+    private Vector3 GetMuzzlePosition(Vector3 targetPoint)
     {
         bool is3rdPerson = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
         if (is3rdPerson && OasisCombatMovement.Instance.robotHeroVisual != null)
         {
-            return OasisCombatMovement.Instance.GetThirdPersonMuzzlePosition();
+            return OasisCombatMovement.Instance.GetThirdPersonMuzzlePosition(targetPoint);
         }
         return _muzzleTransform != null ? _muzzleTransform.position : transform.position + transform.forward * 0.5f;
+    }
+
+    private Vector3 GetMuzzlePosition()
+    {
+        Vector3 defaultTarget = _camera != null ? _camera.transform.position + _camera.transform.forward * 50f : transform.position + transform.forward * 50f;
+        return GetMuzzlePosition(defaultTarget);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -542,8 +548,9 @@ public class BlasterWeapon : MonoBehaviour
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
-        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.25f, 0.95f, 1f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
+        Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.25f, 0.95f, 1f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -568,10 +575,12 @@ public class BlasterWeapon : MonoBehaviour
             Vector3 hitPt = PerformRaycastShot(pelletRay, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile, true);
             if (hitHostile) anyHostileHit = true;
 
-            BlasterVFX.SpawnLaserBeam(muzzlePos, hitPt, shotgunColor);
+            Vector3 trueMuzzle = GetMuzzlePosition(hitPt);
+            BlasterVFX.SpawnLaserBeam(trueMuzzle, hitPt, shotgunColor);
         }
 
-        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, ray.GetPoint(range), anyHostileHit);
+        Vector3 fallbackMuzzle = GetMuzzlePosition(ray.GetPoint(range));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(fallbackMuzzle, ray.GetPoint(range), anyHostileHit);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -596,8 +605,10 @@ public class BlasterWeapon : MonoBehaviour
             targetPoint = aimRay.GetPoint(135f);
         }
 
+        Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+
         // Calculate smooth ballistic mortar arc towards targetPoint (speed ~55 m/s)
-        Vector3 toTarget = targetPoint - muzzlePos;
+        Vector3 toTarget = targetPoint - trueMuzzle;
         float dist = toTarget.magnitude;
         float speed = 55f;
         float flightTime = Mathf.Max(0.25f, dist / speed);
@@ -607,7 +618,7 @@ public class BlasterWeapon : MonoBehaviour
         float verticalVel = (toTarget.y + 0.5f * mortarGravity * flightTime * flightTime) / flightTime;
         Vector3 launchVel = horizontalVel + Vector3.up * verticalVel;
 
-        OasisPlasmaBomb.SpawnBomb(muzzlePos, launchVel, localTeam, localId);
+        OasisPlasmaBomb.SpawnBomb(trueMuzzle, launchVel, localTeam, localId);
 
         OasisShooterManager.Instance?.TriggerCameraShake(0.28f, 0.22f);
     }
@@ -623,8 +634,9 @@ public class BlasterWeapon : MonoBehaviour
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
-        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.2f, 0.95f, 0.5f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
+        Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.2f, 0.95f, 0.5f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -638,8 +650,9 @@ public class BlasterWeapon : MonoBehaviour
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
-        BlasterVFX.SpawnLaserBeam(muzzlePos, targetPoint, new Color(0.92f, 0.35f, 0.95f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile);
+        Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.92f, 0.35f, 0.95f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -714,7 +727,7 @@ public class BlasterWeapon : MonoBehaviour
         }
         else
         {
-            muzzlePos = GetMuzzlePosition();
+            muzzlePos = GetMuzzlePosition(targetPoint);
         }
 
         // Update LineRenderer directly from muzzle point along the physical gun line

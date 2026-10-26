@@ -76,18 +76,45 @@ public class OasisCombatMovement : MonoBehaviour
     private AudioSource _audioSource;
     private Transform _spineBone;
     private Transform _gunArmBone;
+    private Transform _gunHandBone;
     public Transform gunArmBone => _gunArmBone;
+
+    [Header("Third Person Dynamic Camera & Zoom")]
+    public float minCameraDistance = 1.2f;
+    public float maxCameraDistance = 5.5f;
+    public float defaultCameraDistance = 3.2f;
+    public float currentCameraDistance = 3.2f;
+    public float cameraZoomSpeed = 1.5f;
+    private float _targetCameraDistance = 3.2f;
+
+    public Vector3 GetThirdPersonMuzzlePosition(Vector3 targetPoint)
+    {
+        Vector3 gripPos;
+        if (_gunArmBone != null)
+        {
+            gripPos = _gunArmBone.position;
+        }
+        else if (_gunHandBone != null)
+        {
+            gripPos = _gunHandBone.position;
+        }
+        else
+        {
+            gripPos = transform.position + transform.right * 0.38f + transform.up * 1.35f;
+        }
+
+        Vector3 aimDir = (targetPoint - gripPos).normalized;
+        if (aimDir.sqrMagnitude < 0.001f) aimDir = transform.forward;
+
+        // The rifle barrel extends ~0.72m forward along the firing axis towards the aim target
+        return gripPos + aimDir * 0.72f;
+    }
 
     public Vector3 GetThirdPersonMuzzlePosition()
     {
-        if (_gunArmBone != null)
-        {
-            // The rifle barrel extends forward along the gun arm bone's aim axis
-            // In the FBX rig, the rifle tip is ~0.65m forward and ~0.05m up from the grip/bone pivot
-            return _gunArmBone.position + _gunArmBone.forward * 0.65f + _gunArmBone.up * 0.05f;
-        }
-        // Fallback if bone not found
-        return transform.position + transform.forward * 0.7f + transform.up * 1.2f + transform.right * 0.35f;
+        Camera cam = Camera.main;
+        Vector3 targetPoint = cam != null ? cam.transform.position + cam.transform.forward * 50f : transform.position + transform.forward * 50f;
+        return GetThirdPersonMuzzlePosition(targetPoint);
     }
 
     [Header("Speed Settings")]
@@ -236,6 +263,7 @@ public class OasisCombatMovement : MonoBehaviour
         }
 
         HandleCameraViewToggle();
+        HandleCameraZoomInput();
 
         // Trap and lock cursor inside game window to prevent leaking onto other monitors
         if (Cursor.lockState != CursorLockMode.Locked)
@@ -850,10 +878,17 @@ public class OasisCombatMovement : MonoBehaviour
         }
         else
         {
-            // Third-person over-the-shoulder view:
+            // Third-person over-the-shoulder view with dynamic scroll zoom:
+            currentCameraDistance = Mathf.Lerp(currentCameraDistance, _targetCameraDistance, Time.deltaTime * 14f);
+
+            float activeDist = isAimingThirdPerson
+                ? Mathf.Min(currentCameraDistance * 0.65f, 2.0f)
+                : currentCameraDistance;
+
+            // Elevated and widened shoulder offset to ensure bulky shoulder armor & backpack never obstruct forward sightlines
             Vector3 shoulderOffset = isAimingThirdPerson
-                ? new Vector3(0.55f, 0.12f, -1.6f)
-                : new Vector3(0.65f, 0.16f, -2.4f);
+                ? new Vector3(0.70f, 0.28f, -activeDist)
+                : new Vector3(0.85f, 0.38f, -activeDist);
 
             Vector3 desiredPos = _cameraTarget.position + _cameraTarget.rotation * shoulderOffset;
             Vector3 origin = _cameraTarget.position;
@@ -863,7 +898,7 @@ public class OasisCombatMovement : MonoBehaviour
             int mask = Physics.AllLayers & ~((1 << LayerMask.NameToLayer("Ignore Raycast")) | (1 << gameObject.layer) | (1 << 8));
             if (Physics.SphereCast(origin, 0.20f, dir.normalized, out RaycastHit hit, maxDist, mask, QueryTriggerInteraction.Ignore))
             {
-                cam.transform.position = origin + dir.normalized * Mathf.Max(0.45f, hit.distance - 0.15f);
+                cam.transform.position = origin + dir.normalized * Mathf.Max(0.50f, hit.distance - 0.15f);
             }
             else
             {
@@ -872,9 +907,9 @@ public class OasisCombatMovement : MonoBehaviour
 
             cam.transform.rotation = _cameraTarget.rotation;
 
-            // Failsafe: If camera gets too close to the character's head, hide mesh so it never blocks the screen
+            // Failsafe: If camera gets too close to the character's head/body, hide mesh so it never clips through camera
             float distToHead = Vector3.Distance(cam.transform.position, _cameraTarget.position);
-            bool tooClose = distToHead < 0.75f;
+            bool tooClose = distToHead < 0.85f;
             if (robotHeroVisual != null)
             {
                 var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
@@ -882,6 +917,110 @@ public class OasisCombatMovement : MonoBehaviour
                 {
                     rends[i].enabled = !tooClose;
                 }
+            }
+        }
+
+        // Apply Aim IK so upper body and weapon point dead straight at the crosshair target
+        ApplyAimIK(cam);
+    }
+
+    private void HandleCameraZoomInput()
+    {
+        float scroll = 0f;
+#if ENABLE_INPUT_SYSTEM
+        if (Mouse.current != null)
+        {
+            scroll = Mouse.current.scroll.ReadValue().y;
+        }
+#else
+        scroll = Input.GetAxis("Mouse ScrollWheel");
+#endif
+        if (Mathf.Abs(scroll) > 0.01f)
+        {
+            // Normalize scroll: new input system returns ~120 per notch; legacy returns ~0.1
+            float normScroll = Mathf.Sign(scroll) * (Mathf.Abs(scroll) > 1f ? 0.35f : scroll * 3.5f);
+
+            if (isThirdPerson)
+            {
+                // Scroll up (positive) = zoom in; Scroll down (negative) = zoom out
+                _targetCameraDistance -= normScroll * cameraZoomSpeed;
+
+                if (_targetCameraDistance < minCameraDistance - 0.25f)
+                {
+                    // Seamlessly zoom directly into first person mode
+                    SetThirdPersonMode(false);
+                    _targetCameraDistance = minCameraDistance;
+                    currentCameraDistance = minCameraDistance;
+                }
+                else
+                {
+                    _targetCameraDistance = Mathf.Clamp(_targetCameraDistance, minCameraDistance, maxCameraDistance);
+                }
+            }
+            else
+            {
+                // In first person: scrolling down (zoom out) seamlessly transitions back into third person mode
+                if (normScroll < -0.05f)
+                {
+                    SetThirdPersonMode(true);
+                    _targetCameraDistance = minCameraDistance + 0.6f;
+                    currentCameraDistance = _targetCameraDistance;
+                }
+            }
+        }
+    }
+
+    private void ApplyAimIK(Camera cam)
+    {
+        if (cam == null || robotHeroVisual == null || !robotHeroVisual.activeInHierarchy) return;
+
+        bool isDowned = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned);
+        if (isDowned) return;
+
+        // Determine reticle aim target in world space
+        Ray aimRay = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        Vector3 aimTarget;
+        int aimMask = Physics.AllLayers & ~((1 << LayerMask.NameToLayer("Ignore Raycast")) | (1 << gameObject.layer));
+        if (Physics.SphereCast(aimRay, 0.15f, out RaycastHit aimHit, 200f, aimMask, QueryTriggerInteraction.Ignore))
+        {
+            aimTarget = aimHit.point;
+        }
+        else
+        {
+            aimTarget = aimRay.GetPoint(100f);
+        }
+
+        // Camera pitch angle (-89 deg looking up to +89 deg looking down)
+        float camPitch = _cameraTarget != null ? _cameraTarget.localEulerAngles.x : cam.transform.eulerAngles.x;
+        if (camPitch > 180f) camPitch -= 360f;
+
+        // 1. Spine pitch & horizontal parallax convergence
+        if (_spineBone != null)
+        {
+            _spineBone.Rotate(cam.transform.right, camPitch * 0.55f, Space.World);
+
+            if (isThirdPerson)
+            {
+                Vector3 toTarget = (aimTarget - _spineBone.position).normalized;
+                Vector3 localDir = transform.InverseTransformDirection(toTarget);
+                float yawOffset = Mathf.Atan2(localDir.x, localDir.z) * Mathf.Rad2Deg;
+                yawOffset = Mathf.Clamp(yawOffset, -25f, 25f);
+                _spineBone.Rotate(Vector3.up, yawOffset * 0.45f, Space.World);
+            }
+        }
+
+        // 2. Gun arm pitch & aim convergence
+        if (_gunArmBone != null)
+        {
+            _gunArmBone.Rotate(cam.transform.right, camPitch * 0.45f, Space.World);
+
+            if (isThirdPerson)
+            {
+                Vector3 toTarget = (aimTarget - _gunArmBone.position).normalized;
+                Vector3 localDir = transform.InverseTransformDirection(toTarget);
+                float yawOffset = Mathf.Atan2(localDir.x, localDir.z) * Mathf.Rad2Deg;
+                yawOffset = Mathf.Clamp(yawOffset, -30f, 30f);
+                _gunArmBone.Rotate(Vector3.up, yawOffset * 0.55f, Space.World);
             }
         }
     }
@@ -1056,15 +1195,22 @@ public class OasisCombatMovement : MonoBehaviour
                 if (animCtrl != null) robotHeroAnimator.runtimeAnimatorController = animCtrl;
             }
 
-            // Find Spine / Chest bone to enable vertical aim pitch (aiming up/down)
+            // Find Spine / Chest and Hand / Arm bones to enable aim IK
             _spineBone = null;
             _gunArmBone = null;
+            _gunHandBone = null;
             var allBones = robotHeroVisual.GetComponentsInChildren<Transform>(true);
             foreach (var b in allBones)
             {
                 if (b.name == "ArmPosition_Right") _gunArmBone = b;
+                if (b.name == "Hand_Right" || b.name == "RightHand") _gunHandBone = b;
                 if (b.name == "Chest" && _spineBone == null) _spineBone = b;
                 if (b.name == "Spine" && _spineBone == null) _spineBone = b;
+            }
+
+            if (_gunArmBone == null && _gunHandBone != null)
+            {
+                _gunArmBone = _gunHandBone;
             }
 
             if (_spineBone == null && robotHeroAnimator != null && robotHeroAnimator.isHuman)
