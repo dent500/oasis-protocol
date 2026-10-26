@@ -176,14 +176,14 @@ public class BlasterWeapon : MonoBehaviour
                 break;
 
             case WeaponArchetype.BombMortar:
-                weaponDisplayName = "High-Velocity Flak Cannon";
-                damage = 110f; // High-velocity direct impact + airburst AoE
+                weaponDisplayName = "Heavy Plasma Mortar Cannon";
+                damage = 125f; // Heavy direct impact + devastating AoE
                 fireRate = 0.65f;
-                range = 160f;
+                range = 220f;
                 maxAmmo = 10;
                 reloadTime = 1.3f;
-                recoilKickback = 0.18f;
-                recoilRotation = 6.0f;
+                recoilKickback = 0.20f;
+                recoilRotation = 6.5f;
                 recoilRecovery = 12f;
                 break;
 
@@ -575,20 +575,41 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 3: High-Velocity Flak Cannon (Airburst & Cluster Fragmentation)
+    // ARCHETYPE 3: Heavy Plasma Mortar Cannon (Guided Ballistic Arc & Airburst)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireBombMortar(Ray ray, Vector3 muzzlePos, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.75f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.85f);
         }
 
-        // High-velocity rocket-assisted flak trajectory (80 m/s) with proximity airburst
-        Vector3 launchVel = ray.direction * 80f;
+        // Raycast from crosshair to find exact target point
+        Ray aimRay = _camera != null ? _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)) : ray;
+        Vector3 targetPoint;
+        if (Physics.Raycast(aimRay, out RaycastHit hit, 250f, Physics.AllLayers, QueryTriggerInteraction.Ignore))
+        {
+            targetPoint = hit.point;
+        }
+        else
+        {
+            targetPoint = aimRay.GetPoint(135f);
+        }
+
+        // Calculate smooth ballistic mortar arc towards targetPoint (speed ~55 m/s)
+        Vector3 toTarget = targetPoint - muzzlePos;
+        float dist = toTarget.magnitude;
+        float speed = 55f;
+        float flightTime = Mathf.Max(0.25f, dist / speed);
+
+        float mortarGravity = 7.35f; // Matches bomb's custom downward gravity
+        Vector3 horizontalVel = new Vector3(toTarget.x, 0, toTarget.z) / flightTime;
+        float verticalVel = (toTarget.y + 0.5f * mortarGravity * flightTime * flightTime) / flightTime;
+        Vector3 launchVel = horizontalVel + Vector3.up * verticalVel;
+
         OasisPlasmaBomb.SpawnBomb(muzzlePos, launchVel, localTeam, localId);
 
-        OasisShooterManager.Instance?.TriggerCameraShake(0.22f, 0.15f);
+        OasisShooterManager.Instance?.TriggerCameraShake(0.28f, 0.22f);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

@@ -8,23 +8,44 @@ using UnityEngine;
 public class OasisPlasmaBomb : MonoBehaviour
 {
     [Header("Explosive Stats")]
-    public float directDamage = 110f;
-    public float splashDamage = 75f;
-    public float explosionRadius = 8.5f;
-    public float explosionForce = 550f;
+    public float directDamage = 125f;
+    public float splashDamage = 90f;
+    public float explosionRadius = 9.5f;
+    public float explosionForce = 650f;
     public int shooterTeamId = 0;
     public int shooterPlayerId = 0;
 
     private Rigidbody _rb;
     private bool _hasExploded = false;
     private Light _glowLight;
+    private float _flightTime = 0f;
+    private const float MortarGravity = 7.35f;
+
+    private void FixedUpdate()
+    {
+        if (_hasExploded || _rb == null) return;
+
+        // Apply smooth ballistic mortar downward gravity
+        _rb.AddForce(Vector3.down * MortarGravity, ForceMode.Acceleration);
+
+        // Turn projectile to follow flight velocity
+        if (_rb.linearVelocity.sqrMagnitude > 1f)
+        {
+            transform.rotation = Quaternion.LookRotation(_rb.linearVelocity);
+        }
+    }
 
     private void Update()
     {
         if (_hasExploded) return;
 
-        // Proximity Airburst Sensor: Detonates automatically when passing within 4.0m of any hostile enemy or drone
-        Collider[] nearby = Physics.OverlapSphere(transform.position, 4.0f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        _flightTime += Time.deltaTime;
+
+        // Arm safety: Do not airburst within first 0.12s of leaving the muzzle
+        if (_flightTime < 0.12f) return;
+
+        // Proximity Airburst Sensor: Detonates automatically when passing within 5.0m of any hostile enemy or drone
+        Collider[] nearby = Physics.OverlapSphere(transform.position, 5.0f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < nearby.Length; i++)
         {
             var ai = nearby[i].GetComponentInParent<OasisCombatAI>();
@@ -48,38 +69,72 @@ public class OasisPlasmaBomb : MonoBehaviour
         GameObject bombObj = new GameObject("OasisPlasmaBomb");
         bombObj.transform.position = position;
 
-        // Core visual sphere
+        // 1. Prominent Core Visual Sphere (0.65m for clear flight visibility)
         GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         sphere.transform.SetParent(bombObj.transform, false);
-        sphere.transform.localScale = Vector3.one * 0.32f;
-        Destroy(sphere.GetComponent<Collider>()); // Main bomb uses its own sphere collider
+        sphere.transform.localScale = Vector3.one * 0.65f;
+        Destroy(sphere.GetComponent<Collider>());
 
-        Material mat = OasisShaderHelper.CreateUnlitMaterial(new Color(1f, 0.45f, 0.1f, 1f));
+        Material mat = OasisShaderHelper.CreateUnlitMaterial(new Color(1f, 0.60f, 0.15f, 1f));
         sphere.GetComponent<Renderer>().sharedMaterial = mat;
 
-        // Glow light
+        // 2. Outer Plasma Glow Ring
+        GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        ring.transform.SetParent(bombObj.transform, false);
+        ring.transform.localScale = new Vector3(0.75f, 0.08f, 0.75f);
+        ring.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        Destroy(ring.GetComponent<Collider>());
+        ring.GetComponent<Renderer>().sharedMaterial = OasisShaderHelper.CreateUnlitMaterial(new Color(1f, 0.85f, 0.25f, 1f));
+
+        // 3. Dynamic Glow Light
         Light lt = bombObj.AddComponent<Light>();
         lt.type = LightType.Point;
-        lt.color = new Color(1f, 0.55f, 0.15f);
-        lt.range = 7f;
-        lt.intensity = 3.5f;
+        lt.color = new Color(1f, 0.65f, 0.2f);
+        lt.range = 14f;
+        lt.intensity = 6f;
 
-        // Trail renderer
+        // 4. Thick Burning Rocket Trail
         TrailRenderer tr = bombObj.AddComponent<TrailRenderer>();
         tr.material = mat;
-        tr.startColor = new Color(1f, 0.6f, 0.1f, 0.9f);
-        tr.endColor = new Color(1f, 0.2f, 0.05f, 0f);
-        tr.startWidth = 0.22f;
-        tr.endWidth = 0.02f;
-        tr.time = 0.35f;
+        tr.startColor = new Color(1f, 0.75f, 0.2f, 1f);
+        tr.endColor = new Color(1f, 0.25f, 0.05f, 0f);
+        tr.startWidth = 0.50f;
+        tr.endWidth = 0.05f;
+        tr.time = 0.85f;
 
-        // Physics
+        // 5. In-flight Smoke Particle Contrail
+        GameObject smokeTrail = new GameObject("SmokeContrail");
+        smokeTrail.transform.SetParent(bombObj.transform, false);
+        ParticleSystem ps = smokeTrail.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        ParticleSystemRenderer psr = smokeTrail.GetComponent<ParticleSystemRenderer>();
+        psr.material = mat;
+
+        var main = ps.main;
+        main.duration = 5f;
+        main.loop = true;
+        main.startLifetime = 0.65f;
+        main.startSpeed = 1.5f;
+        main.startSize = 0.85f;
+        main.startColor = new Color(1f, 0.55f, 0.15f, 0.85f);
+        main.gravityModifier = -0.1f;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 40;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.25f;
+
+        ps.Play();
+
+        // 6. Physics
         SphereCollider col = bombObj.AddComponent<SphereCollider>();
-        col.radius = 0.35f;
+        col.radius = 0.40f;
 
         Rigidbody rb = bombObj.AddComponent<Rigidbody>();
-        rb.mass = 0.8f;
-        rb.useGravity = false; // Fast, direct rocket-assisted flak trajectory
+        rb.mass = 1.0f;
+        rb.useGravity = false; // Custom gravity driven in FixedUpdate
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.linearVelocity = velocity;
 
@@ -98,7 +153,7 @@ public class OasisPlasmaBomb : MonoBehaviour
     {
         var bomb = SpawnBomb(position, velocity, teamId, playerId);
         bomb.directDamage = dmg;
-        bomb.splashDamage = dmg * 0.7f;
+        bomb.splashDamage = dmg * 0.72f;
         bomb.explosionRadius = radius;
         if (fuseSeconds > 0f)
         {
@@ -127,27 +182,27 @@ public class OasisPlasmaBomb : MonoBehaviour
         if (_hasExploded) return;
         _hasExploded = true;
 
-        // 1. Primary & Secondary Cluster Airburst VFX
-        BlasterVFX.SpawnExplosion(center);
-        for (int k = 0; k < 3; k++)
+        // 1. Primary Massive Cinematic Mortar Blast & Secondary Clusters
+        BlasterVFX.SpawnMortarBlast(center, explosionRadius);
+        for (int k = 0; k < 2; k++)
         {
-            Vector3 clusterPos = center + Random.insideUnitSphere * 2.8f;
+            Vector3 clusterPos = center + Random.insideUnitSphere * 3.5f;
             clusterPos.y = Mathf.Max(center.y, clusterPos.y);
             BlasterVFX.SpawnExplosion(clusterPos);
         }
 
-        // 2. Audio
-        AudioSource.PlayClipAtPoint(ProceduralAudio.GetBombExplosionClip(), center, 0.75f);
+        // 2. Deep Sub-Bass Explosive Audio
+        AudioSource.PlayClipAtPoint(ProceduralAudio.GetBombExplosionClip(), center, 0.95f);
 
-        // 3. Screen Shake if near player
+        // 3. High-Impact Screen Shake
         Camera cam = Camera.main;
         if (cam != null)
         {
             float distToPlayer = Vector3.Distance(cam.transform.position, center);
-            if (distToPlayer < 25f)
+            if (distToPlayer < 45f)
             {
-                float shakeIntensity = Mathf.Clamp01(1f - (distToPlayer / 25f)) * 0.35f;
-                OasisShooterManager.Instance?.TriggerCameraShake(0.35f, shakeIntensity);
+                float shakeIntensity = Mathf.Clamp01(1f - (distToPlayer / 45f)) * 0.45f;
+                OasisShooterManager.Instance?.TriggerCameraShake(0.40f, shakeIntensity);
             }
         }
 
@@ -167,7 +222,7 @@ public class OasisPlasmaBomb : MonoBehaviour
                 float dist = Vector3.Distance(center, ai.transform.position);
                 float falloff = Mathf.Clamp01(1f - (dist / explosionRadius));
                 float dmg = splashDamage * falloff;
-                if (dist < 1.8f) dmg = directDamage; // Direct hit bonus
+                if (dist < 2.5f) dmg = directDamage; // Direct hit bonus
 
                 ai.TakeDamage(dmg, c.ClosestPoint(center), Vector3.up, shooterPlayerId, shooterTeamId);
                 int localId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;

@@ -1791,9 +1791,6 @@ public class OasisCombatMovement : MonoBehaviour
         GUI.color = Color.white;
     }
 
-    private string _upscalerToastText = "";
-    private float _upscalerToastTimer = 0f;
-
     private void HandleUpscalerToggle()
     {
         bool f10Pressed = false;
@@ -1808,27 +1805,28 @@ public class OasisCombatMovement : MonoBehaviour
         var urpAsset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
         if (urpAsset == null) return;
 
+        string toast = "";
         if (urpAsset.upscalingFilter == UpscalingFilterSelection.STP)
         {
             urpAsset.upscalingFilter = UpscalingFilterSelection.FSR;
             urpAsset.renderScale = 0.77f;
             urpAsset.fsrSharpness = 0.92f;
-            _upscalerToastText = "[F10] UPSCALER: AMD FSR 1.0 (77% -> NATIVE)";
+            toast = "[F10] UPSCALER: AMD FSR 1.0 (77% -> NATIVE)";
         }
         else if (urpAsset.upscalingFilter == UpscalingFilterSelection.FSR)
         {
             urpAsset.upscalingFilter = UpscalingFilterSelection.Auto;
             urpAsset.renderScale = 1.0f;
-            _upscalerToastText = "[F10] UPSCALER: OFF / NATIVE 1:1 (100%)";
+            toast = "[F10] UPSCALER: OFF / NATIVE 1:1 (100%)";
         }
         else
         {
             urpAsset.upscalingFilter = UpscalingFilterSelection.STP;
             urpAsset.renderScale = 0.77f;
-            _upscalerToastText = "[F10] UPSCALER: UNITY 6 STP (77% -> NATIVE)";
+            toast = "[F10] UPSCALER: UNITY 6 STP (77% -> NATIVE)";
         }
 
-        _upscalerToastTimer = 2.5f;
+        OasisShooterManager.Instance?.ShowNotificationBanner(toast, 2.5f);
     }
 
     private void HandleFullscreenToggle()

@@ -62,7 +62,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
             "Reinforced titanium chassis engineered for intense frontline breaches. High kinetic resistance with balanced assault firepower.", 
             "RobotHero_URP", new Color(0.25f, 0.75f, 1.0f),
             0.95f, 0.60f, 0.85f, 0.75f,
-            "Micro-Bomb Flak Mortar", "[F] TITANIUM SLAM", "Discharges kinetic shockwave (45 AoE dmg) & grants +60 HP temporary overshield."),
+            "Heavy Plasma Mortar Cannon", "[F] TITANIUM SLAM", "Discharges kinetic shockwave (45 AoE dmg) & grants +60 HP temporary overshield."),
 
         new OperativeProfile(
             "desert_commando", "Desert Tactical Commando", "DEMOLITIONS / INFANTRY", 
