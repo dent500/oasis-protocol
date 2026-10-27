@@ -80,11 +80,11 @@ public class OasisCombatMovement : MonoBehaviour
     public Transform gunArmBone => _gunArmBone;
 
     [Header("Third Person Dynamic Camera & Zoom")]
-    public float minCameraDistance = 1.2f;
-    public float maxCameraDistance = 5.5f;
-    public float defaultCameraDistance = 3.2f;
-    public float currentCameraDistance = 3.2f;
-    public float cameraZoomSpeed = 1.5f;
+    [System.NonSerialized] public float minCameraDistance = 1.2f;
+    [System.NonSerialized] public float maxCameraDistance = 5.5f;
+    [System.NonSerialized] public float defaultCameraDistance = 3.2f;
+    [System.NonSerialized] public float currentCameraDistance = 3.2f;
+    [System.NonSerialized] public float cameraZoomSpeed = 1.5f;
     private float _targetCameraDistance = 3.2f;
 
     public Vector3 GetThirdPersonMuzzlePosition(Vector3 targetPoint)
