@@ -53,6 +53,7 @@ public class OasisWorldExpander : MonoBehaviour
         BuildStartingBunker();
         BuildTacticalContainmentDome();
         BuildExpandedWorldLandmarks();
+        SanitizeAndValidateAllMaterials();
     }
 
     private void Update()
@@ -1377,6 +1378,7 @@ public class OasisWorldExpander : MonoBehaviour
         MeshRenderer mr = obj.AddComponent<MeshRenderer>();
         mr.sharedMaterials = tpl.materials;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        ValidateAndFixRendererMaterials(mr);
 
         if (addMeshCollider && tpl.mesh.isReadable)
         {
@@ -1870,6 +1872,98 @@ public class OasisWorldExpander : MonoBehaviour
         box.GetComponent<MeshRenderer>().sharedMaterial = mat;
         return box;
     }
+    /// <summary>
+    /// Runtime safeguard: ensures no material renders as magenta/pink missing shader or missing texture.
+    /// If a shader is missing, erroring, or unsupported in the player build, falls back to Universal Render Pipeline/Lit.
+    /// </summary>
+    public static void ValidateAndFixRendererMaterials(MeshRenderer mr)
+    {
+        if (mr == null) return;
+        Material[] mats = mr.sharedMaterials;
+        if (mats == null || mats.Length == 0) return;
+
+        bool modified = false;
+        Shader urpLit = null;
+
+        for (int i = 0; i < mats.Length; i++)
+        {
+            Material m = mats[i];
+            if (m == null) continue;
+
+            bool isShaderBroken = m.shader == null ||
+                                  m.shader.name == "Hidden/InternalErrorShader" ||
+                                  !m.shader.isSupported;
+
+            if (isShaderBroken)
+            {
+                if (urpLit == null) urpLit = Shader.Find("Universal Render Pipeline/Lit");
+                if (urpLit != null)
+                {
+                    Material fallbackMat = new Material(urpLit);
+                    fallbackMat.name = m.name + "_Fallback";
+
+                    Texture baseTex = m.HasProperty("_ColorMap") ? m.GetTexture("_ColorMap") :
+                                     (m.HasProperty("_BaseMap") ? m.GetTexture("_BaseMap") : null);
+                    if (baseTex != null)
+                    {
+                        fallbackMat.SetTexture("_BaseMap", baseTex);
+                    }
+
+                    Texture bumpTex = m.HasProperty("_NormalMap") ? m.GetTexture("_NormalMap") :
+                                     (m.HasProperty("_BumpMap") ? m.GetTexture("_BumpMap") : null);
+                    if (bumpTex != null)
+                    {
+                        fallbackMat.SetTexture("_BumpMap", bumpTex);
+                        fallbackMat.EnableKeyword("_NORMALMAP");
+                    }
+
+                    string lowerName = m.name.ToLowerInvariant();
+                    if (lowerName.Contains("palm") || lowerName.Contains("atlas") ||
+                        lowerName.Contains("grass") || lowerName.Contains("leaf") ||
+                        lowerName.Contains("fountain") || lowerName.Contains("foliage"))
+                    {
+                        fallbackMat.SetFloat("_Surface", 0.0f);
+                        fallbackMat.SetFloat("_AlphaClip", 1.0f);
+                        fallbackMat.SetFloat("_Cutoff", 0.33f);
+                        fallbackMat.SetFloat("_Cull", 0.0f);
+                        fallbackMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
+                        fallbackMat.EnableKeyword("_ALPHATEST_ON");
+                    }
+
+                    mats[i] = fallbackMat;
+                    modified = true;
+                }
+            }
+            else
+            {
+                if (m.HasProperty("_BaseMap") && m.GetTexture("_BaseMap") == null && m.HasProperty("_ColorMap"))
+                {
+                    Texture cMap = m.GetTexture("_ColorMap");
+                    if (cMap != null) m.SetTexture("_BaseMap", cMap);
+                }
+                if (m.HasProperty("_BumpMap") && m.GetTexture("_BumpMap") == null && m.HasProperty("_NormalMap"))
+                {
+                    Texture nMap = m.GetTexture("_NormalMap");
+                    if (nMap != null) m.SetTexture("_BumpMap", nMap);
+                }
+            }
+        }
+
+        if (modified)
+        {
+            mr.materials = mats;
+        }
+    }
+
+    private void SanitizeAndValidateAllMaterials()
+    {
+        MeshRenderer[] renderers = FindObjectsByType<MeshRenderer>(FindObjectsInactive.Include);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            ValidateAndFixRendererMaterials(renderers[i]);
+        }
+    }
+
 }
 
 /// <summary>
