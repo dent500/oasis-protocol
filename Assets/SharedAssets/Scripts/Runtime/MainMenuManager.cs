@@ -582,10 +582,13 @@ public class MainMenuManager : MonoBehaviour
             48, FontStyle.Bold, new Color(0.96f, 0.98f, 1.0f, 1.0f),
             new Vector2(0.10f, 0.29f), new Vector2(0.90f, 0.77f), TextAnchor.MiddleCenter);
 
-        // Subtitle Banner Pill
-        GameObject subPill = CreateAnchoredPanel(headerObj.transform, "Subtitle_Pill", new Vector2(0.24f, 0.12f), new Vector2(0.76f, 0.29f), new Color(0.02f, 0.05f, 0.10f, 0.35f));
+        // Subtitle Banner Pill (Displays Steam Operative Callsign)
+        string myName = (OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.myPlayerName))
+            ? OasisNetworkManager.Instance.myPlayerName
+            : PlayerPrefs.GetString("OasisPlayerName", "Operative");
+        GameObject subPill = CreateAnchoredPanel(headerObj.transform, "Subtitle_Pill", new Vector2(0.18f, 0.12f), new Vector2(0.82f, 0.29f), new Color(0.02f, 0.05f, 0.10f, 0.35f));
         CreateAnchoredText(subPill.transform, font, "Subtitle_Text",
-            "TACTICAL SCI-FI SQUAD COMBAT   •   SOLO, CO-OP & MULTI-TEAM AI ARENA",
+            $"TACTICAL SQUAD COMBAT   •   OPERATIVE: <color=#38EF7D><b>[{myName.ToUpper()}]</b></color> (STEAM LINKED)",
             13, FontStyle.Bold, new Color(0.22f, 0.95f, 0.68f, 1f),
             Vector2.zero, Vector2.one, TextAnchor.MiddleCenter);
     }

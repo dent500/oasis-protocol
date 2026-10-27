@@ -96,6 +96,7 @@ public class OasisNetworkManager : MonoBehaviour
     // Scoreboard UI
     private GameObject _scoreboardPanel;
     private Transform _scoreboardRowsContainer;
+    private Text _scoreboardSubtitle;
     private readonly List<GameObject> _scoreboardRowObjects = new List<GameObject>();
     private float _scoreboardRefreshTimer = 0f;
     private bool _isScoreboardToggled = false;
@@ -248,7 +249,12 @@ public class OasisNetworkManager : MonoBehaviour
         {
             string status = inst.isDowned ? "[DOWNED] " : "";
             inst.nameTagText.text = $"{status}{inst.name} [OP-{inst.id}]";
-            inst.nameTagText.color = inst.isDowned ? new Color(1f, 0.35f, 0.35f) : teamColor;
+            int localTeam = OasisShooterManager.Instance != null 
+                ? OasisShooterManager.Instance.localPlayerTeam 
+                : PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+            bool isAlly = (inst.teamId == localTeam);
+            Color tagCol = isAlly ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
+            inst.nameTagText.color = inst.isDowned ? new Color(1f, 0.35f, 0.35f) : tagCol;
         }
     }
 
@@ -342,10 +348,12 @@ public class OasisNetworkManager : MonoBehaviour
         foreach (var bot in OasisCombatAI.ActiveBots)
         {
             if (bot == null) continue;
+            string tShort = OasisShooterManager.GetTeamShortName(bot.teamId);
+            string cleanName = bot.botName.StartsWith("[") ? bot.botName : $"[{tShort}] {bot.botName}";
             list.Add(new ScoreboardEntry
             {
                 playerId = bot.GetHashCode(),
-                playerName = bot.botName,
+                playerName = cleanName,
                 score = bot.score,
                 kills = bot.kills,
                 playerColor = bot.teamColor,
@@ -360,6 +368,58 @@ public class OasisNetworkManager : MonoBehaviour
 
     public int ConnectedPlayersCount => 1 + _remotePlayers.Count;
 
+    public static string DetectSteamPersonaName()
+    {
+        try
+        {
+            string programFilesX86 = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86);
+            string programFiles = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFiles);
+            string[] possiblePaths = new string[]
+            {
+                System.IO.Path.Combine(programFilesX86, "Steam", "config", "loginusers.vdf"),
+                System.IO.Path.Combine(programFiles, "Steam", "config", "loginusers.vdf"),
+                @"C:\Program Files (x86)\Steam\config\loginusers.vdf",
+                @"C:\Program Files\Steam\config\loginusers.vdf",
+                @"D:\Steam\config\loginusers.vdf",
+                @"E:\Steam\config\loginusers.vdf"
+            };
+
+            foreach (string p in possiblePaths)
+            {
+                if (System.IO.File.Exists(p))
+                {
+                    string fileText = System.IO.File.ReadAllText(p);
+                    var match = System.Text.RegularExpressions.Regex.Match(fileText, @"""PersonaName""\s+""([^""]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success && !string.IsNullOrEmpty(match.Groups[1].Value.Trim()))
+                    {
+                        string persona = match.Groups[1].Value.Trim();
+                        if (persona.Length > 0)
+                        {
+                            Debug.Log($"<color=#38EF7D>[OasisNetwork]</color> Auto-detected Steam Persona Name: {persona}");
+                            return persona;
+                        }
+                    }
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[OasisNetwork] Could not parse Steam persona: {ex.Message}");
+        }
+
+        try
+        {
+            string envUser = System.Environment.UserName;
+            if (!string.IsNullOrEmpty(envUser) && envUser.Trim().Length > 0)
+            {
+                return envUser.Trim();
+            }
+        }
+        catch { }
+
+        return "Operative";
+    }
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -371,6 +431,19 @@ public class OasisNetworkManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         Application.runInBackground = true;
         UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+
+        // Auto-detect and populate Player Name from Steam profile
+        string saved = PlayerPrefs.GetString("OasisPlayerName", "");
+        if (!string.IsNullOrEmpty(saved) && saved != "Operative")
+        {
+            myPlayerName = saved;
+        }
+        else
+        {
+            myPlayerName = DetectSteamPersonaName();
+            PlayerPrefs.SetString("OasisPlayerName", myPlayerName);
+            PlayerPrefs.Save();
+        }
 
         if (_lobbyCanvas == null)
         {
@@ -2609,7 +2682,11 @@ public class OasisNetworkManager : MonoBehaviour
         nameText.fontSize = 18;
         nameText.fontStyle = FontStyle.Bold;
         nameText.alignment = TextAnchor.MiddleCenter;
-        nameText.color = OasisShooterManager.GetTeamColor(teamId);
+        int localTeam = OasisShooterManager.Instance != null 
+            ? OasisShooterManager.Instance.localPlayerTeam 
+            : PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        bool isAlly = (teamId == localTeam);
+        nameText.color = isAlly ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
         Outline ntOutline = textObj.AddComponent<Outline>();
         ntOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
         ntOutline.effectDistance = new Vector2(1.5f, -1.5f);
@@ -3129,7 +3206,7 @@ public class OasisNetworkManager : MonoBehaviour
 
         // Header Title
         CreateLabel(_scoreboardPanel.transform, "OPERATIVE MISSION SCOREBOARD", 20, new Vector2(0, 150), new Vector2(620, 36), FontStyle.Bold, new Color(0.2f, 0.9f, 1f));
-        CreateLabel(_scoreboardPanel.transform, "[HOLD TAB TO VIEW LIVE MATCH STATS]", 11, new Vector2(0, 125), new Vector2(620, 20), FontStyle.Normal, new Color(0.6f, 0.75f, 0.9f));
+        _scoreboardSubtitle = CreateLabel(_scoreboardPanel.transform, "[HOLD TAB TO VIEW LIVE MATCH STATS]", 11, new Vector2(0, 125), new Vector2(620, 20), FontStyle.Normal, new Color(0.6f, 0.75f, 0.9f));
 
         // Column Titles Bar
         GameObject headerObj = new GameObject("HeaderRow");
@@ -3166,6 +3243,18 @@ public class OasisNetworkManager : MonoBehaviour
     public void RefreshScoreboardUI()
     {
         if (_scoreboardRowsContainer == null) return;
+
+        if (_scoreboardSubtitle != null)
+        {
+            if (!string.IsNullOrEmpty(activeRelayJoinCode))
+            {
+                _scoreboardSubtitle.text = $"[HOLD TAB TO VIEW]  •  <color=#38EF7D><b>RELAY JOIN CODE: {activeRelayJoinCode}</b></color> (PRESS F10 TO COPY)";
+            }
+            else
+            {
+                _scoreboardSubtitle.text = "[HOLD TAB TO VIEW LIVE MATCH STATS]";
+            }
+        }
 
         // Clean up previous rows
         for (int i = 0; i < _scoreboardRowObjects.Count; i++)

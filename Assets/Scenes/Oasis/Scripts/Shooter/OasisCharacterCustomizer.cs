@@ -961,10 +961,10 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
         string[][] teamCallsigns = new string[][]
         {
-            new string[] { "VANCE", "MERCER", "VALKYRIE", "KAI", "ROOK" },
-            new string[] { "VIPER", "RAZOR", "GHOST", "HAVOC", "KORP" },
-            new string[] { "FALCON", "TITAN", "NOVA", "LYNX", "APEX" },
-            new string[] { "BLAZE", "REAPER", "ECHO", "DRAKE", "VOLT" }
+            new string[] { "AXEL", "JINX", "TORQUE", "CIPHER", "VALKYRIE" },
+            new string[] { "RAZOR", "VIPER", "HAVOC", "STRIKER", "BLITZ" },
+            new string[] { "SPECTRE", "TITAN", "PHANTOM", "VORTEX", "KINETIC" },
+            new string[] { "REAPER", "BLAZE", "DRAKE", "WARP", "APEX" }
         };
         string[][] teamClasses = new string[][]
         {
@@ -1036,7 +1036,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
                     realPlayersOnTeam++;
                     int opIdx = Mathf.Clamp(rop.operativeIndex, 0, operatives.Count - 1);
                     var rProfile = operatives[opIdx];
-                    string roleBadge = rop.isHost ? "SQUAD HOST" : rop.playerName.ToUpper();
+                    string roleBadge = rop.isHost ? $"{rop.playerName.ToUpper()} (HOST)" : rop.playerName.ToUpper();
                     if (numTeams >= 3)
                     {
                         sb.AppendLine($"<color=#38EF7D>● {roleBadge} (Real)</color>\n  <b>{rProfile.name}</b> <color={colorHex}>[{rProfile.id}]</color>");
@@ -1053,7 +1053,10 @@ public class OasisCharacterCustomizer : MonoBehaviour
             {
                 totalAssigned++;
                 realPlayersOnTeam++;
-                string youLabel = isLocalHost ? "YOU (Squad Host)" : "YOU (Real Player)";
+                string myName = (OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.myPlayerName))
+                    ? OasisNetworkManager.Instance.myPlayerName.ToUpper()
+                    : "YOU";
+                string youLabel = isLocalHost ? $"{myName} (HOST / YOU)" : $"{myName} (YOU)";
                 if (numTeams >= 3)
                 {
                     sb.AppendLine($"<color=#FFEA00>★ {youLabel}</color>\n  <b>{chosenOp.name}</b> <color={colorHex}>[{chosenOp.id}]</color>");

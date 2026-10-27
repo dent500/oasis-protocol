@@ -198,8 +198,23 @@ public class OasisMapSystem : MonoBehaviour
         foreach (var bot in OasisCombatAI.ActiveBots)
         {
             if (bot == null) continue;
-            Color col = (bot.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.3f, 0.2f);
+            Color col = (bot.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
             combatants.Add((bot.transform.position, col));
+        }
+
+        // Add Remote Operatives
+        if (OasisNetworkManager.Instance != null)
+        {
+            var rOps = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+            for (int r = 0; r < rOps.Count; r++)
+            {
+                var rop = rOps[r];
+                if (rop != null && rop.gameObject != null && rop.gameObject.activeInHierarchy)
+                {
+                    Color rCol = (rop.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
+                    combatants.Add((rop.transform.position, rCol));
+                }
+            }
         }
 
         // Add Target Drones
@@ -325,8 +340,22 @@ public class OasisMapSystem : MonoBehaviour
         foreach (var bot in OasisCombatAI.ActiveBots)
         {
             if (bot == null) continue;
-            Color col = (bot.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.3f, 0.2f);
+            Color col = (bot.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
             combatants.Add((bot.transform.position, col));
+        }
+
+        if (OasisNetworkManager.Instance != null)
+        {
+            var rOps = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+            for (int r = 0; r < rOps.Count; r++)
+            {
+                var rop = rOps[r];
+                if (rop != null && rop.gameObject != null && rop.gameObject.activeInHierarchy)
+                {
+                    Color rCol = (rop.teamId == myTeam) ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
+                    combatants.Add((rop.transform.position, rCol));
+                }
+            }
         }
 
         TargetDrone[] drones = FindObjectsByType<TargetDrone>();
@@ -339,7 +368,7 @@ public class OasisMapSystem : MonoBehaviour
 
         if (_fullHostileCountText != null)
         {
-            _fullHostileCountText.text = $"ACTIVE COMBATANTS: {combatants.Count} (SQUAD ALPHA & BRAVO)";
+            _fullHostileCountText.text = $"ACTIVE COMBATANTS: {combatants.Count}  [BLUE: ALLIES  |  RED: HOSTILES]";
         }
 
         for (int i = 0; i < combatants.Count; i++)

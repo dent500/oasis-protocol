@@ -1890,9 +1890,19 @@ public class OasisWorldExpander : MonoBehaviour
             Material m = mats[i];
             if (m == null) continue;
 
+            string sName = m.shader != null ? m.shader.name : "";
+            string lowerName = m.name.ToLowerInvariant();
+            bool isVegetation = lowerName.Contains("palm") || lowerName.Contains("atlas") ||
+                                lowerName.Contains("grass") || lowerName.Contains("leaf") ||
+                                lowerName.Contains("fountain") || lowerName.Contains("foliage") ||
+                                lowerName.Contains("bark") || lowerName.Contains("stem");
+
             bool isShaderBroken = m.shader == null ||
-                                  m.shader.name == "Hidden/InternalErrorShader" ||
-                                  !m.shader.isSupported;
+                                  sName == "Hidden/InternalErrorShader" ||
+                                  sName.Contains("Error") ||
+                                  sName.Contains("OasisVegetationGraph") ||
+                                  !m.shader.isSupported ||
+                                  (isVegetation && sName != "Universal Render Pipeline/Lit");
 
             if (isShaderBroken)
             {
@@ -1917,14 +1927,11 @@ public class OasisWorldExpander : MonoBehaviour
                         fallbackMat.EnableKeyword("_NORMALMAP");
                     }
 
-                    string lowerName = m.name.ToLowerInvariant();
-                    if (lowerName.Contains("palm") || lowerName.Contains("atlas") ||
-                        lowerName.Contains("grass") || lowerName.Contains("leaf") ||
-                        lowerName.Contains("fountain") || lowerName.Contains("foliage"))
+                    if (isVegetation)
                     {
                         fallbackMat.SetFloat("_Surface", 0.0f);
                         fallbackMat.SetFloat("_AlphaClip", 1.0f);
-                        fallbackMat.SetFloat("_Cutoff", 0.33f);
+                        fallbackMat.SetFloat("_Cutoff", 0.35f);
                         fallbackMat.SetFloat("_Cull", 0.0f);
                         fallbackMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
                         fallbackMat.EnableKeyword("_ALPHATEST_ON");

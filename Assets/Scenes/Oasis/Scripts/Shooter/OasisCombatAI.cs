@@ -444,6 +444,32 @@ public class OasisCombatAI : MonoBehaviour
         return s_ArrowMesh;
     }
 
+    public bool IsFriendlyToLocalPlayer()
+    {
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
+        {
+            return false;
+        }
+        int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        return this.teamId == localTeam;
+    }
+
+    public Color GetTacticalColor()
+    {
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
+        {
+            return teamColor;
+        }
+        return IsFriendlyToLocalPlayer() ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
+    }
+
+    public string GetFullDisplayName()
+    {
+        string shortName = OasisShooterManager.GetTeamShortName(teamId);
+        if (botName.StartsWith("[")) return botName;
+        return $"[{shortName}] {botName}";
+    }
+
     private void BuildOverheadBeacon()
     {
         if (_overheadBeaconObj != null) Destroy(_overheadBeaconObj);
@@ -460,15 +486,16 @@ public class OasisCombatAI : MonoBehaviour
                              ?? Shader.Find("Unlit/Color") 
                              ?? OasisShaderHelper.GetLitShader();
         _overheadBeaconMat = new Material(unlitShader);
-        _overheadBeaconMat.color = teamColor;
+        Color beaconCol = GetTacticalColor();
+        _overheadBeaconMat.color = beaconCol;
         if (_overheadBeaconMat.HasProperty("_BaseColor"))
         {
-            _overheadBeaconMat.SetColor("_BaseColor", teamColor);
+            _overheadBeaconMat.SetColor("_BaseColor", beaconCol);
         }
         if (_overheadBeaconMat.HasProperty("_EmissionColor"))
         {
             _overheadBeaconMat.EnableKeyword("_EMISSION");
-            _overheadBeaconMat.SetColor("_EmissionColor", teamColor * 2.0f);
+            _overheadBeaconMat.SetColor("_EmissionColor", beaconCol * 2.0f);
         }
         mr.sharedMaterial = _overheadBeaconMat;
     }
@@ -501,12 +528,11 @@ public class OasisCombatAI : MonoBehaviour
 
         _overheadNameText = nameObj.GetComponent<Text>();
         _overheadNameText.font = font;
-        string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
-        _overheadNameText.text = teamPrefix + botName;
+        _overheadNameText.text = GetFullDisplayName();
         _overheadNameText.fontSize = 14;
         _overheadNameText.fontStyle = FontStyle.Bold;
         _overheadNameText.alignment = TextAnchor.MiddleCenter;
-        _overheadNameText.color = teamColor;
+        _overheadNameText.color = GetTacticalColor();
         Outline nOutline = nameObj.AddComponent<Outline>();
         nOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
         nOutline.effectDistance = new Vector2(1.5f, -1.5f);
@@ -596,7 +622,7 @@ public class OasisCombatAI : MonoBehaviour
         fRT.offsetMin = Vector2.zero;
         fRT.offsetMax = Vector2.zero;
         Image fillImg = fill.AddComponent<Image>();
-        fillImg.color = teamColor;
+        fillImg.color = GetTacticalColor();
 
         _overheadHealthSlider.fillRect = fRT;
     }
@@ -763,9 +789,8 @@ public class OasisCombatAI : MonoBehaviour
                 currentAmmo = maxAmmo;
                 if (_overheadNameText != null)
                 {
-                    string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
-        _overheadNameText.text = teamPrefix + botName;
-                    _overheadNameText.color = teamColor;
+                    _overheadNameText.text = GetFullDisplayName();
+                    _overheadNameText.color = GetTacticalColor();
                 }
             }
         }
@@ -1594,9 +1619,8 @@ public class OasisCombatAI : MonoBehaviour
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
-                string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
-        _overheadNameText.text = teamPrefix + botName;
-                _overheadNameText.color = teamColor;
+                _overheadNameText.text = GetFullDisplayName();
+                _overheadNameText.color = GetTacticalColor();
             }
             if (_overheadShieldSlider != null)
             {
@@ -1612,7 +1636,7 @@ public class OasisCombatAI : MonoBehaviour
         {
             _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
             _overheadBeaconObj.SetActive(true);
-            if (_overheadBeaconMat != null) _overheadBeaconMat.color = teamColor;
+            if (_overheadBeaconMat != null) { Color bc = GetTacticalColor(); _overheadBeaconMat.color = bc; if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc); }
         }
 
         if (_animator != null)
@@ -1702,9 +1726,8 @@ public class OasisCombatAI : MonoBehaviour
             _overheadCanvasObj.SetActive(true);
             if (_overheadNameText != null)
             {
-                string teamPrefix = (teamId == 0) ? "[ALPHA] " : "[BRAVO] ";
-        _overheadNameText.text = teamPrefix + botName;
-                _overheadNameText.color = teamColor;
+                _overheadNameText.text = GetFullDisplayName();
+                _overheadNameText.color = GetTacticalColor();
             }
             if (_overheadShieldSlider != null) _overheadShieldSlider.value = maxShield;
             if (_overheadHealthSlider != null) _overheadHealthSlider.value = maxHealth;
@@ -1714,7 +1737,7 @@ public class OasisCombatAI : MonoBehaviour
         {
             _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
             _overheadBeaconObj.SetActive(true);
-            if (_overheadBeaconMat != null) _overheadBeaconMat.color = teamColor;
+            if (_overheadBeaconMat != null) { Color bc = GetTacticalColor(); _overheadBeaconMat.color = bc; if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc); }
         }
 
         if (_animator != null)

@@ -63,6 +63,7 @@ public class OasisShooterManager : MonoBehaviour
     public int activePlayersPerTeam = 2;
     public int targetKills = 15;
     public bool isTeamBattleActive = false;
+    public int localPlayerTeam => PlayerPrefs.GetInt("OasisPlayerTeam", 0);
     private readonly List<OasisCombatAI> _spawnedAIBots = new List<OasisCombatAI>();
 
     public static string GetTeamShortName(int teamId)
@@ -1225,10 +1226,10 @@ public class OasisShooterManager : MonoBehaviour
         };
         string[][] teamCallsigns = new string[][]
         {
-            new string[] { "VANCE", "MERCER", "VALKYRIE", "KAI", "ROOK" },
-            new string[] { "VIPER", "RAZOR", "GHOST", "HAVOC", "KORP" },
-            new string[] { "FALCON", "TITAN", "NOVA", "LYNX", "ORION" },
-            new string[] { "BLAZE", "REAPER", "ECHO", "DRAKE", "APEX" }
+            new string[] { "AXEL", "JINX", "TORQUE", "CIPHER", "VALKYRIE" },
+            new string[] { "RAZOR", "VIPER", "HAVOC", "STRIKER", "BLITZ" },
+            new string[] { "SPECTRE", "TITAN", "PHANTOM", "VORTEX", "KINETIC" },
+            new string[] { "REAPER", "BLAZE", "DRAKE", "WARP", "APEX" }
         };
 
         // If any remote operative is a local-test squad placeholder (e.g. testing CONNECT & JOIN SQUAD on one PC),
@@ -1247,7 +1248,7 @@ public class OasisShooterManager : MonoBehaviour
                     }
                     string tShort = GetTeamShortName(rTeam);
                     int opIdx = Mathf.Clamp(rop.operativeIndex, 0, classIds.Length - 1);
-                    SpawnCombatAIBot(rTeam, $"[{tShort}] {rop.playerName}", classIds[opIdx], texPaths[opIdx]);
+                    SpawnCombatAIBot(rTeam, rop.playerName, classIds[opIdx], texPaths[opIdx]);
                 }
             }
         }
@@ -1263,7 +1264,7 @@ public class OasisShooterManager : MonoBehaviour
             {
                 int rIndex = Random.Range(0, classIds.Length);
                 string callsign = callsigns[i % callsigns.Length];
-                SpawnCombatAIBot(t, $"[{tShort}] {callsign}", classIds[rIndex], texPaths[rIndex]);
+                SpawnCombatAIBot(t, callsign, classIds[rIndex], texPaths[rIndex]);
             }
         }
 
@@ -1986,7 +1987,8 @@ public class OasisShooterManager : MonoBehaviour
     {
         Vector3 spawnPos = OasisSpawnSystem.Instance.GetRandomSpawnPosition(team);
 
-        GameObject botObj = new GameObject($"Bot_{botName}");
+        string tShort = GetTeamShortName(team);
+        GameObject botObj = new GameObject($"Bot_{tShort}_{botName}");
         botObj.transform.position = spawnPos;
 
         OasisCombatAI ai = botObj.AddComponent<OasisCombatAI>();

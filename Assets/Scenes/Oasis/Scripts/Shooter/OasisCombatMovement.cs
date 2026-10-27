@@ -1668,6 +1668,27 @@ public class OasisCombatMovement : MonoBehaviour
         subStyle.normal.textColor = new Color(0.65f, 0.75f, 0.85f);
         GUI.Label(new Rect(sbX + 20, sbY + 25, sbW - 40, 16), $"FIRST TO {mgr.targetKills} ELIMINATIONS", subStyle);
 
+        if (OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.activeRelayJoinCode))
+        {
+            string rCode = OasisNetworkManager.Instance.activeRelayJoinCode;
+            float rW = 320f;
+            float rH = 22f;
+            float rX = centerX - (rW * 0.5f);
+            float rY = sbY + sbH + 4f;
+
+            GUI.color = new Color(0.02f, 0.08f, 0.05f, 0.88f);
+            GUI.DrawTexture(new Rect(rX, rY, rW, rH), _crosshairWhiteTex);
+            GUI.color = new Color(0.2f, 0.95f, 0.45f, 0.85f);
+            GUI.DrawTexture(new Rect(rX, rY, rW, 1), _crosshairWhiteTex);
+
+            GUIStyle relayStyle = new GUIStyle(GUI.skin.label);
+            relayStyle.fontSize = 11;
+            relayStyle.fontStyle = FontStyle.Bold;
+            relayStyle.alignment = TextAnchor.MiddleCenter;
+            relayStyle.normal.textColor = new Color(0.35f, 1.0f, 0.6f);
+            GUI.Label(new Rect(rX, rY, rW, rH), $"RELAY JOIN CODE: {rCode}  [F10 COPY]", relayStyle);
+        }
+
         GUI.color = Color.white;
     }
 
@@ -1991,6 +2012,18 @@ public class OasisCombatMovement : MonoBehaviour
         f11Pressed = Input.GetKeyDown(KeyCode.F11);
         altEnterPressed = (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter));
 #endif
+
+        bool f10Pressed = false;
+#if ENABLE_INPUT_SYSTEM
+        if (kb != null) f10Pressed = kb.f10Key.wasPressedThisFrame;
+#else
+        f10Pressed = Input.GetKeyDown(KeyCode.F10);
+#endif
+        if (f10Pressed && OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.activeRelayJoinCode))
+        {
+            GUIUtility.systemCopyBuffer = OasisNetworkManager.Instance.activeRelayJoinCode;
+            OasisShooterManager.Instance?.ShowNotificationBanner($"RELAY JOIN CODE {OasisNetworkManager.Instance.activeRelayJoinCode} COPIED TO CLIPBOARD!", 3.5f);
+        }
 
         if (f11Pressed || altEnterPressed)
         {
