@@ -46,7 +46,8 @@ public class OasisSpawnSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Samples ground height down to the authentic desert sand dunes, strictly ignoring building roofs, canopies, and invisible safety catch planes.
+    /// Samples ground height down to the authentic desert sand dunes, strictly ignoring building roofs, canopies,
+    /// character colliders, AI meshes, and invisible safety catch planes.
     /// </summary>
     public float SampleGroundY(float x, float z, float fallbackY)
     {
@@ -56,7 +57,8 @@ public class OasisSpawnSystem : MonoBehaviour
         {
             if (hit.collider == null) continue;
             if (hit.collider.isTrigger) continue;
-            if (hit.collider.GetComponent<CharacterController>() != null) continue;
+            if (hit.collider.GetComponentInParent<CharacterController>() != null) continue;
+            if (hit.collider.GetComponentInParent<OasisCombatAI>() != null) continue;
             if (hit.collider.CompareTag("Player")) continue;
 
             string n = hit.collider.gameObject.name;
@@ -68,7 +70,9 @@ public class OasisSpawnSystem : MonoBehaviour
                 n.IndexOf("Safety_Floor", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("Bunker", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("Pillar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                n.IndexOf("Perimeter", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                n.IndexOf("Perimeter", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("AI_", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Bot_", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 continue;
             }
@@ -231,7 +235,7 @@ public class OasisSpawnSystem : MonoBehaviour
     {
         SpawnSector targetSector = GetTeamSector(teamId);
         Vector3[] sectorSpawns = GetSectorSpawnOffsets(targetSector);
-        int idx = Mathf.Clamp(Mathf.Abs(squadSlot), 0, sectorSpawns.Length - 1);
+        int idx = Mathf.Abs(squadSlot) % sectorSpawns.Length;
         Vector3 chosen = sectorSpawns[idx];
         float fallbackY = GetPlayableCenter().y;
         float gy = SampleGroundY(chosen.x, chosen.z, fallbackY);
@@ -243,7 +247,7 @@ public class OasisSpawnSystem : MonoBehaviour
     /// </summary>
     public Vector3 GetRandomSpawnPosition(int teamId, bool isTeammateOfPlayer = false)
     {
-        return GetTeamSpawnPosition(teamId, isTeammateOfPlayer ? 1 : 0);
+        return GetTeamSpawnPosition(teamId, isTeammateOfPlayer ? Random.Range(1, 4) : Random.Range(0, 4));
     }
 
     /// <summary>
@@ -251,7 +255,7 @@ public class OasisSpawnSystem : MonoBehaviour
     /// </summary>
     public Vector3 GetRandomSpawnPosition(int teamId)
     {
-        return GetTeamSpawnPosition(teamId, 0);
+        return GetTeamSpawnPosition(teamId, Random.Range(0, 4));
     }
 
     /// <summary>
@@ -265,7 +269,12 @@ public class OasisSpawnSystem : MonoBehaviour
 
         if (squadSlot < 0)
         {
-            if (combatant.GetComponent<StarterAssets.FirstPersonController>() != null)
+            var ai = combatant.GetComponent<OasisCombatAI>();
+            if (ai != null)
+            {
+                squadSlot = ai.squadSlot >= 0 ? ai.squadSlot : Random.Range(0, 4);
+            }
+            else if (combatant.GetComponent<StarterAssets.FirstPersonController>() != null)
             {
                 squadSlot = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.myPlayerId : 0;
             }
@@ -276,10 +285,6 @@ public class OasisSpawnSystem : MonoBehaviour
                 {
                     squadSlot = opId;
                 }
-            }
-            else if (combatant.GetComponent<OasisCombatAI>() != null)
-            {
-                squadSlot = Random.Range(0, 4);
             }
             else
             {

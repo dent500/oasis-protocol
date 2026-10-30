@@ -5,14 +5,16 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Autonomous Humanoid AI Combatant for Oasis Team Battles (2v2, 3v3, 4v4).
-/// Features random operative chassis selection, grounded dune locomotion,
-/// intelligent target acquisition across opposing team members (AI & players),
-/// spine tracking, rifle fire, colored laser tracers, overhead health bars, and respawns.
+/// Features class-specific tactical archetypes, context-aware state machine maneuvers,
+/// out-of-combat shield regeneration, line-of-sight target acquisition, 3-ray whisker
+/// obstacle avoidance, coordinated squad revives with covering fire, and relative
+/// ally (blue) vs. enemy (red) tactical identification.
 /// </summary>
 public class OasisCombatAI : MonoBehaviour
 {
     [Header("Team & Identity")]
-    public int teamId = 1; // 0 = Team Alpha (Blue), 1 = Team Bravo (Red)
+    public int teamId = 1; // 0 = Team Alpha, 1 = Team Bravo, 2 = Team Charlie, 3 = Team Delta
+    public int squadSlot = 0;
     public string botName = "Operative";
     public string operativeClassId = "heavy_warrior";
     public Color teamColor;
@@ -22,10 +24,10 @@ public class OasisCombatAI : MonoBehaviour
     public float currentHealth = 100f;
     public float maxShield = 50f;
     public float currentShield = 50f;
-    public float attackRange = 36f;
+    public float attackRange = 38f;
     public float fireRate = 0.22f;
     public float damagePerShot = 12f;
-    public float moveSpeed = 4.2f;
+    public float moveSpeed = 4.3f;
 
     [Header("Match Performance")]
     public int kills = 0;
@@ -43,9 +45,13 @@ public class OasisCombatAI : MonoBehaviour
     private GameObject _overheadCanvasObj;
     private Slider _overheadHealthSlider;
     private Slider _overheadShieldSlider;
+    private Image _overheadHealthFillImg;
     private Text _overheadNameText;
     private GameObject _overheadBeaconObj;
     private Material _overheadBeaconMat;
+    private Material _torsoRingMat;
+    private Material _customBodyMat;
+    private int _cachedLocalPlayerTeam = -99;
 
     // Targeting & Navigation
     private Transform _currentTarget;
@@ -58,22 +64,28 @@ public class OasisCombatAI : MonoBehaviour
     private bool _isDead = false;
     public bool isDead => _isDead;
 
+    // Shield Regeneration
+    private float _shieldRegenDelayTimer = 0f;
+
     [Header("Downed & Revival System")]
     public bool isDowned = false;
     public float downedTimer = 10.0f;
     public float reviveProgress = 0.0f;
+    private float _downedGraceTimer = 0.0f;
     private int _lastAttackerId = 0;
     private int _lastAttackerTeamId = -1;
+    private float _lastHitDistance = 0f;
 
     private Transform _downedAllyTarget = null;
     private OasisCombatAI _downedAllyBot = null;
     private bool _targetIsDownedPlayer = false;
+    private Transform _lastReviveLoggedTarget = null;
 
     [Header("Weapon Magazine & Tactical Reload")]
     public int maxAmmo = 16;
     public int currentAmmo = 16;
     public bool isReloading = false;
-    public float reloadDuration = 2.0f;
+    public float reloadDuration = 1.9f;
     private float _reloadTimer = 0f;
 
     // Dynamic Locomotion, Anti-Stuck Tracking & Obstacle Vaulting
@@ -85,16 +97,18 @@ public class OasisCombatAI : MonoBehaviour
     private float _stuckTimer = 0f;
     private Vector3 _evasiveJitter = Vector3.zero;
     private float _maneuverTimer = 0f;
-    private int _currentManeuver = 0; // 0 = Aggressive Advance, 1 = Lateral Flank, 2 = Tactical Reposition
+    private int _currentManeuver = 0; // 0 = Aggressive Push, 1 = Lateral Flank, 2 = Tactical Fallback
     private float _intendedMoveSpeed = 0f;
 
     // Blaster Muzzle
     private Transform _muzzleTransform;
     public float stunTimer = 0f;
+
     public void ApplyEMPStun(float duration)
     {
         stunTimer = Mathf.Max(stunTimer, duration);
         currentShield = Mathf.Max(0f, currentShield - 50f);
+        _shieldRegenDelayTimer = 4.5f;
         if (_overheadShieldSlider != null) _overheadShieldSlider.value = currentShield;
         BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, Vector3.up, false);
     }
@@ -134,26 +148,77 @@ public class OasisCombatAI : MonoBehaviour
         ActiveBots.Remove(this);
     }
 
-    public void InitializeBot(int team, string name, string classId, Texture2D skinTex, Color skinAccent)
+    private void ConfigureClassArchetypeStats()
+    {
+        switch (operativeClassId)
+        {
+            case "heavy_warrior":
+                maxHealth = 100f;
+                maxShield = 70f;
+                moveSpeed = 4.15f;
+                damagePerShot = 13f;
+                attackRange = 36f;
+                break;
+
+            case "combat_medic":
+                maxHealth = 100f;
+                maxShield = 55f;
+                moveSpeed = 4.65f;
+                damagePerShot = 12f;
+                attackRange = 36f;
+                break;
+
+            case "cyborg_specops":
+            case "cyber_outlaw":
+                maxHealth = 100f;
+                maxShield = 50f;
+                moveSpeed = 4.80f;
+                damagePerShot = 12f;
+                attackRange = 38f;
+                break;
+
+            case "wasteland_nomad":
+            case "desert_commando":
+            case "unit07_android":
+            default:
+                maxHealth = 100f;
+                maxShield = 55f;
+                moveSpeed = 4.45f;
+                damagePerShot = 12f;
+                attackRange = 40f;
+                break;
+        }
+    }
+
+    public void InitializeBot(int team, string name, string classId, Texture2D skinTex, Color skinAccent, int assignedSlot = 0)
     {
         this.teamId = team;
+        this.squadSlot = assignedSlot;
         this.botName = name;
         this.operativeClassId = classId;
         this.teamColor = OasisShooterManager.GetTeamColor(team);
 
+        ConfigureClassArchetypeStats();
+
         currentHealth = maxHealth;
         currentShield = maxShield;
         _isDead = false;
+        _cachedLocalPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
 
         BuildHumanoidVisual(skinTex, skinAccent);
         BuildOverheadHealthBar();
         BuildOverheadBeacon();
 
-        OasisAITelemetryLogger.Instance?.RecordBotSpawn(this);
+        // Choose an initial class-appropriate tactical maneuver without logging at 00s before movement
+        _currentManeuver = (operativeClassId == "cyborg_specops" || operativeClassId == "cyber_outlaw") ? 1 : 0;
+        _maneuverTimer = Random.Range(3.5f, 5.2f);
+        _strafeDir = (assignedSlot % 2 == 0) ? 1f : -1f;
     }
 
     private void BuildHumanoidVisual(Texture2D skinTex, Color skinAccent)
     {
+        Color tacCol = GetTacticalColor();
+
         // 1. Instantiate 3D Robot Hero character model
         GameObject prefab = Resources.Load<GameObject>("RobotHero");
 #if UNITY_EDITOR
@@ -171,9 +236,13 @@ public class OasisCombatAI : MonoBehaviour
             visual.transform.localRotation = Quaternion.identity;
             _visualRoot = visual.transform;
 
-            // Strip colliders from visual child hierarchy so CharacterController handles collision
+            // Strip colliders from visual child hierarchy immediately (disable first so same-frame raycasts ignore them)
             var cols = visual.GetComponentsInChildren<Collider>(true);
-            foreach (var c in cols) Destroy(c);
+            foreach (var c in cols)
+            {
+                c.enabled = false;
+                Destroy(c);
+            }
 
             // 2. Setup Animator
             RuntimeAnimatorController animCtrl = Resources.Load<RuntimeAnimatorController>("RobotHero");
@@ -199,55 +268,60 @@ public class OasisCombatAI : MonoBehaviour
                 if (b.name == "Spine" && _spineBone == null) _spineBone = b;
             }
 
-            // 4. Apply Material with selected operative skin and team accent
+            // 4. Apply Material with selected operative skin and tactical ally/enemy emission
             Material baseMat = Resources.Load<Material>("RobotHero_URP");
 #if UNITY_EDITOR
             if (baseMat == null) baseMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/SciFiWarriorPBRHPPolyart/Materials/RobotHero_URP.mat");
 #endif
             if (baseMat == null) baseMat = new Material(OasisShaderHelper.GetLitShader());
-            Material customMat = new Material(baseMat);
-            customMat.name = $"{botName}_Mat";
+            _customBodyMat = new Material(baseMat);
+            _customBodyMat.name = $"{botName}_Mat";
 
             if (skinTex != null)
             {
-                if (customMat.HasProperty("_BaseMap")) customMat.SetTexture("_BaseMap", skinTex);
-                if (customMat.HasProperty("_MainTex")) customMat.SetTexture("_MainTex", skinTex);
-                customMat.color = Color.white;
+                if (_customBodyMat.HasProperty("_BaseMap")) _customBodyMat.SetTexture("_BaseMap", skinTex);
+                if (_customBodyMat.HasProperty("_MainTex")) _customBodyMat.SetTexture("_MainTex", skinTex);
+                _customBodyMat.color = Color.white;
             }
             else
             {
-                customMat.color = skinAccent;
+                _customBodyMat.color = tacCol;
             }
 
-            // Give team color glow on emissions
-            if (customMat.HasProperty("_EmissionColor"))
+            // Give tactical ally (blue) / enemy (red) glow on emissions
+            if (_customBodyMat.HasProperty("_EmissionColor"))
             {
-                customMat.EnableKeyword("_EMISSION");
-                customMat.SetColor("_EmissionColor", teamColor * 1.5f);
+                _customBodyMat.EnableKeyword("_EMISSION");
+                _customBodyMat.SetColor("_EmissionColor", tacCol * 1.4f);
             }
 
             var rends = visual.GetComponentsInChildren<Renderer>(true);
             foreach (var r in rends)
             {
-                r.sharedMaterial = customMat;
+                r.sharedMaterial = _customBodyMat;
             }
 
-            // 4b. Attach glowing Holographic Team Beacon Ring to torso for instantaneous squad identification
+            // 4b. Attach glowing Holographic Tactical Beacon Ring to torso for instantaneous friend-or-foe identification
             GameObject teamRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             teamRing.name = "Team_HoloBeacon";
             teamRing.transform.SetParent(visual.transform, false);
             teamRing.transform.localPosition = new Vector3(0f, 1.35f, 0f);
             teamRing.transform.localScale = new Vector3(0.65f, 0.035f, 0.65f);
             var ringCol = teamRing.GetComponent<Collider>();
-            if (ringCol != null) Destroy(ringCol);
-            Material ringMat = new Material(OasisShaderHelper.GetLitShader());
-            ringMat.color = teamColor;
-            if (ringMat.HasProperty("_EmissionColor"))
+            if (ringCol != null)
             {
-                ringMat.EnableKeyword("_EMISSION");
-                ringMat.SetColor("_EmissionColor", teamColor * 2.5f);
+                ringCol.enabled = false;
+                Destroy(ringCol);
             }
-            teamRing.GetComponent<Renderer>().sharedMaterial = ringMat;
+            _torsoRingMat = new Material(OasisShaderHelper.GetLitShader());
+            _torsoRingMat.color = tacCol;
+            if (_torsoRingMat.HasProperty("_BaseColor")) _torsoRingMat.SetColor("_BaseColor", tacCol);
+            if (_torsoRingMat.HasProperty("_EmissionColor"))
+            {
+                _torsoRingMat.EnableKeyword("_EMISSION");
+                _torsoRingMat.SetColor("_EmissionColor", tacCol * 2.5f);
+            }
+            teamRing.GetComponent<Renderer>().sharedMaterial = _torsoRingMat;
 
             // 5. Attach 3D Blaster Rifle to the right gun arm bone
             Transform attachParent = _gunArmBone != null ? _gunArmBone : visual.transform;
@@ -262,12 +336,12 @@ public class OasisCombatAI : MonoBehaviour
             visual.transform.localPosition = Vector3.zero;
             _visualRoot = visual.transform;
 
-            Material bodyMat = new Material(OasisShaderHelper.GetLitShader());
-            bodyMat.color = teamColor;
-            if (bodyMat.HasProperty("_EmissionColor"))
+            _customBodyMat = new Material(OasisShaderHelper.GetLitShader());
+            _customBodyMat.color = tacCol;
+            if (_customBodyMat.HasProperty("_EmissionColor"))
             {
-                bodyMat.EnableKeyword("_EMISSION");
-                bodyMat.SetColor("_EmissionColor", teamColor * 1.2f);
+                _customBodyMat.EnableKeyword("_EMISSION");
+                _customBodyMat.SetColor("_EmissionColor", tacCol * 1.2f);
             }
 
             // Torso
@@ -275,276 +349,236 @@ public class OasisCombatAI : MonoBehaviour
             torso.transform.SetParent(visual.transform, false);
             torso.transform.localPosition = new Vector3(0, 1.1f, 0);
             torso.transform.localScale = new Vector3(0.55f, 0.75f, 0.35f);
-            Destroy(torso.GetComponent<Collider>());
-            torso.GetComponent<Renderer>().sharedMaterial = bodyMat;
+            var tCol = torso.GetComponent<Collider>();
+            if (tCol != null) { tCol.enabled = false; Destroy(tCol); }
+            torso.GetComponent<Renderer>().sharedMaterial = _customBodyMat;
 
             // Head / Helmet
             GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             head.transform.SetParent(visual.transform, false);
             head.transform.localPosition = new Vector3(0, 1.7f, 0);
             head.transform.localScale = new Vector3(0.35f, 0.38f, 0.35f);
-            Destroy(head.GetComponent<Collider>());
-            head.GetComponent<Renderer>().sharedMaterial = bodyMat;
+            var hCol = head.GetComponent<Collider>();
+            if (hCol != null) { hCol.enabled = false; Destroy(hCol); }
+            head.GetComponent<Renderer>().sharedMaterial = _customBodyMat;
 
             // Legs
             GameObject leftLeg = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             leftLeg.transform.SetParent(visual.transform, false);
             leftLeg.transform.localPosition = new Vector3(-0.16f, 0.45f, 0);
             leftLeg.transform.localScale = new Vector3(0.16f, 0.45f, 0.16f);
-            Destroy(leftLeg.GetComponent<Collider>());
-            leftLeg.GetComponent<Renderer>().sharedMaterial = bodyMat;
+            var llCol = leftLeg.GetComponent<Collider>();
+            if (llCol != null) { llCol.enabled = false; Destroy(llCol); }
+            leftLeg.GetComponent<Renderer>().sharedMaterial = _customBodyMat;
 
             GameObject rightLeg = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             rightLeg.transform.SetParent(visual.transform, false);
             rightLeg.transform.localPosition = new Vector3(0.16f, 0.45f, 0);
             rightLeg.transform.localScale = new Vector3(0.16f, 0.45f, 0.16f);
-            Destroy(rightLeg.GetComponent<Collider>());
-            rightLeg.GetComponent<Renderer>().sharedMaterial = bodyMat;
+            var rlCol = rightLeg.GetComponent<Collider>();
+            if (rlCol != null) { rlCol.enabled = false; Destroy(rlCol); }
+            rightLeg.GetComponent<Renderer>().sharedMaterial = _customBodyMat;
 
             // Rifle
             GameObject rifle = BuildProceduralRifle(visual.transform);
-            rifle.transform.localPosition = new Vector3(0.28f, 1.05f, 0.4f);
+            rifle.transform.localPosition = new Vector3(0.32f, 1.15f, 0.35f);
+            rifle.transform.localRotation = Quaternion.identity;
             _muzzleTransform = rifle.transform.Find("Muzzle");
         }
     }
 
     private GameObject BuildProceduralRifle(Transform parent)
     {
-        GameObject gun = new GameObject("AI_BlasterRifle");
-        gun.transform.SetParent(parent, false);
-        gun.transform.localPosition = new Vector3(0.08f, -0.05f, 0.18f);
-        gun.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-        gun.transform.localScale = Vector3.one * 0.85f;
+        GameObject gunRoot = new GameObject("AI_BlasterRifle");
+        gunRoot.transform.SetParent(parent, false);
+        gunRoot.transform.localPosition = new Vector3(-0.02f, 0.08f, 0.12f);
+        gunRoot.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
 
-        Material gunMat = new Material(OasisShaderHelper.GetLitShader());
-        gunMat.color = new Color(0.12f, 0.15f, 0.20f);
+        Material darkMetal = new Material(OasisShaderHelper.GetLitShader());
+        darkMetal.color = new Color(0.15f, 0.17f, 0.2f);
 
-        Material barrelMat = new Material(OasisShaderHelper.GetLitShader());
-        barrelMat.color = teamColor;
-        if (barrelMat.HasProperty("_EmissionColor"))
+        Material glowMat = new Material(OasisShaderHelper.GetLitShader());
+        Color tacCol = GetTacticalColor();
+        glowMat.color = tacCol;
+        if (glowMat.HasProperty("_EmissionColor"))
         {
-            barrelMat.EnableKeyword("_EMISSION");
-            barrelMat.SetColor("_EmissionColor", teamColor * 1.5f);
+            glowMat.EnableKeyword("_EMISSION");
+            glowMat.SetColor("_EmissionColor", tacCol * 2f);
         }
 
-        // Receiver Body
+        // Receiver body
         GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        body.transform.SetParent(gun.transform, false);
-        body.transform.localPosition = new Vector3(0f, 0f, 0f);
-        body.transform.localScale = new Vector3(0.12f, 0.14f, 0.45f);
-        Destroy(body.GetComponent<Collider>());
-        body.GetComponent<Renderer>().sharedMaterial = gunMat;
+        body.transform.SetParent(gunRoot.transform, false);
+        body.transform.localPosition = new Vector3(0f, 0f, 0.15f);
+        body.transform.localScale = new Vector3(0.06f, 0.10f, 0.42f);
+        var bCol = body.GetComponent<Collider>();
+        if (bCol != null) { bCol.enabled = false; Destroy(bCol); }
+        body.GetComponent<Renderer>().sharedMaterial = darkMetal;
 
         // Barrel
         GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        barrel.transform.SetParent(gun.transform, false);
-        barrel.transform.localPosition = new Vector3(0f, 0.02f, 0.32f);
+        barrel.transform.SetParent(gunRoot.transform, false);
+        barrel.transform.localPosition = new Vector3(0f, 0.02f, 0.42f);
         barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-        barrel.transform.localScale = new Vector3(0.06f, 0.22f, 0.06f);
-        Destroy(barrel.GetComponent<Collider>());
-        barrel.GetComponent<Renderer>().sharedMaterial = barrelMat;
+        barrel.transform.localScale = new Vector3(0.025f, 0.18f, 0.025f);
+        var brCol = barrel.GetComponent<Collider>();
+        if (brCol != null) { brCol.enabled = false; Destroy(brCol); }
+        barrel.GetComponent<Renderer>().sharedMaterial = glowMat;
 
-        // Muzzle Tip
+        // Muzzle Point
         GameObject muzzle = new GameObject("Muzzle");
-        muzzle.transform.SetParent(gun.transform, false);
-        muzzle.transform.localPosition = new Vector3(0f, 0.02f, 0.54f);
+        muzzle.transform.SetParent(gunRoot.transform, false);
+        muzzle.transform.localPosition = new Vector3(0f, 0.02f, 0.65f);
 
-        return gun;
+        return gunRoot;
     }
 
-    private static Sprite s_ArrowSprite;
-    public static Sprite GetOverheadArrowSprite()
-    {
-        if (s_ArrowSprite != null) return s_ArrowSprite;
-
-        int w = 64;
-        int h = 64;
-        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        tex.wrapMode = TextureWrapMode.Clamp;
-        tex.filterMode = FilterMode.Bilinear;
-
-        Color clear = new Color(0, 0, 0, 0);
-        Color white = Color.white;
-        Color border = new Color(0.05f, 0.05f, 0.05f, 1f);
-
-        for (int y = 0; y < h; y++)
-        {
-            float ny = (float)y / (h - 1);
-            float t = Mathf.Clamp01((ny - 0.06f) / 0.88f);
-            float outerHalfWidth = Mathf.Lerp(0.04f, 0.44f, t);
-
-            for (int x = 0; x < w; x++)
-            {
-                float nx = (float)x / (w - 1);
-                float dx = Mathf.Abs(nx - 0.5f);
-
-                float notchY = 0.40f + (dx / 0.44f) * 0.48f;
-
-                if (ny >= 0.06f && ny <= 0.94f && dx <= outerHalfWidth && ny <= notchY)
-                {
-                    bool isBorder = (dx >= outerHalfWidth - 0.035f) || 
-                                   (ny <= 0.10f) || 
-                                   (ny >= notchY - 0.035f);
-
-                    tex.SetPixel(x, y, isBorder ? border : white);
-                }
-                else
-                {
-                    tex.SetPixel(x, y, clear);
-                }
-            }
-        }
-
-        tex.Apply();
-        s_ArrowSprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
-        return s_ArrowSprite;
-    }
-
-    private static Mesh s_ArrowMesh;
-    private static Mesh GetOverheadArrowMesh()
-    {
-        if (s_ArrowMesh != null) return s_ArrowMesh;
-
-        Mesh m = new Mesh();
-        m.name = "ProceduralOverheadArrow";
-
-        // Sleek downward pointing faceted diamond/arrow
-        // Tip at bottom (0, 0, 0)
-        // 4 corners of waist (height = 0.32m, radius = 0.18m)
-        // Top crown point (height = 0.45m)
-        Vector3 tip = Vector3.zero;
-        Vector3 c0 = new Vector3(-0.18f, 0.32f, -0.18f);
-        Vector3 c1 = new Vector3( 0.18f, 0.32f, -0.18f);
-        Vector3 c2 = new Vector3( 0.18f, 0.32f,  0.18f);
-        Vector3 c3 = new Vector3(-0.18f, 0.32f,  0.18f);
-        Vector3 crown = new Vector3(0f, 0.45f, 0f);
-
-        Vector3[] verts = new Vector3[]
-        {
-            // Bottom 4 faces (pointing down towards operative)
-            tip, c1, c0,
-            tip, c2, c1,
-            tip, c3, c2,
-            tip, c0, c3,
-            // Top 4 faces (faceted diamond roof)
-            crown, c0, c1,
-            crown, c1, c2,
-            crown, c2, c3,
-            crown, c3, c0
-        };
-
-        int[] tris = new int[24];
-        for (int i = 0; i < 24; i++) tris[i] = i;
-
-        m.vertices = verts;
-        m.triangles = tris;
-        m.RecalculateNormals();
-        m.RecalculateBounds();
-        s_ArrowMesh = m;
-        return s_ArrowMesh;
-    }
-
-    public bool IsFriendlyToLocalPlayer()
-    {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
-        {
-            return false;
-        }
-        int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-        return this.teamId == localTeam;
-    }
-
-    public Color GetTacticalColor()
-    {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
-        {
-            return teamColor;
-        }
-        return IsFriendlyToLocalPlayer() ? new Color(0.15f, 0.85f, 1.0f) : new Color(1.0f, 0.23f, 0.19f);
-    }
-
-    public string GetFullDisplayName()
-    {
-        string shortName = OasisShooterManager.GetTeamShortName(teamId);
-        if (botName.StartsWith("[")) return botName;
-        return $"[{shortName}] {botName}";
-    }
-
+    /// <summary>
+    /// Builds a spinning 3D holographic diamond beacon above the operative's head
+    /// so teammates (blue) and enemies (red) are unmistakably identifiable at any distance.
+    /// </summary>
     private void BuildOverheadBeacon()
     {
         if (_overheadBeaconObj != null) Destroy(_overheadBeaconObj);
 
-        _overheadBeaconObj = new GameObject("Overhead_Team_Beacon");
+        _overheadBeaconObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        _overheadBeaconObj.name = "Team_3D_DiamondBeacon";
         _overheadBeaconObj.transform.SetParent(transform, false);
         _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
+        _overheadBeaconObj.transform.localRotation = Quaternion.Euler(45f, 0f, 45f);
+        _overheadBeaconObj.transform.localScale = new Vector3(0.24f, 0.24f, 0.24f);
 
-        MeshFilter mf = _overheadBeaconObj.AddComponent<MeshFilter>();
-        mf.sharedMesh = GetOverheadArrowMesh();
+        var col = _overheadBeaconObj.GetComponent<Collider>();
+        if (col != null)
+        {
+            col.enabled = false;
+            Destroy(col);
+        }
 
-        MeshRenderer mr = _overheadBeaconObj.AddComponent<MeshRenderer>();
-        Shader unlitShader = Shader.Find("Universal Render Pipeline/Unlit") 
-                             ?? Shader.Find("Unlit/Color") 
-                             ?? OasisShaderHelper.GetLitShader();
-        _overheadBeaconMat = new Material(unlitShader);
-        Color beaconCol = GetTacticalColor();
-        _overheadBeaconMat.color = beaconCol;
-        if (_overheadBeaconMat.HasProperty("_BaseColor"))
+        Color beaconColor = GetTacticalColor();
+        _overheadBeaconMat = OasisShaderHelper.CreateUnlitMaterial(beaconColor);
+        var rend = _overheadBeaconObj.GetComponent<Renderer>();
+        if (rend != null)
         {
-            _overheadBeaconMat.SetColor("_BaseColor", beaconCol);
+            rend.sharedMaterial = _overheadBeaconMat;
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rend.receiveShadows = false;
         }
-        if (_overheadBeaconMat.HasProperty("_EmissionColor"))
+    }
+
+    /// <summary>
+    /// Returns true if this operative is on the local human player's team (Friendly Ally).
+    /// </summary>
+    public bool IsFriendlyToLocalPlayer()
+    {
+        int localTeam = (OasisShooterManager.Instance != null)
+            ? OasisShooterManager.Instance.localPlayerTeam
+            : PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        return this.teamId == localTeam;
+    }
+
+    /// <summary>
+    /// Returns high-visibility Cyan-Blue for friendly allies and Crimson-Red for opposing enemies
+    /// so the player can instantaneously distinguish friend from foe regardless of which of the 4 squads they belong to.
+    /// </summary>
+    public Color GetTacticalColor()
+    {
+        return IsFriendlyToLocalPlayer()
+            ? new Color(0.15f, 0.85f, 1.0f)  // Friendly Ally: Bright Tactical Blue
+            : new Color(1.0f, 0.22f, 0.18f); // Hostile Enemy: Bright Crimson Red
+    }
+
+    public string GetFullDisplayName()
+    {
+        string teamShort = OasisShooterManager.GetTeamShortName(this.teamId);
+        string roleTag = IsFriendlyToLocalPlayer() ? "ALLY" : "ENEMY";
+        return $"[{teamShort} • {roleTag}] {botName}";
+    }
+
+    public void RefreshTacticalColors()
+    {
+        Color tacCol = GetTacticalColor();
+        if (_overheadNameText != null && !isDowned && !isReloading)
         {
-            _overheadBeaconMat.EnableKeyword("_EMISSION");
-            _overheadBeaconMat.SetColor("_EmissionColor", beaconCol * 2.0f);
+            _overheadNameText.text = GetFullDisplayName();
+            _overheadNameText.color = tacCol;
         }
-        mr.sharedMaterial = _overheadBeaconMat;
+        if (_overheadHealthFillImg != null)
+        {
+            _overheadHealthFillImg.color = tacCol;
+        }
+        if (_overheadBeaconMat != null && !isDowned)
+        {
+            _overheadBeaconMat.color = tacCol;
+            if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", tacCol);
+        }
+        if (_torsoRingMat != null)
+        {
+            _torsoRingMat.color = tacCol;
+            if (_torsoRingMat.HasProperty("_BaseColor")) _torsoRingMat.SetColor("_BaseColor", tacCol);
+            if (_torsoRingMat.HasProperty("_EmissionColor")) _torsoRingMat.SetColor("_EmissionColor", tacCol * 2.5f);
+        }
+        if (_customBodyMat != null && _customBodyMat.HasProperty("_EmissionColor"))
+        {
+            _customBodyMat.SetColor("_EmissionColor", tacCol * 1.4f);
+        }
     }
 
     private void BuildOverheadHealthBar()
     {
         if (_overheadCanvasObj != null) Destroy(_overheadCanvasObj);
 
-        _overheadCanvasObj = new GameObject("Overhead_Health_Canvas", typeof(RectTransform), typeof(Canvas));
+        _overheadCanvasObj = new GameObject("AI_OverheadHealth");
         _overheadCanvasObj.transform.SetParent(transform, false);
         _overheadCanvasObj.transform.localPosition = new Vector3(0f, 3.42f, 0f);
+        _overheadCanvasObj.transform.localScale = Vector3.one * 0.01f;
 
-        Canvas canvas = _overheadCanvasObj.GetComponent<Canvas>();
+        Canvas canvas = _overheadCanvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
+        RectTransform rt = _overheadCanvasObj.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(180, 56);
 
-        RectTransform cRT = _overheadCanvasObj.GetComponent<RectTransform>();
-        cRT.sizeDelta = new Vector2(160, 60);
-        cRT.localScale = Vector3.one * 0.010f;
+        // 0. Dark Semi-Transparent Backdrop Plate for crisp contrast against desert sky & sand
+        GameObject plateObj = new GameObject("BackdropPlate");
+        plateObj.transform.SetParent(_overheadCanvasObj.transform, false);
+        RectTransform plateRT = plateObj.AddComponent<RectTransform>();
+        plateRT.anchorMin = new Vector2(0.5f, 0.5f);
+        plateRT.anchorMax = new Vector2(0.5f, 0.5f);
+        plateRT.sizeDelta = new Vector2(145, 42);
+        plateRT.anchoredPosition = new Vector2(0f, 1f);
+        Image plateImg = plateObj.AddComponent<Image>();
+        plateImg.color = new Color(0.02f, 0.04f, 0.08f, 0.72f);
 
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-        // 1. Overhead Call-Sign Name
-        GameObject nameObj = new GameObject("NameText", typeof(RectTransform), typeof(Text));
+        // 1. Callsign + Team Tag Label
+        GameObject nameObj = new GameObject("NameLabel");
         nameObj.transform.SetParent(_overheadCanvasObj.transform, false);
-        RectTransform nRT = nameObj.GetComponent<RectTransform>();
-        nRT.anchorMin = new Vector2(0.5f, 0.5f);
-        nRT.anchorMax = new Vector2(0.5f, 0.5f);
-        nRT.sizeDelta = new Vector2(160, 22);
-        nRT.anchoredPosition = new Vector2(0f, 10f);
+        RectTransform nameRT = nameObj.AddComponent<RectTransform>();
+        nameRT.anchorMin = new Vector2(0.5f, 0.5f);
+        nameRT.anchorMax = new Vector2(0.5f, 0.5f);
+        nameRT.sizeDelta = new Vector2(220, 26);
+        nameRT.anchoredPosition = new Vector2(0f, 9f);
 
-        _overheadNameText = nameObj.GetComponent<Text>();
-        _overheadNameText.font = font;
+        _overheadNameText = nameObj.AddComponent<Text>();
+        _overheadNameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         _overheadNameText.text = GetFullDisplayName();
-        _overheadNameText.fontSize = 14;
+        _overheadNameText.fontSize = 15;
         _overheadNameText.fontStyle = FontStyle.Bold;
         _overheadNameText.alignment = TextAnchor.MiddleCenter;
+        _overheadNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
         _overheadNameText.color = GetTacticalColor();
-        Outline nOutline = nameObj.AddComponent<Outline>();
-        nOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
-        nOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
-        // 2. Shield Bar Slider (Top thin bar so shield hits are immediately visible!)
+        Outline outline = nameObj.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.95f);
+        outline.effectDistance = new Vector2(1.2f, -1.2f);
+
+        // 2. Shield Bar Slider (Top thin cyan bar)
         GameObject sSliderObj = new GameObject("ShieldSlider");
         sSliderObj.transform.SetParent(_overheadCanvasObj.transform, false);
         RectTransform ssRT = sSliderObj.AddComponent<RectTransform>();
         ssRT.anchorMin = new Vector2(0.5f, 0.5f);
         ssRT.anchorMax = new Vector2(0.5f, 0.5f);
-        ssRT.sizeDelta = new Vector2(90, 6);
-        ssRT.anchoredPosition = new Vector2(0f, -4f);
+        ssRT.sizeDelta = new Vector2(90, 5);
+        ssRT.anchoredPosition = new Vector2(0f, -5f);
 
         _overheadShieldSlider = sSliderObj.AddComponent<Slider>();
         _overheadShieldSlider.minValue = 0f;
@@ -621,8 +655,8 @@ public class OasisCombatAI : MonoBehaviour
         fRT.anchorMax = Vector2.one;
         fRT.offsetMin = Vector2.zero;
         fRT.offsetMax = Vector2.zero;
-        Image fillImg = fill.AddComponent<Image>();
-        fillImg.color = GetTacticalColor();
+        _overheadHealthFillImg = fill.AddComponent<Image>();
+        _overheadHealthFillImg.color = GetTacticalColor();
 
         _overheadHealthSlider.fillRect = fRT;
     }
@@ -645,6 +679,14 @@ public class OasisCombatAI : MonoBehaviour
     private void Update()
     {
         if (_isDead) return;
+
+        // Keep ally (blue) vs enemy (red) colors dynamically synced if local player team changes
+        int currentLocalTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        if (currentLocalTeam != _cachedLocalPlayerTeam)
+        {
+            _cachedLocalPlayerTeam = currentLocalTeam;
+            RefreshTacticalColors();
+        }
 
         // If team battle is inactive (match finished, countdown expired, or paused), halt all combat processing
         if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isTeamBattleActive)
@@ -676,7 +718,17 @@ public class OasisCombatAI : MonoBehaviour
         // 1. If Downed: prone crawl animation along the ground, manage bleedout timer, update overhead canvas, and check expiry
         if (isDowned)
         {
-            downedTimer -= Time.deltaTime;
+            if (_downedGraceTimer > 0f)
+            {
+                _downedGraceTimer -= Time.deltaTime;
+            }
+
+            // Pause bleedout timer while a squadmate is actively channeling revive on us
+            if (reviveProgress <= 0.02f)
+            {
+                downedTimer -= Time.deltaTime;
+            }
+
             if (_overheadCanvasObj != null && Camera.main != null)
             {
                 _overheadCanvasObj.transform.rotation = Camera.main.transform.rotation;
@@ -738,7 +790,7 @@ public class OasisCombatAI : MonoBehaviour
                 }
             }
 
-            // Slowly crawl along the ground when not actively being revived
+            // Slowly crawl toward nearest standing squadmate when not actively being revived
             if (_characterController != null && _characterController.enabled && reviveProgress <= 0.01f)
             {
                 Vector3 crawlDir = -transform.forward;
@@ -761,7 +813,7 @@ public class OasisCombatAI : MonoBehaviour
                     transform.rotation = Quaternion.Slerp(transform.rotation, crawlRot, Time.deltaTime * 3.5f);
                 }
 
-                Vector3 crawlVel = crawlDir * (moveSpeed * 0.22f);
+                Vector3 crawlVel = crawlDir * (moveSpeed * 0.25f);
                 crawlVel.y = _characterController.isGrounded ? -2f : -9.81f;
                 _characterController.Move(crawlVel * Time.deltaTime);
             }
@@ -773,13 +825,27 @@ public class OasisCombatAI : MonoBehaviour
             return;
         }
 
-        // 2. Face overhead canvas toward Camera.main
+        // 2. Out-of-Combat Shield Regeneration (recharges after 4.2s without taking damage)
+        if (_shieldRegenDelayTimer > 0f)
+        {
+            _shieldRegenDelayTimer -= Time.deltaTime;
+        }
+        else if (currentShield < maxShield)
+        {
+            currentShield = Mathf.Min(maxShield, currentShield + 14f * Time.deltaTime);
+            if (_overheadShieldSlider != null)
+            {
+                _overheadShieldSlider.value = currentShield;
+            }
+        }
+
+        // 3. Face overhead canvas toward Camera.main
         if (_overheadCanvasObj != null && Camera.main != null)
         {
             _overheadCanvasObj.transform.rotation = Camera.main.transform.rotation;
         }
 
-        // 3. Handle Active Weapon Reload
+        // 4. Handle Active Weapon Reload
         if (isReloading)
         {
             _reloadTimer -= Time.deltaTime;
@@ -795,19 +861,20 @@ public class OasisCombatAI : MonoBehaviour
             }
         }
 
-        // 4. Scan for downed friendly allies (Player or friendly bots) to prioritize resurrecting them
+        // 5. Scan for downed friendly allies (Player or friendly bots) to prioritize resurrecting them
         _downedAllyTarget = null;
         _downedAllyBot = null;
         _targetIsDownedPlayer = false;
 
-        // Only seek revive if not in point-blank dueling danger (< 7.0m from a standing enemy)
-        bool inImmediateDanger = (_currentTarget != null && Vector3.Distance(transform.position, _currentTarget.position) < 7.0f);
+        // Medics brave closer threats (3.0m) than standard classes (4.2m) to rescue fallen teammates
+        float dangerThreshold = (operativeClassId == "combat_medic") ? 3.0f : 4.2f;
+        bool inImmediateDanger = (_currentTarget != null && Vector3.Distance(transform.position, _currentTarget.position) < dangerThreshold);
 
         if (!inImmediateDanger)
         {
             int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
 
-            // Check if player is on our team and downed (ignore player during simulation mode)
+            // Priority A: Check if human player is on our team and downed (ignore player during simulation mode)
             if (localPlayerTeam == this.teamId && OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isSimulationMode && OasisShooterManager.Instance.isPlayerDowned)
             {
                 Transform player = OasisPlayerHelper.FindPlayerTransform();
@@ -818,7 +885,7 @@ public class OasisCombatAI : MonoBehaviour
                 }
             }
 
-            // If player is not downed, check if any friendly AI bot is downed
+            // Priority B: If player is not downed, check if any friendly AI bot is downed
             if (_downedAllyTarget == null)
             {
                 float closestDownedDist = float.MaxValue;
@@ -840,24 +907,50 @@ public class OasisCombatAI : MonoBehaviour
             }
         }
 
-        // 5. Scan and evaluate combat targets
+        // Log REVIVE_START telemetry once when acquiring a new downed ally target
+        if (_downedAllyTarget != null)
+        {
+            if (_lastReviveLoggedTarget != _downedAllyTarget)
+            {
+                _lastReviveLoggedTarget = _downedAllyTarget;
+                float revDist = Vector3.Distance(transform.position, _downedAllyTarget.position);
+                if (_targetIsDownedPlayer)
+                {
+                    OasisAITelemetryLogger.Instance?.RecordReviveStartOnPlayer(this, revDist);
+                }
+                else if (_downedAllyBot != null)
+                {
+                    OasisAITelemetryLogger.Instance?.RecordReviveStart(this, _downedAllyBot, revDist);
+                }
+            }
+        }
+        else
+        {
+            _lastReviveLoggedTarget = null;
+        }
+
+        // 6. Scan and evaluate combat targets (immediately retarget if current target is downed or dead)
         _retargetTimer -= Time.deltaTime;
         if (_retargetTimer <= 0f || _currentTarget == null || !IsTargetAliveAndEnemy(_currentTarget))
         {
-            _retargetTimer = Random.Range(1.2f, 2.2f);
+            if (_currentTarget != null && !IsTargetAliveAndEnemy(_currentTarget))
+            {
+                _burstShotsRemaining = 0;
+            }
+            _retargetTimer = Random.Range(0.85f, 1.55f);
             Transform prev = _currentTarget;
             _currentTarget = FindBestEnemyTarget();
             if (_currentTarget != null && _currentTarget != prev)
             {
-                // Reaction delay before first firing at a newly acquired enemy
-                _nextFireTime = Time.time + Random.Range(0.35f, 0.75f);
+                // Crisp reaction time before firing at newly acquired enemy
+                _nextFireTime = Time.time + Random.Range(0.22f, 0.48f);
             }
         }
 
-        // 6. Locomotion & Combat / Revive Positioning
+        // 7. Locomotion & Combat / Revive Positioning
         HandleMovementAndPositioning();
 
-        // 7. Weapons & Firing
+        // 8. Weapons & Firing (bots can fire defensive bursts while advancing to a downed ally, only pausing when kneeling)
         HandleWeaponFiring();
     }
 
@@ -910,6 +1003,128 @@ public class OasisCombatAI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Context-aware tactical maneuver evaluator:
+    /// - Chooses Tactical Fallback (2) when shields are broken and health is low, or while reloading.
+    /// - Chooses Aggressive Push (0) when healthy with shields or finishing off a weakened enemy (<45 HP).
+    /// - Chooses Lateral Flank (1) for flanker classes or when coordinating pincer fire with squadmates.
+    /// </summary>
+    private int SelectTacticalManeuver(float distToTarget)
+    {
+        if (isReloading || (currentShield <= 5f && currentHealth < 60f))
+        {
+            return 2; // Tactical Fallback to recharge shields / finish reload
+        }
+
+        var targetAI = _currentTarget != null ? _currentTarget.GetComponent<OasisCombatAI>() : null;
+        bool targetWeak = (targetAI != null && (targetAI.currentHealth + targetAI.currentShield) < 48f);
+
+        if (targetWeak || distToTarget > 22f)
+        {
+            return 0; // Aggressive Push to close distance or finish weak target
+        }
+
+        if (operativeClassId == "cyborg_specops" || operativeClassId == "cyber_outlaw")
+        {
+            return (Random.value < 0.7f) ? 1 : 0; // High-speed flankers prefer Lateral Flank
+        }
+
+        if (operativeClassId == "heavy_warrior")
+        {
+            return (currentShield > 20f) ? 0 : 1; // Heavy Warrior pushes frontline while shields hold
+        }
+
+        if (operativeClassId == "combat_medic")
+        {
+            return (distToTarget < 15f) ? 2 : 1; // Medic stays at mid-range support distance
+        }
+
+        // Balanced classes: mix Lateral Flank and Aggressive Push while healthy
+        return (Random.value < 0.55f) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// 3-Ray Whisker Obstacle Avoidance + Squadmate Separation so bots glide smoothly around canyon boulders.
+    /// </summary>
+    private Vector3 ApplyWhiskerAvoidanceAndSeparation(Vector3 desiredDir)
+    {
+        if (desiredDir.sqrMagnitude < 0.01f) return desiredDir;
+        desiredDir.y = 0f;
+        desiredDir.Normalize();
+
+        Vector3 origin = transform.position + Vector3.up * 0.85f;
+        Vector3 leftWhisker = Quaternion.Euler(0f, -35f, 0f) * desiredDir;
+        Vector3 rightWhisker = Quaternion.Euler(0f, 35f, 0f) * desiredDir;
+
+        bool centerBlocked = IsRayBlockedByEnvironment(origin, desiredDir, 2.8f, out RaycastHit centerHit);
+        bool leftBlocked = IsRayBlockedByEnvironment(origin, leftWhisker, 2.3f, out _);
+        bool rightBlocked = IsRayBlockedByEnvironment(origin, rightWhisker, 2.3f, out _);
+
+        Vector3 steered = desiredDir;
+        if (centerBlocked)
+        {
+            if (!leftBlocked && rightBlocked)
+            {
+                steered = (desiredDir + Quaternion.Euler(0f, -65f, 0f) * desiredDir * 1.8f).normalized;
+            }
+            else if (!rightBlocked && leftBlocked)
+            {
+                steered = (desiredDir + Quaternion.Euler(0f, 65f, 0f) * desiredDir * 1.8f).normalized;
+            }
+            else
+            {
+                Vector3 slide = Vector3.Cross(Vector3.up, centerHit.normal) * _strafeDir;
+                steered = (desiredDir * 0.3f + slide * 1.9f).normalized;
+            }
+        }
+        else if (leftBlocked && !rightBlocked)
+        {
+            steered = (desiredDir + rightWhisker * 0.65f).normalized;
+        }
+        else if (rightBlocked && !leftBlocked)
+        {
+            steered = (desiredDir + leftWhisker * 0.65f).normalized;
+        }
+
+        // Gentle squadmate separation so friendly bots don't stack on the exact same firing position
+        Vector3 separation = Vector3.zero;
+        foreach (var b in ActiveBots)
+        {
+            if (b == null || b == this || b._isDead || b.isDowned) continue;
+            if (b.teamId == this.teamId)
+            {
+                Vector3 diff = transform.position - b.transform.position;
+                diff.y = 0f;
+                float d = diff.magnitude;
+                if (d > 0.05f && d < 2.4f)
+                {
+                    separation += diff.normalized * ((2.4f - d) * 0.55f);
+                }
+            }
+        }
+
+        Vector3 finalDir = steered + separation;
+        finalDir.y = 0f;
+        return finalDir.sqrMagnitude > 0.01f ? finalDir.normalized : desiredDir;
+    }
+
+    private bool IsRayBlockedByEnvironment(Vector3 origin, Vector3 dir, float maxDist, out RaycastHit envHit)
+    {
+        envHit = default;
+        if (Physics.Raycast(origin, dir, out RaycastHit hit, maxDist, Physics.AllLayers, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider != null && !hit.collider.isTrigger &&
+                hit.collider.GetComponentInParent<OasisCombatAI>() == null &&
+                hit.collider.GetComponentInParent<CharacterController>() == null &&
+                !hit.collider.CompareTag("Player"))
+            {
+                envHit = hit;
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void HandleMovementAndPositioning()
     {
         if (_characterController == null) return;
@@ -926,7 +1141,7 @@ public class OasisCombatAI : MonoBehaviour
         {
             _verticalVelocity = 0f;
             if (_characterController != null) _characterController.enabled = false;
-            transform.position = OasisSpawnSystem.Instance.GetRandomSpawnPosition(this.teamId);
+            transform.position = OasisSpawnSystem.Instance.GetTeamSpawnPosition(this.teamId, this.squadSlot);
             if (_characterController != null) _characterController.enabled = true;
             return;
         }
@@ -978,55 +1193,47 @@ public class OasisCombatAI : MonoBehaviour
         if (enableObstacleJump && _characterController.isGrounded && _jumpCooldownTimer <= 0f && _intendedMoveSpeed > 1.2f && !isDowned)
         {
             Vector3 kneeLevel = transform.position + Vector3.up * 0.38f;
-            if (Physics.Raycast(kneeLevel, transform.forward, out RaycastHit hitObstacle, 1.4f))
+            if (IsRayBlockedByEnvironment(kneeLevel, transform.forward, 1.4f, out _))
             {
-                if (!hitObstacle.collider.isTrigger && hitObstacle.collider.GetComponent<CharacterController>() == null)
+                // Check if head/chest level is clear (ensuring it's a vaultable rock/step, not a high cliff)
+                Vector3 headLevel = transform.position + Vector3.up * 1.5f;
+                if (!IsRayBlockedByEnvironment(headLevel, transform.forward, 1.6f, out _))
                 {
-                    // Check if head/chest level is clear (ensuring it's a vaultable rock/step, not a high cliff)
-                    Vector3 headLevel = transform.position + Vector3.up * 1.5f;
-                    if (!Physics.Raycast(headLevel, transform.forward, 1.6f))
-                    {
-                        _verticalVelocity = obstacleJumpForce;
-                        _jumpCooldownTimer = 1.6f;
-                        _evasiveJitter = transform.forward * 3.5f;
-                        if (_animator != null) _animator.Play("Run_guard_AR");
-                    }
+                    _verticalVelocity = obstacleJumpForce;
+                    _jumpCooldownTimer = 1.6f;
+                    _evasiveJitter = transform.forward * 3.5f;
+                    if (_animator != null) _animator.Play("Run_guard_AR");
                 }
             }
         }
 
-        // Anti-Stuck Detection: ONLY trigger if bot was actively trying to move for >1.2s but made no progress
-        if (_intendedMoveSpeed > 0.6f && !isDowned && _downedAllyTarget == null)
+        // Anti-Stuck Detection: ONLY trigger if bot was actively trying to move for >1.4s but made no progress
+        bool isKneelingRevive = (_downedAllyTarget != null && Vector3.Distance(transform.position, _downedAllyTarget.position) <= 2.4f);
+        if (_intendedMoveSpeed > 0.8f && !isDowned && !isKneelingRevive)
         {
             _stuckTimer += Time.deltaTime;
-            if (_stuckTimer >= 1.2f)
+            if (_stuckTimer >= 1.4f)
             {
-                if ((transform.position - _lastSampledPos).sqrMagnitude < 0.25f)
+                if ((transform.position - _lastSampledPos).sqrMagnitude < 0.22f)
                 {
-                    // Check if an obstacle is directly blocking movement
-                    bool lowBlocked = Physics.Raycast(transform.position + Vector3.up * 0.38f, transform.forward, out RaycastHit hitObj, 1.5f);
-                    bool highClear = !Physics.Raycast(transform.position + Vector3.up * 1.5f, transform.forward, 1.6f);
+                    bool lowBlocked = IsRayBlockedByEnvironment(transform.position + Vector3.up * 0.38f, transform.forward, 1.5f, out _);
 
                     if (enableObstacleJump && (_characterController.isGrounded || _verticalVelocity <= 0f) && (lowBlocked || Random.value < 0.7f))
                     {
-                        // OPTION 1: Obstacle Jump! Vault upward and boost forward over the obstacle
                         _verticalVelocity = obstacleJumpForce;
                         _jumpCooldownTimer = 1.8f;
-                        Vector3 jumpDir = transform.forward * 4.2f + (Random.value > 0.5f ? transform.right : -transform.right) * 1.6f;
+                        Vector3 jumpDir = transform.forward * 4.2f + (Random.value > 0.5f ? transform.right : -transform.right) * 2.0f;
                         _evasiveJitter = jumpDir;
-                        _currentManeuver = 2; // Switch to tactical reposition
-                        _maneuverTimer = 2.0f;
+                        _strafeDir = -_strafeDir;
                         if (_animator != null) _animator.Play("Run_guard_AR");
 
                         OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Obstacle Jump");
                     }
                     else
                     {
-                        // OPTION 2: Tactical detour: step sideways/backward away from obstruction
-                        Vector3 awayDir = (Random.value > 0.5f ? transform.right : -transform.right) - transform.forward * 0.6f;
-                        _evasiveJitter = awayDir.normalized * 3.2f;
-                        _currentManeuver = 2; // Switch to tactical reposition
-                        _maneuverTimer = 2.5f;
+                        _strafeDir = -_strafeDir;
+                        Vector3 awayDir = (transform.right * _strafeDir) - transform.forward * 0.65f;
+                        _evasiveJitter = awayDir.normalized * 3.6f;
 
                         OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Tactical Detour");
                     }
@@ -1049,49 +1256,67 @@ public class OasisCombatAI : MonoBehaviour
             toAlly.y = 0f;
             float dist = toAlly.magnitude;
 
-            if (toAlly.sqrMagnitude > 0.05f)
+            if (dist > 2.4f)
             {
-                Quaternion targetRot = Quaternion.LookRotation(toAlly.normalized);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 10f);
-            }
+                // Sprint toward fallen ally using 3-ray whisker obstacle avoidance, while still facing enemy threat if one is nearby
+                Vector3 moveDir = ApplyWhiskerAvoidanceAndSeparation(toAlly.normalized);
+                if (_currentTarget != null)
+                {
+                    Vector3 toEnemy = _currentTarget.position - transform.position;
+                    toEnemy.y = 0f;
+                    if (toEnemy.sqrMagnitude > 0.1f)
+                    {
+                        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toEnemy.normalized), Time.deltaTime * 9f);
+                    }
+                }
+                else if (moveDir.sqrMagnitude > 0.05f)
+                {
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(moveDir), Time.deltaTime * 10f);
+                }
 
-            if (dist > 2.2f)
-            {
-                // Sprint straight to the fallen ally
-                Vector3 moveDir = toAlly.normalized;
-                moveVelocity = moveDir * (moveSpeed * 1.45f);
+                float sprintMultiplier = (operativeClassId == "combat_medic") ? 1.55f : 1.42f;
+                moveVelocity = moveDir * (moveSpeed * sprintMultiplier);
                 _intendedMoveSpeed = moveVelocity.magnitude;
                 if (_animator != null) _animator.Play("Run_guard_AR");
             }
             else
             {
-                // In range! Kneel and channel resurrection
+                // In range! Face ally, kneel, and channel resurrection (Combat Medic revives in 2.0s, standard in 3.0s)
                 moveVelocity = Vector3.zero;
                 _intendedMoveSpeed = 0f;
+                if (toAlly.sqrMagnitude > 0.05f)
+                {
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toAlly.normalized), Time.deltaTime * 10f);
+                }
                 if (_animator != null)
                 {
                     _animator.speed = 1.0f;
                     _animator.Play("Idle_Ducking_AR");
                 }
 
+                float reviveDuration = (operativeClassId == "combat_medic") ? 2.0f : 3.0f;
+
                 if (_targetIsDownedPlayer && OasisShooterManager.Instance != null)
                 {
                     bool wasDowned = OasisShooterManager.Instance.isPlayerDowned;
-                    OasisShooterManager.Instance.ChannelPlayerRevive(Time.deltaTime / 3.5f, this.botName);
+                    OasisShooterManager.Instance.ChannelPlayerRevive(Time.deltaTime / reviveDuration, this.botName);
                     if (wasDowned && !OasisShooterManager.Instance.isPlayerDowned)
                     {
                         this.score += 75;
+                        OasisAITelemetryLogger.Instance?.RecordReviveSuccessOnPlayer(this);
+                        _lastReviveLoggedTarget = null;
                     }
                 }
                 else if (_downedAllyBot != null)
                 {
-                    _downedAllyBot.reviveProgress += Time.deltaTime / 3.5f;
+                    _downedAllyBot.reviveProgress += Time.deltaTime / reviveDuration;
                     if (_downedAllyBot.reviveProgress >= 1.0f)
                     {
                         _downedAllyBot.Revive();
                         this.score += 75;
                         OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>{botName} RESURRECTED {_downedAllyBot.botName}!</color>", 3.0f);
                         OasisAITelemetryLogger.Instance?.RecordReviveSuccess(this, _downedAllyBot);
+                        _lastReviveLoggedTarget = null;
                     }
                 }
             }
@@ -1115,17 +1340,31 @@ public class OasisCombatAI : MonoBehaviour
             if (toTarget.sqrMagnitude > 0.1f)
             {
                 Quaternion lookRot = Quaternion.LookRotation(toTarget.normalized);
-                transform.rotation = Quaternion.Slerp(transform.rotation, lookRot, Time.deltaTime * 9f);
+                transform.rotation = Quaternion.Slerp(transform.rotation, lookRot, Time.deltaTime * 9.5f);
             }
 
-            // Cycle dynamic combat maneuvers
+            // Immediate tactical override if shields break under low health or reload begins
+            bool needsEmergencyFallback = isReloading || (currentShield <= 2f && currentHealth < 55f);
+            if (needsEmergencyFallback && _currentManeuver != 2)
+            {
+                _currentManeuver = 2;
+                _maneuverTimer = Random.Range(3.2f, 4.5f);
+                _strafeDir = -_strafeDir;
+                OasisAITelemetryLogger.Instance?.RecordManeuverChange(this, _currentManeuver);
+            }
+
+            // Cycle context-aware combat maneuvers
             _maneuverTimer -= Time.deltaTime;
             if (_maneuverTimer <= 0f)
             {
-                _maneuverTimer = Random.Range(2.0f, 3.8f);
-                _currentManeuver = Random.Range(0, 3);
-                _strafeDir = (Random.value > 0.5f) ? 1f : -1f;
-                OasisAITelemetryLogger.Instance?.RecordManeuverChange(this, _currentManeuver);
+                _maneuverTimer = Random.Range(3.4f, 5.2f);
+                int nextManeuver = SelectTacticalManeuver(dist);
+                _strafeDir = (Random.value > 0.35f) ? -_strafeDir : _strafeDir;
+                if (nextManeuver != _currentManeuver)
+                {
+                    _currentManeuver = nextManeuver;
+                    OasisAITelemetryLogger.Instance?.RecordManeuverChange(this, _currentManeuver);
+                }
             }
 
             Vector3 strafeVector = Vector3.Cross(Vector3.up, toTarget.normalized) * _strafeDir;
@@ -1133,59 +1372,55 @@ public class OasisCombatAI : MonoBehaviour
 
             if (isReloading)
             {
-                // When reloading: actively backpedal and strafe defensively to avoid incoming shots
-                moveDir = (-toTarget.normalized * 0.75f + strafeVector * 0.65f).normalized;
+                // When reloading: actively backpedal and strafe wide to break enemy tracking
+                moveDir = (-toTarget.normalized * 0.70f + strafeVector * 0.75f).normalized;
+                moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
                 moveVelocity = moveDir * (moveSpeed * 1.30f);
             }
-            else if (dist < 6.0f)
+            else if (dist < 6.5f)
             {
                 // DANGER ZONE (Too close!): Immediate tactical backpedal to restore stand-off distance
-                moveDir = (-toTarget.normalized * 0.90f + strafeVector * 0.45f).normalized;
+                moveDir = (-toTarget.normalized * 0.85f + strafeVector * 0.55f).normalized;
+                moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
                 moveVelocity = moveDir * (moveSpeed * 1.25f);
             }
-            else if (dist < 11.0f)
+            else if (dist < 11.5f)
             {
                 // CLOSE QUARTERS: Create spacing while strafing
-                moveDir = (-toTarget.normalized * 0.45f + strafeVector * 0.85f).normalized;
+                moveDir = (-toTarget.normalized * 0.40f + strafeVector * 0.88f).normalized;
+                moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
                 moveVelocity = moveDir * (moveSpeed * 1.15f);
             }
-            else if (dist > 24.0f)
+            else if (dist > 25.0f)
             {
-                // LONG RANGE: Close into combat range with angled advance
-                moveDir = (toTarget.normalized * 0.80f + strafeVector * 0.45f).normalized;
+                // LONG RANGE: Close into combat range with angled flank advance
+                moveDir = (toTarget.normalized * 0.78f + strafeVector * 0.52f).normalized;
+                moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
                 moveVelocity = moveDir * (moveSpeed * 1.25f);
             }
             else
             {
-                // IDEAL WEAPON COMBAT ZONE (11m - 24m): Lateral strafe and tactical dueling
+                // IDEAL WEAPON COMBAT ZONE (11.5m - 25m): Context-driven dueling
                 switch (_currentManeuver)
                 {
-                    case 0: // Aggressive dueling pressure: slight advance with heavy strafe
-                        moveDir = (toTarget.normalized * 0.35f + strafeVector * 0.85f).normalized;
-                        moveVelocity = moveDir * (moveSpeed * 1.15f);
+                    case 0: // Aggressive Push: angled advance with strong lateral strafe
+                        moveDir = (toTarget.normalized * 0.38f + strafeVector * 0.85f).normalized;
+                        moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
+                        moveVelocity = moveDir * (moveSpeed * 1.16f);
                         break;
 
-                    case 1: // Flanking circle strafe: pure lateral circling
-                        moveDir = (strafeVector * 0.95f + toTarget.normalized * 0.10f).normalized;
-                        moveVelocity = moveDir * (moveSpeed * 1.10f);
+                    case 1: // Lateral Flank: wide high-speed circling around target
+                        moveDir = (strafeVector * 0.96f + toTarget.normalized * 0.14f).normalized;
+                        moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
+                        moveVelocity = moveDir * (moveSpeed * 1.14f);
                         break;
 
-                    case 2: // Defensive repositioning: fall back slightly while strafing
+                    case 2: // Tactical Fallback: retreat toward cover while strafing
                     default:
-                        moveDir = (-toTarget.normalized * 0.35f + strafeVector * 0.85f).normalized;
-                        moveVelocity = moveDir * (moveSpeed * 1.05f);
+                        moveDir = (-toTarget.normalized * 0.55f + strafeVector * 0.80f).normalized;
+                        moveDir = ApplyWhiskerAvoidanceAndSeparation(moveDir);
+                        moveVelocity = moveDir * (moveSpeed * 1.12f);
                         break;
-                }
-            }
-
-            // Obstacle Avoidance: raycast forward to smoothly slide around boulders and terrain
-            if (Physics.Raycast(transform.position + Vector3.up * 0.8f, moveDir, out RaycastHit obsHit, 2.5f, Physics.AllLayers, QueryTriggerInteraction.Ignore))
-            {
-                if (obsHit.collider != null && obsHit.collider.transform != _currentTarget)
-                {
-                    Vector3 detour = Vector3.Cross(Vector3.up, obsHit.normal);
-                    moveDir = (moveDir + detour * 2.0f).normalized;
-                    moveVelocity = moveDir * (moveSpeed * 1.1f);
                 }
             }
 
@@ -1198,10 +1433,10 @@ public class OasisCombatAI : MonoBehaviour
             toCenter.y = 0f;
             if (toCenter.sqrMagnitude > 4f)
             {
-                Vector3 moveDir = toCenter.normalized;
+                Vector3 moveDir = ApplyWhiskerAvoidanceAndSeparation(toCenter.normalized);
                 Quaternion lookRot = Quaternion.LookRotation(moveDir);
                 transform.rotation = Quaternion.Slerp(transform.rotation, lookRot, Time.deltaTime * 5f);
-                moveVelocity = moveDir * (moveSpeed * 0.95f);
+                moveVelocity = moveDir * (moveSpeed * 0.98f);
                 horizontalSpeed = moveVelocity.magnitude;
             }
         }
@@ -1244,6 +1479,21 @@ public class OasisCombatAI : MonoBehaviour
     {
         if (isDowned || isReloading || _currentTarget == null) return;
 
+        // Stop firing only when actively kneeling at a downed ally (< 2.4m); allow covering fire while sprinting to them!
+        if (_downedAllyTarget != null && Vector3.Distance(transform.position, _downedAllyTarget.position) <= 2.4f)
+        {
+            _burstShotsRemaining = 0;
+            return;
+        }
+
+        // Never fire at a target that has already been knocked down or eliminated
+        if (!IsTargetAliveAndEnemy(_currentTarget))
+        {
+            _burstShotsRemaining = 0;
+            _retargetTimer = 0f;
+            return;
+        }
+
         // Water Sanctuary No-Fire Zone: Neither shooter in water nor firing at target in water
         if (OasisWaterZone.IsInWater(transform.position) || OasisWaterZone.IsInWater(_currentTarget.position))
         {
@@ -1257,16 +1507,10 @@ public class OasisCombatAI : MonoBehaviour
         if (dist > attackRange + 6f) return;
 
         // Line of Sight Verification: do not shoot if obstructed by terrain, rocks, or tent walls
-        Vector3 muzzle = _muzzleTransform != null ? _muzzleTransform.position : transform.position + Vector3.up * 1.3f;
-        Vector3 targetAim = _currentTarget.position + Vector3.up * 1.1f;
-        Vector3 toAim = targetAim - muzzle;
-        if (Physics.Raycast(muzzle, toAim.normalized, out RaycastHit losHit, toAim.magnitude - 0.4f, Physics.AllLayers, QueryTriggerInteraction.Ignore))
+        if (!HasClearLineOfSight(_currentTarget))
         {
-            if (losHit.collider != null && !losHit.collider.transform.IsChildOf(_currentTarget) && losHit.collider.transform != _currentTarget)
-            {
-                // Obstructed by obstacle - reposition rather than wasting ammo into walls
-                return;
-            }
+            _burstShotsRemaining = 0;
+            return;
         }
 
         // Handle active burst fire sequence
@@ -1275,7 +1519,7 @@ public class OasisCombatAI : MonoBehaviour
             _burstTimer -= Time.deltaTime;
             if (_burstTimer <= 0f)
             {
-                _burstTimer = 0.24f;
+                _burstTimer = 0.21f;
                 _burstShotsRemaining--;
                 ExecuteSingleBlasterShot();
             }
@@ -1285,14 +1529,44 @@ public class OasisCombatAI : MonoBehaviour
         // Trigger next burst fire
         if (Time.time >= _nextFireTime)
         {
-            _nextFireTime = Time.time + Random.Range(1.3f, 2.6f);
-            _burstShotsRemaining = Random.Range(2, 4);
-            _burstTimer = 0.05f;
+            _nextFireTime = Time.time + Random.Range(1.15f, 2.25f);
+            _burstShotsRemaining = Random.Range(2, 5);
+            _burstTimer = 0.04f;
         }
+    }
+
+    private bool HasClearLineOfSight(Transform target)
+    {
+        if (target == null) return false;
+        Vector3 muzzle = _muzzleTransform != null ? _muzzleTransform.position : transform.position + Vector3.up * 1.35f;
+        Vector3 targetAim = target.position + Vector3.up * 1.15f;
+        Vector3 toAim = targetAim - muzzle;
+        float dist = toAim.magnitude;
+        if (dist <= 0.6f) return true;
+
+        RaycastHit[] hits = Physics.RaycastAll(muzzle, toAim.normalized, dist - 0.35f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            var c = hits[i].collider;
+            if (c == null || c.isTrigger) continue;
+            if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+            if (c.transform == target || c.transform.IsChildOf(target)) continue;
+            if (c.GetComponentInParent<OasisCombatAI>() != null) continue;
+            if (c.GetComponentInParent<CharacterController>() != null) continue;
+            return false; // Environment obstacle blocks line of sight
+        }
+        return true;
     }
 
     private void ExecuteSingleBlasterShot()
     {
+        if (_currentTarget != null && !IsTargetAliveAndEnemy(_currentTarget))
+        {
+            _burstShotsRemaining = 0;
+            _retargetTimer = 0f;
+            return;
+        }
+
         // Consume weapon ammo
         currentAmmo--;
         OasisAITelemetryLogger.Instance?.RecordShotFired(this);
@@ -1323,7 +1597,7 @@ public class OasisCombatAI : MonoBehaviour
             float targetDist = Vector3.Distance(muzzle, _currentTarget.position);
             Vector3 targetCenter = _currentTarget.position + Vector3.up * 1.15f;
             // Realistic, balanced distance-scaled spread: tight at close range, natural cone at distance
-            float spreadRadius = Mathf.Clamp(targetDist * 0.032f, 0.18f, 0.85f);
+            float spreadRadius = Mathf.Clamp(targetDist * 0.030f, 0.16f, 0.78f);
             aimPoint = targetCenter + (Random.insideUnitSphere * spreadRadius);
         }
         else
@@ -1339,7 +1613,7 @@ public class OasisCombatAI : MonoBehaviour
             _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.18f);
         }
 
-        // Raycast against scene (filter out triggers, shooter, and friendly teammates)
+        // Raycast against scene (filter out triggers, shooter, friendly teammates, and already-downed operatives)
         RaycastHit[] hits = Physics.RaycastAll(muzzle, fireDir, 60f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
@@ -1365,9 +1639,9 @@ public class OasisCombatAI : MonoBehaviour
 
             if (isPlayer)
             {
-                if (localPlayerTeam == this.teamId)
+                if (localPlayerTeam == this.teamId || (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned))
                 {
-                    // Friendly teammate! Laser passes through teammates without hitting them
+                    // Friendly teammate or already downed player: laser passes through cleanly
                     continue;
                 }
                 else
@@ -1385,19 +1659,25 @@ public class OasisCombatAI : MonoBehaviour
             OasisCombatAI hitAI = h.collider.GetComponentInParent<OasisCombatAI>();
             if (hitAI != null)
             {
-                if (hitAI.teamId == this.teamId)
+                if (hitAI.teamId == this.teamId || hitAI.isDowned || hitAI.isDead)
                 {
-                    // Friendly AI operative! Laser passes through without friendly fire
+                    // Friendly AI operative or already downed operative: laser passes through so downed operatives can be revived
                     continue;
                 }
                 else
                 {
-                    // Hostile AI enemy hit — award bot hit score
+                    // Hostile standing AI enemy hit — record hit first so chronological log shows HIT before KNOCKDOWN
                     laserEnd = h.point;
                     this.score += 15;
-                    hitAI.TakeDamage(damagePerShot, h.point, h.normal, this.GetHashCode(), this.teamId);
+                    float hitDist = Vector3.Distance(muzzle, h.point);
+                    OasisAITelemetryLogger.Instance?.RecordHitLanded(this, hitAI, damagePerShot, hitDist);
+                    hitAI.TakeDamage(damagePerShot, h.point, h.normal, this.GetHashCode(), this.teamId, hitDist);
                     BlasterVFX.SpawnImpact(h.point, h.normal, false);
-                    OasisAITelemetryLogger.Instance?.RecordHitLanded(this, hitAI, damagePerShot, Vector3.Distance(muzzle, h.point));
+                    if (hitAI.isDowned)
+                    {
+                        _burstShotsRemaining = 0;
+                        _retargetTimer = 0f;
+                    }
                     break;
                 }
             }
@@ -1408,11 +1688,11 @@ public class OasisCombatAI : MonoBehaviour
             break;
         }
 
-        // Colored laser beam
-        BlasterVFX.SpawnLaserBeam(muzzle, laserEnd, teamColor);
+        // Colored laser beam using tactical color (blue for ally, red for enemy)
+        BlasterVFX.SpawnLaserBeam(muzzle, laserEnd, GetTacticalColor());
     }
 
-    public void TakeDamage(float amount, Vector3 hitPoint, Vector3 hitNormal, int attackerId = 0, int attackerTeamId = -1)
+    public void TakeDamage(float amount, Vector3 hitPoint, Vector3 hitNormal, int attackerId = 0, int attackerTeamId = -1, float hitDistance = 0f)
     {
         if (_isDead) return;
         if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isTeamBattleActive) return;
@@ -1421,11 +1701,21 @@ public class OasisCombatAI : MonoBehaviour
         {
             _lastAttackerTeamId = attackerTeamId;
         }
+        if (hitDistance > 0.01f)
+        {
+            _lastHitDistance = hitDistance;
+        }
+        else if (hitPoint != Vector3.zero)
+        {
+            _lastHitDistance = Vector3.Distance(transform.position, hitPoint);
+        }
 
         if (isDowned)
         {
-            // Accelerated bleedout when damaged while downed (finishes off in 2-3 shots)
-            downedTimer -= 3.5f;
+            // Newly downed operatives have a 0.85s invulnerability grace period so stray pellets/bursts don't instant-execute them
+            if (_downedGraceTimer > 0f) return;
+
+            downedTimer -= 1.2f;
             BlasterVFX.SpawnImpact(hitPoint, hitNormal, true);
             if (_overheadHealthSlider != null)
             {
@@ -1438,10 +1728,13 @@ public class OasisCombatAI : MonoBehaviour
             return;
         }
 
-        // Interrupt revive channel when under fire
+        _shieldRegenDelayTimer = 4.2f;
+        _lastAttackerId = attackerId;
+
+        // Slight revive setback when taking fire while reviving (0.08f instead of 0.25f so medics can power through)
         if (_downedAllyBot != null && _downedAllyBot.reviveProgress > 0f)
         {
-            _downedAllyBot.reviveProgress = Mathf.Max(0f, _downedAllyBot.reviveProgress - 0.25f);
+            _downedAllyBot.reviveProgress = Mathf.Max(0f, _downedAllyBot.reviveProgress - 0.08f);
         }
 
         // Shield absorbs first
@@ -1488,7 +1781,9 @@ public class OasisCombatAI : MonoBehaviour
 
         isDowned = true;
         downedTimer = 8.0f;
+        _downedGraceTimer = 0.85f;
         reviveProgress = 0f;
+        _burstShotsRemaining = 0;
         _lastAttackerId = attackerId;
 
         // Transition visual root and play Die collapse animation (or prone posture)
@@ -1579,12 +1874,16 @@ public class OasisCombatAI : MonoBehaviour
             {
                 attackerBot.kills++;
                 attackerBot.score += 100;
+                if (_lastHitDistance <= 0.01f)
+                {
+                    _lastHitDistance = Vector3.Distance(attackerBot.transform.position, transform.position);
+                }
             }
         }
 
         // Immediately award knockdown score, update team kills, and refresh HUD
         OasisShooterManager.Instance?.OnCombatAIDowned(this, isPlayerDownedThis, _lastAttackerTeamId);
-        OasisAITelemetryLogger.Instance?.RecordKnockdown(this, attackerId, 0f);
+        OasisAITelemetryLogger.Instance?.RecordKnockdown(this, attackerId, _lastHitDistance);
 
         int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
         if (!isPlayerDownedThis && this.teamId == localPlayerTeam)
@@ -1603,8 +1902,9 @@ public class OasisCombatAI : MonoBehaviour
         reviveProgress = 0f;
         currentAmmo = maxAmmo;
         isReloading = false;
-        currentHealth = maxHealth * 0.6f;
-        currentShield = maxShield * 0.5f;
+        currentHealth = maxHealth * 0.65f;
+        currentShield = maxShield * 0.65f;
+        _shieldRegenDelayTimer = 1.5f;
 
         if (_visualRoot != null)
         {
@@ -1636,7 +1936,12 @@ public class OasisCombatAI : MonoBehaviour
         {
             _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
             _overheadBeaconObj.SetActive(true);
-            if (_overheadBeaconMat != null) { Color bc = GetTacticalColor(); _overheadBeaconMat.color = bc; if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc); }
+            if (_overheadBeaconMat != null)
+            {
+                Color bc = GetTacticalColor();
+                _overheadBeaconMat.color = bc;
+                if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc);
+            }
         }
 
         if (_animator != null)
@@ -1700,8 +2005,8 @@ public class OasisCombatAI : MonoBehaviour
 
         _verticalVelocity = 0f;
 
-        // When respawning from bleedout death, combatant respawns back inside starting base outpost
-        OasisSpawnSystem.Instance.RespawnCombatant(transform, this.teamId);
+        // When respawning from bleedout death, combatant respawns back inside starting base outpost in its assigned squad slot
+        OasisSpawnSystem.Instance.RespawnCombatant(transform, this.teamId, this.squadSlot);
 
         if (_visualRoot != null)
         {
@@ -1718,6 +2023,7 @@ public class OasisCombatAI : MonoBehaviour
         isDowned = false;
         downedTimer = 10f;
         reviveProgress = 0f;
+        _shieldRegenDelayTimer = 0f;
 
         if (_characterController != null) _characterController.enabled = true;
         if (_overheadCanvasObj != null)
@@ -1737,7 +2043,12 @@ public class OasisCombatAI : MonoBehaviour
         {
             _overheadBeaconObj.transform.localPosition = new Vector3(0f, 2.85f, 0f);
             _overheadBeaconObj.SetActive(true);
-            if (_overheadBeaconMat != null) { Color bc = GetTacticalColor(); _overheadBeaconMat.color = bc; if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc); }
+            if (_overheadBeaconMat != null)
+            {
+                Color bc = GetTacticalColor();
+                _overheadBeaconMat.color = bc;
+                if (_overheadBeaconMat.HasProperty("_BaseColor")) _overheadBeaconMat.SetColor("_BaseColor", bc);
+            }
         }
 
         if (_animator != null)
@@ -1768,6 +2079,10 @@ public class OasisCombatAI : MonoBehaviour
                 {
                     float d = Vector3.Distance(transform.position, player.position);
                     float score = d;
+                    if (HasClearLineOfSight(player))
+                    {
+                        score -= 14.0f; // Strong preference for targets with unobstructed line of sight
+                    }
                     if (score < lowestThreatScore)
                     {
                         lowestThreatScore = score;
@@ -1777,25 +2092,31 @@ public class OasisCombatAI : MonoBehaviour
             }
         }
 
-        // 2. Check other AI bots on opposing team (prioritize standing enemies with threat & revenge weighting)
+        // 2. Check other AI bots on opposing team (prioritize visible standing enemies with threat, focus-fire & revenge weighting)
         foreach (var bot in ActiveBots)
         {
             if (bot == null || bot == this || bot._isDead || bot.isDowned) continue;
             if (bot.teamId != this.teamId)
             {
                 float d = Vector3.Distance(transform.position, bot.transform.position);
-
-                // Threat weighting:
-                // - High retaliation priority for the enemy actively shooting us (_lastAttackerId)
-                // - Elimination priority for critical low-health opponents (<35 HP)
                 float threatScore = d;
+
+                // Line-of-Sight bonus: prioritize enemies we can immediately hit without rock obstruction
+                if (HasClearLineOfSight(bot.transform))
+                {
+                    threatScore -= 14.0f;
+                }
+
+                // Retaliation priority for the enemy actively shooting us
                 if (bot.GetHashCode() == _lastAttackerId)
                 {
-                    threatScore -= 8.0f; // Retaliate directly against attacker
+                    threatScore -= 9.0f;
                 }
-                if (bot.currentHealth < 35f)
+
+                // Focus-fire elimination priority for vulnerable opponents (< 45 HP)
+                if (bot.currentHealth < 45f)
                 {
-                    threatScore -= 4.0f; // Finish off vulnerable opponents
+                    threatScore -= 6.0f;
                 }
 
                 if (threatScore < lowestThreatScore)
@@ -1820,7 +2141,7 @@ public class OasisCombatAI : MonoBehaviour
             return !ai._isDead && !ai.isDowned && ai.teamId != this.teamId;
         }
 
-        // If target is the local player, verify player is on opposing team
+        // If target is the local player, verify player is on opposing team and not downed
         int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
         Transform localPlayer = OasisPlayerHelper.FindPlayerTransform();
         if (localPlayer != null && (target == localPlayer || target.IsChildOf(localPlayer)))

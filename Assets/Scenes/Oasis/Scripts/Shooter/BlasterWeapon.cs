@@ -565,6 +565,9 @@ public class BlasterWeapon : MonoBehaviour
 
         Color shotgunColor = new Color(1f, 0.45f, 0.1f);
         bool anyHostileHit = false;
+        OasisCombatAI primaryHitAI = null;
+        float totalPelletDamageOnAI = 0f;
+        float primaryHitDist = 0f;
 
         for (int p = 0; p < shotgunPelletCount; p++)
         {
@@ -572,11 +575,25 @@ public class BlasterWeapon : MonoBehaviour
             Vector3 pelletDir = (ray.direction + _camera.transform.right * spreadCircle.x + _camera.transform.up * spreadCircle.y).normalized;
             Ray pelletRay = new Ray(ray.origin, pelletDir);
 
-            Vector3 hitPt = PerformRaycastShot(pelletRay, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile, true);
-            if (hitHostile) anyHostileHit = true;
+            Vector3 hitPt = PerformRaycastShot(pelletRay, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile, true, out OasisCombatAI pelletHitAI, out float pelletHitDist);
+            if (hitHostile)
+            {
+                anyHostileHit = true;
+                if (pelletHitAI != null)
+                {
+                    primaryHitAI = pelletHitAI;
+                    totalPelletDamageOnAI += damage;
+                    primaryHitDist = pelletHitDist;
+                }
+            }
 
             Vector3 trueMuzzle = GetMuzzlePosition(hitPt);
             BlasterVFX.SpawnLaserBeam(trueMuzzle, hitPt, shotgunColor);
+        }
+
+        if (primaryHitAI != null && totalPelletDamageOnAI > 0f)
+        {
+            OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(primaryHitAI, totalPelletDamageOnAI, primaryHitDist);
         }
 
         Vector3 fallbackMuzzle = GetMuzzlePosition(ray.GetPoint(range));
@@ -780,7 +797,14 @@ public class BlasterWeapon : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────────
     private Vector3 PerformRaycastShot(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId, float dmg, out bool hitHostile, bool isPellet = false)
     {
+        return PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, dmg, out hitHostile, isPellet, out _, out _);
+    }
+
+    private Vector3 PerformRaycastShot(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId, float dmg, out bool hitHostile, bool isPellet, out OasisCombatAI outHitAI, out float outHitDist)
+    {
         hitHostile = false;
+        outHitAI = null;
+        outHitDist = 0f;
         if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.scanReconTimeRemaining > 0f)
         {
             dmg *= 1.25f;
@@ -798,7 +822,7 @@ public class BlasterWeapon : MonoBehaviour
             if (playerRoot != null && (h.collider.transform.IsChildOf(playerRoot) || h.collider.transform == playerRoot)) continue;
 
             OasisCombatAI aiCheck = h.collider.GetComponentInParent<OasisCombatAI>();
-            if (aiCheck != null && aiCheck.teamId == localTeam) continue;
+            if (aiCheck != null && (aiCheck.teamId == localTeam || aiCheck.isDowned || aiCheck.isDead)) continue;
 
             if (h.distance < closestDist)
             {
@@ -817,7 +841,7 @@ public class BlasterWeapon : MonoBehaviour
                 RaycastHit sh = sphereHits[i];
                 if (sh.collider == null || sh.collider.isTrigger) continue;
                 OasisCombatAI candidateAI = sh.collider.GetComponentInParent<OasisCombatAI>();
-                if (candidateAI != null && !candidateAI.isDead && candidateAI.teamId != localTeam && sh.distance < closestDist)
+                if (candidateAI != null && !candidateAI.isDead && !candidateAI.isDowned && candidateAI.teamId != localTeam && sh.distance < closestDist)
                 {
                     closestDist = sh.distance;
                     bestHit = sh;
@@ -830,11 +854,16 @@ public class BlasterWeapon : MonoBehaviour
         {
             targetPoint = bestHit.point;
             OasisCombatAI hitAI = bestHit.collider.GetComponentInParent<OasisCombatAI>();
-            if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead)
+            if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead && !hitAI.isDowned)
             {
                 hitHostile = true;
+                outHitAI = hitAI;
+                outHitDist = bestHit.distance;
+                if (!isPellet)
+                {
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, dmg, bestHit.distance);
+                }
                 hitAI.TakeDamage(dmg, bestHit.point, bestHit.normal, localId, localTeam);
-                OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, dmg, bestHit.distance);
                 OasisCombatMovement.Instance?.TriggerHitmarker();
                 OasisShooterManager.Instance?.OnTargetHit(dmg, hitAI.isDowned);
                 OasisShooterManager.Instance?.AddPlayerScore(isPellet ? 2 : 15);

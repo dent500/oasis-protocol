@@ -427,7 +427,10 @@ public class OasisShooterManager : MonoBehaviour
         // Handle Downed Player State in Team Combat
         if (isTeamBattleActive && isPlayerDowned)
         {
-            playerDownedTimer -= Time.deltaTime;
+            if (playerReviveProgress <= 0.02f)
+            {
+                playerDownedTimer -= Time.deltaTime;
+            }
             if (playerDownedTimer <= 0f)
             {
                 // Bleedout expired! Re-deploy at base
@@ -969,6 +972,8 @@ public class OasisShooterManager : MonoBehaviour
 
     public void DamagePlayer(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null)
     {
+        if (isTeamBattleActive && isPlayerDowned) return;
+
         // Safe spawn shelter invulnerability only applies to survival wave drone defense mode, NOT competitive team deathmatch!
         if (!isTeamBattleActive && amount > 0f && _playerTransform != null && IsPositionInSafeShelter(_playerTransform.position))
         {
@@ -1260,11 +1265,13 @@ public class OasisShooterManager : MonoBehaviour
             string tShort = GetTeamShortName(t);
             string[] callsigns = teamCallsigns[t % teamCallsigns.Length];
 
+            int slotOffset = (!isSimulationMode && t == localPlayerTeam) ? 1 : 0;
             for (int i = 0; i < botsNeeded; i++)
             {
                 int rIndex = Random.Range(0, classIds.Length);
                 string callsign = callsigns[i % callsigns.Length];
-                SpawnCombatAIBot(t, callsign, classIds[rIndex], texPaths[rIndex]);
+                int slot = (i + slotOffset) % 4;
+                SpawnCombatAIBot(t, callsign, classIds[rIndex], texPaths[rIndex], slot);
             }
         }
 
@@ -1983,9 +1990,9 @@ public class OasisShooterManager : MonoBehaviour
         GUI.color = Color.white;
     }
 
-    private void SpawnCombatAIBot(int team, string botName, string classId, string texPath)
+    private void SpawnCombatAIBot(int team, string botName, string classId, string texPath, int squadSlot = 0)
     {
-        Vector3 spawnPos = OasisSpawnSystem.Instance.GetRandomSpawnPosition(team);
+        Vector3 spawnPos = OasisSpawnSystem.Instance.GetTeamSpawnPosition(team, squadSlot);
 
         string tShort = GetTeamShortName(team);
         GameObject botObj = new GameObject($"Bot_{tShort}_{botName}");
@@ -2000,10 +2007,11 @@ public class OasisShooterManager : MonoBehaviour
         }
 
         Color accent = GetTeamColor(team);
-        ai.InitializeBot(team, botName, classId, skinTex, accent);
+        ai.InitializeBot(team, botName, classId, skinTex, accent, squadSlot);
 
-        // Snap and orient bot to canyon ground facing center
-        OasisSpawnSystem.Instance.RespawnCombatant(botObj.transform, team);
+        // Snap and orient bot to canyon ground in its formation slot facing center
+        OasisSpawnSystem.Instance.RespawnCombatant(botObj.transform, team, squadSlot);
+        OasisAITelemetryLogger.Instance?.RecordBotSpawn(ai);
 
         _spawnedAIBots.Add(ai);
     }

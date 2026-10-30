@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 
 /// <summary>
-/// AI Combat & Behavior Analytics Logger for 2v2 Oasis FPS Simulation:
+/// AI Combat & Behavior Analytics Logger for Oasis FPS Simulation:
 /// 1. Chronological Event Journal (Spawns, Shots, Hits, Knockdowns, Revives, Reloads, Maneuvers, Stuck triggers).
 /// 2. Per-Bot Comprehensive Metrics (Accuracy %, Damage Dealt/Taken, K/D/R, Engagement Range, Maneuver Distribution).
 /// 3. Positional Heatmap Telemetry (Periodic spatial coordinates to detect corner clustering or arena mobility).
@@ -53,7 +53,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
         public float totalEngagementDistance = 0f;
         public int engagementDistanceSamples = 0;
 
-        public float Accuracy => shotsFired > 0 ? ((float)shotsHit / shotsFired) * 100f : 0f;
+        public float Accuracy => shotsFired > 0 ? Mathf.Min(100f, ((float)shotsHit / shotsFired) * 100f) : 0f;
         public float AverageEngagementRange => engagementDistanceSamples > 0 ? totalEngagementDistance / engagementDistanceSamples : 0f;
     }
 
@@ -137,7 +137,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
         _spatialHeatmap.Clear();
         _nextHeatmapSampleTime = Time.time + HEATMAP_INTERVAL;
 
-        LogEvent("SESSION_START", "SYSTEM", "ALL", 0f, $"2v2 AI Simulation Session Started (ID: {sessionMatchId})");
+        LogEvent("SESSION_START", "SYSTEM", "ALL", 0f, $"AI Simulation Session Started (ID: {sessionMatchId})");
         Debug.Log($"<color=#26D9FF>[AI_TELEMETRY]</color> Session initialized: {sessionMatchId}");
     }
 
@@ -238,10 +238,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
             if (bot.isDowned)
             {
                 stats.timeInDownedState += Time.deltaTime;
-            }
-            else if (bot.isReloading)
-            {
-                // Reload defensive movement
             }
         }
 
@@ -369,7 +365,8 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
         string attName = attacker != null ? attacker.botName : "UNKNOWN";
         string vicName = victim != null ? victim.botName : "UNKNOWN";
-        LogEvent("HIT", attName, vicName, distance, $"Landed {damage:F0} DMG at {distance:F1}m (HP: {victim?.currentHealth:F0})");
+        float postHp = victim != null ? Mathf.Max(0f, victim.currentHealth - Mathf.Max(0f, damage - victim.currentShield)) : 0f;
+        LogEvent("HIT", attName, vicName, distance, $"Landed {damage:F0} DMG at {distance:F1}m (HP: {postHp:F0})");
     }
 
     public void RecordKnockdown(OasisCombatAI victim, int attackerId, float distance)
@@ -391,6 +388,10 @@ public class OasisAITelemetryLogger : MonoBehaviour
             attackerName = GetLocalPlayerName();
             var aStats = GetOrCreateBotMetrics(attackerName, GetLocalPlayerTeam(), GetLocalPlayerClass());
             aStats.knockdownsInflicted++;
+            if (distance <= 0.01f && OasisCombatMovement.Instance != null)
+            {
+                distance = Vector3.Distance(OasisCombatMovement.Instance.transform.position, victim.transform.position);
+            }
         }
         else
         {
@@ -401,6 +402,10 @@ public class OasisAITelemetryLogger : MonoBehaviour
                     attackerName = bot.botName;
                     var aStats = GetOrCreateBotMetrics(bot.botName, bot.teamId, bot.operativeClassId);
                     aStats.knockdownsInflicted++;
+                    if (distance <= 0.01f)
+                    {
+                        distance = Vector3.Distance(bot.transform.position, victim.transform.position);
+                    }
                     break;
                 }
             }
@@ -418,6 +423,15 @@ public class OasisAITelemetryLogger : MonoBehaviour
         LogEvent("REVIVE_START", reviver.botName, fallen.botName, distance, $"Initiated revive run to rescue {fallen.botName} from {distance:F1}m away");
     }
 
+    public void RecordReviveStartOnPlayer(OasisCombatAI reviver, float distance)
+    {
+        if (reviver == null) return;
+        var rStats = GetOrCreateBotMetrics(reviver.botName, reviver.teamId, reviver.operativeClassId);
+        rStats.revivesInitiated++;
+        string pName = GetLocalPlayerName();
+        LogEvent("REVIVE_START", reviver.botName, pName, distance, $"Initiated revive run to rescue {pName} from {distance:F1}m away");
+    }
+
     public void RecordReviveSuccess(OasisCombatAI reviver, OasisCombatAI revived)
     {
         if (reviver == null || revived == null) return;
@@ -425,6 +439,16 @@ public class OasisAITelemetryLogger : MonoBehaviour
         rStats.revivesCompleted++;
         LogEvent("REVIVE_SUCCESS", reviver.botName, revived.botName, 0f, $"Successfully resurrected {revived.botName}! Both re-entering active combat.");
         Debug.Log($"<color=#26D9FF>[AI_TELEMETRY]</color> {reviver.botName} resurrected {revived.botName}!");
+    }
+
+    public void RecordReviveSuccessOnPlayer(OasisCombatAI reviver)
+    {
+        if (reviver == null) return;
+        var rStats = GetOrCreateBotMetrics(reviver.botName, reviver.teamId, reviver.operativeClassId);
+        rStats.revivesCompleted++;
+        string pName = GetLocalPlayerName();
+        LogEvent("REVIVE_SUCCESS", reviver.botName, pName, 0f, $"Successfully resurrected {pName}! Both re-entering active combat.");
+        Debug.Log($"<color=#26D9FF>[AI_TELEMETRY]</color> {reviver.botName} resurrected {pName}!");
     }
 
     public void RecordBleedoutDeath(OasisCombatAI victim)
@@ -486,7 +510,8 @@ public class OasisAITelemetryLogger : MonoBehaviour
         }
 
         string vicName = victim != null ? victim.botName : "UNKNOWN";
-        LogEvent("HIT", pName, vicName, distance, $"Landed {damage:F0} DMG at {distance:F1}m (HP: {victim?.currentHealth:F0})");
+        float postHp = victim != null ? Mathf.Max(0f, victim.currentHealth - Mathf.Max(0f, damage - victim.currentShield)) : 0f;
+        LogEvent("HIT", pName, vicName, distance, $"Landed {damage:F0} DMG at {distance:F1}m (HP: {postHp:F0})");
     }
 
     public void RecordPlayerDamageTaken(float damage, string attackerName)
@@ -520,6 +545,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
         if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
+        pStats.revivesInitiated++;
         pStats.revivesCompleted++;
         LogEvent("REVIVE_SUCCESS", pName, allyName, 0f, $"Successfully resurrected {allyName}! Both re-entering active combat.");
     }
@@ -624,7 +650,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
             totalRevives += b.revivesCompleted;
             totalStucks += b.stuckIncidents;
         }
-        float overallAcc = totalShots > 0 ? (totalHits / totalShots) * 100f : 0f;
+        float overallAcc = totalShots > 0 ? Mathf.Min(100f, (totalHits / totalShots) * 100f) : 0f;
         sb.AppendLine($"- **Combat Accuracy:** Operatives fired `{totalShots}` total blaster bolts with `{overallAcc:F1}%` overall accuracy.");
         sb.AppendLine($"- **Revival Effectiveness:** `{totalRevives}` fallen teammates were successfully saved before bleedout timeout.");
         sb.AppendLine($"- **Mobility & Navigation Health:** Total anti-stuck corrections triggered: `{totalStucks}` events.");
@@ -775,13 +801,13 @@ public class OasisAITelemetryLogger : MonoBehaviour
             if (bot == null) continue;
             var b = GetOrCreateBotMetrics(bot.botName, bot.teamId, bot.operativeClassId);
 
-            Color teamCol = OasisShooterManager.GetTeamColor(bot.teamId);
+            Color teamCol = bot.GetTacticalColor();
             string stateStr = bot.isDowned ? "<color=#FFAA00>[DOWNED]</color>" :
                               bot.isReloading ? "<color=#FFDD44>[RELOADING]</color>" : "<color=#44FF88>[ACTIVE]</color>";
 
             GUIStyle botRowStyle = new GUIStyle(GUI.skin.label) { fontSize = 11, richText = true };
             GUILayout.BeginHorizontal("box");
-            GUILayout.Label($"<color=#{ColorUtility.ToHtmlStringRGB(teamCol)}><b>{bot.botName}</b></color> {stateStr}", botRowStyle, GUILayout.Width(180));
+            GUILayout.Label($"<color=#{ColorUtility.ToHtmlStringRGB(teamCol)}><b>{bot.GetFullDisplayName()}</b></color> {stateStr}", botRowStyle, GUILayout.Width(180));
             GUILayout.Label($"HP:{bot.currentHealth:F0} SH:{bot.currentShield:F0}", botRowStyle, GUILayout.Width(90));
             GUILayout.Label($"KD:{b.knockdownsInflicted}/{b.fullDeaths}", botRowStyle, GUILayout.Width(50));
             GUILayout.Label($"REZ:{b.revivesCompleted}", botRowStyle, GUILayout.Width(45));
@@ -820,7 +846,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
         {
             ExportReports();
         }
-        if (GUILayout.Button("RESTART 2v2", GUILayout.Height(28)))
+        if (GUILayout.Button("RESTART SIM", GUILayout.Height(28)))
         {
             if (OasisShooterManager.Instance != null)
             {
