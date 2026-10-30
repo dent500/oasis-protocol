@@ -298,6 +298,8 @@ public class BlasterWeapon : MonoBehaviour
     private void Update()
     {
         bool inactiveCombat =
+            (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused) ||
+            (OasisMapSystem.Instance != null && OasisMapSystem.Instance.IsFullscreenOpen) ||
             (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isMatchFinished || OasisShooterManager.Instance.isSimulationMode)) ||
             (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive);
 

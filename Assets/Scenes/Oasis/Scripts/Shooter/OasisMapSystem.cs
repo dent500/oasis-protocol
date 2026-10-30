@@ -133,13 +133,10 @@ public class OasisMapSystem : MonoBehaviour
         escPressed = Input.GetKeyDown(KeyCode.Escape);
 #endif
 
+        if (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused) return;
         if (mPressed)
         {
             SetFullscreenMap(!_isFullscreenOpen);
-        }
-        else if (_isFullscreenOpen && escPressed)
-        {
-            SetFullscreenMap(false);
         }
     }
 

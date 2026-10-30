@@ -718,12 +718,12 @@ public class OasisCharacterCustomizer : MonoBehaviour
             }
             else if (isSpectatorMode)
             {
-                _confirmButtonText.text = $"HOST: LAUNCH GAME MODE (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  SPECTATOR AI SIMULATION";
+                _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  SPECTATOR AI SIMULATION";
             }
             else
             {
                 string teamLabel = OasisShooterManager.GetTeamFullName(selectedTeam);
-                _confirmButtonText.text = $"HOST: LAUNCH GAME MODE (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  {teamLabel}";
+                _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  {teamLabel}";
             }
         }
         if (_confirmButtonBg != null)
@@ -1561,7 +1561,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         {
             OasisCombatMovement.Instance.ApplyCharacterSkin(skinTex, teamAccent, chosen.id);
             OasisCombatMovement.Instance.ConfigureOperativeAbility(selectedOperativeIndex);
-            OasisCombatMovement.Instance.SetThirdPersonMode(true);
+            OasisCombatMovement.Instance.SetThirdPersonMode(false);
             var pWeapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
             if (pWeapon == null) pWeapon = FindAnyObjectByType<BlasterWeapon>();
             if (pWeapon != null) pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
@@ -1884,7 +1884,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         mchRT.offsetMax = Vector2.zero;
         Text mchText = mcHdrObj.AddComponent<Text>();
         mchText.font = font;
-        mchText.text = "MATCH CONFIGURATION // SQUAD SIDE, TEAMS, PLAYERS/TEAM & SPECTATOR";
+        mchText.text = "MATCH CONFIGURATION // 3:00 TIMED MATCH • SQUAD SIDE, TEAMS & PLAYERS/TEAM";
         mchText.fontSize = 11;
         mchText.fontStyle = FontStyle.Bold;
         mchText.color = new Color(0.35f, 0.85f, 1.0f);

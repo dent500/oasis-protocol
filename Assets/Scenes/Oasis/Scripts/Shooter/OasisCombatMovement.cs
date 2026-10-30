@@ -250,6 +250,8 @@ public class OasisCombatMovement : MonoBehaviour
         HandleUpscalerToggle();
 
         bool menuOrMatchEnded =
+            (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused) ||
+            (OasisMapSystem.Instance != null && OasisMapSystem.Instance.IsFullscreenOpen) ||
             (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isSimulationMode || OasisShooterManager.Instance.isMatchFinished)) ||
             (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive);
 
@@ -880,6 +882,11 @@ public class OasisCombatMovement : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused)
+        {
+            return;
+        }
+
         // Process mouse look rotation immediately BEFORE reading _cameraTarget so there is zero 1-frame camera lag
         if (_fpc != null)
         {
@@ -1659,9 +1666,10 @@ public class OasisCombatMovement : MonoBehaviour
 
     private void OnGUI()
     {
-        // Only draw aiming reticle during active gameplay (not while character customizer or post-match modal is open)
+        // Only draw aiming reticle during active gameplay (not while character customizer, pause overlay, or post-match modal is open)
         var customizer = OasisCharacterCustomizer.Instance;
         if (customizer != null && customizer.isSelectionActive) return;
+        if (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused) return;
 
         var mgr = OasisShooterManager.Instance;
         if (mgr != null && (mgr.isSimulationMode || mgr.isMatchFinished))
@@ -1870,56 +1878,75 @@ public class OasisCombatMovement : MonoBehaviour
         var mgr = OasisShooterManager.Instance;
         if (mgr == null || !mgr.isTeamBattleActive) return;
 
-        float sbW = 440f;
-        float sbH = 44f;
+        int nTeams = Mathf.Clamp(mgr.activeNumTeams, 2, 4);
+        float sbW = nTeams > 2 ? 560f : 480f;
+        float sbH = 48f;
         float sbX = centerX - (sbW * 0.5f);
-        float sbY = 16f;
+        float sbY = 14f;
 
         // Dark tactical backdrop
-        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.90f);
+        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.92f);
         GUI.DrawTexture(new Rect(sbX, sbY, sbW, sbH), _crosshairWhiteTex);
 
         // Sleek top & bottom accent borders
-        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.8f);
+        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.85f);
         GUI.DrawTexture(new Rect(sbX, sbY, sbW, 2), _crosshairWhiteTex);
         GUI.color = new Color(0.12f, 0.20f, 0.28f, 0.9f);
         GUI.DrawTexture(new Rect(sbX, sbY + sbH - 2, sbW, 2), _crosshairWhiteTex);
 
-        // Styles
         GUIStyle teamStyle = new GUIStyle(GUI.skin.label);
-        teamStyle.fontSize = 18;
+        teamStyle.fontSize = nTeams > 2 ? 15 : 18;
         teamStyle.fontStyle = FontStyle.Bold;
+        teamStyle.richText = true;
 
-        // ALPHA Score (Left)
-        teamStyle.alignment = TextAnchor.MiddleLeft;
-        teamStyle.normal.textColor = new Color(0.15f, 0.85f, 1.0f);
-        GUI.Label(new Rect(sbX + 18, sbY + 4, 130, 24), $"ALPHA  {mgr.alphaKills}", teamStyle);
+        if (nTeams <= 2)
+        {
+            // ALPHA Score (Left)
+            teamStyle.alignment = TextAnchor.MiddleLeft;
+            teamStyle.normal.textColor = new Color(0.15f, 0.85f, 1.0f);
+            GUI.Label(new Rect(sbX + 18, sbY + 4, 150, 24), $"ALPHA  {mgr.alphaKills}", teamStyle);
 
-        // BRAVO Score (Right)
-        teamStyle.alignment = TextAnchor.MiddleRight;
-        teamStyle.normal.textColor = new Color(1.0f, 0.35f, 0.25f);
-        GUI.Label(new Rect(sbX + sbW - 148, sbY + 4, 130, 24), $"{mgr.bravoKills}  BRAVO", teamStyle);
+            // BRAVO Score (Right)
+            teamStyle.alignment = TextAnchor.MiddleRight;
+            teamStyle.normal.textColor = new Color(1.0f, 0.35f, 0.25f);
+            GUI.Label(new Rect(sbX + sbW - 168, sbY + 4, 150, 24), $"{mgr.bravoKills}  BRAVO", teamStyle);
+        }
+        else
+        {
+            // Left side teams (ALPHA & CHARLIE)
+            teamStyle.alignment = TextAnchor.MiddleLeft;
+            GUI.Label(new Rect(sbX + 14, sbY + 4, 200, 24),
+                $"<color=#26D9FF>ALPHA {mgr.alphaKills}</color>   <color=#38EF7D>CHARLIE {mgr.charlieKills}</color>", teamStyle);
 
-        // Center Countdown Timer
+            // Right side teams (BRAVO & DELTA)
+            teamStyle.alignment = TextAnchor.MiddleRight;
+            string rightTeams = nTeams >= 4
+                ? $"<color=#FF5544>BRAVO {mgr.bravoKills}</color>   <color=#FFBD2E>DELTA {mgr.deltaKills}</color>"
+                : $"<color=#FF5544>{mgr.bravoKills} BRAVO</color>";
+            GUI.Label(new Rect(sbX + sbW - 214, sbY + 4, 200, 24), rightTeams, teamStyle);
+        }
+
+        // Center 3:00 Countdown Timer
         int minutes = Mathf.FloorToInt(mgr.matchTimeRemaining / 60f);
         int seconds = Mathf.FloorToInt(mgr.matchTimeRemaining % 60f);
         string timeStr = $"{minutes:00}:{seconds:00}";
 
         GUIStyle timerStyle = new GUIStyle(GUI.skin.label);
         timerStyle.alignment = TextAnchor.MiddleCenter;
-        timerStyle.fontSize = 19;
+        timerStyle.fontSize = 20;
         timerStyle.fontStyle = FontStyle.Bold;
-        timerStyle.normal.textColor = mgr.matchTimeRemaining <= 30f ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.95f, 0.95f, 0.95f);
-        GUI.Label(new Rect(sbX + (sbW * 0.5f) - 60, sbY + 3, 120, 24), timeStr, timerStyle);
+        timerStyle.normal.textColor = mgr.matchTimeRemaining <= 30f ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.25f, 0.95f, 1.0f);
+        GUI.Label(new Rect(sbX + (sbW * 0.5f) - 65, sbY + 3, 130, 24), timeStr, timerStyle);
 
-        // Subtitle: Goal
+        // Subtitle: 3:00 Timed Match & Score Limit + ESC Menu hint
         GUIStyle subStyle = new GUIStyle(GUI.skin.label);
         subStyle.alignment = TextAnchor.MiddleCenter;
         subStyle.fontSize = 10;
         subStyle.fontStyle = FontStyle.Bold;
         subStyle.richText = true;
-        subStyle.normal.textColor = new Color(0.65f, 0.75f, 0.85f);
-        GUI.Label(new Rect(sbX + 20, sbY + 25, sbW - 40, 16), $"FIRST TO {mgr.targetKills} ELIMINATIONS", subStyle);
+        subStyle.normal.textColor = new Color(0.68f, 0.80f, 0.92f);
+        GUI.Label(new Rect(sbX + 12, sbY + 27, sbW - 24, 16),
+            $"3:00 TIMED MATCH  •  FIRST TO {mgr.targetKills} ELIMINATIONS  •  [ESC: PAUSE / SETTINGS]", subStyle);
 
         if (OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.activeRelayJoinCode))
         {

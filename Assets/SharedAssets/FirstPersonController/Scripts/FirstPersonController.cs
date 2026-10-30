@@ -164,6 +164,10 @@ namespace StarterAssets
 
         private void Update()
         {
+            if (InGamePauseManager.Instance != null && InGamePauseManager.Instance.IsPaused)
+            {
+                return;
+            }
             if (thrusterCooldownRemaining > 0f) thrusterCooldownRemaining -= Time.deltaTime;
             GroundedCheck();
             JumpAndGravity();

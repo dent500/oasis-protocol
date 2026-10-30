@@ -1175,7 +1175,7 @@ public class OasisShooterManager : MonoBehaviour
         int localPlayerTeam = Mathf.Clamp(PlayerPrefs.GetInt("OasisPlayerTeam", 0), 0, activeNumTeams - 1);
 
         int teamCapacity = activePlayersPerTeam;
-        targetKills = Mathf.Max(8, teamCapacity * 5);
+        targetKills = Mathf.Max(20, teamCapacity * 10); // Scaled for 3:00 (180s) timed match duration
 
         // Calculate human count on each team based on actual selected team of local player & connected remote operatives
         int[] humansPerTeam = new int[4];
@@ -1540,7 +1540,14 @@ public class OasisShooterManager : MonoBehaviour
 
         if (escPressed)
         {
-            ReturnToMenu();
+            if (InGamePauseManager.Instance != null)
+            {
+                InGamePauseManager.Instance.TogglePause();
+            }
+            else
+            {
+                ReturnToMenu();
+            }
             return;
         }
 
@@ -1980,11 +1987,14 @@ public class OasisShooterManager : MonoBehaviour
             }
         }
 
-        // Return to Menu button
+        // Pause / Settings / Quit button
         GUI.color = new Color(1f, 0.4f, 0.35f);
-        if (GUI.Button(new Rect(btnStartX + 690, btnY, 150, btnH), "MENU [ESC]"))
+        if (GUI.Button(new Rect(btnStartX + 690, btnY, 150, btnH), "PAUSE / QUIT [ESC]"))
         {
-            ReturnToMenu();
+            if (InGamePauseManager.Instance != null)
+                InGamePauseManager.Instance.TogglePause();
+            else
+                ReturnToMenu();
         }
 
         GUI.color = Color.white;
