@@ -47,22 +47,22 @@ public class BlasterWeapon : MonoBehaviour
     private const float beamTickDamage = 11f;
 
     [Header("Weapon Positioning")]
-    public Vector3 hipPosition = new Vector3(0.28f, -0.24f, 0.55f);
-    public Vector3 aimPosition = new Vector3(0f, -0.16f, 0.45f);
-    public float swayAmount = 0.022f;
-    public float maxSway = 0.065f;
-    public float swaySmooth = 11f;
+    public Vector3 hipPosition = new Vector3(0.20f, -0.19f, 0.42f);
+    public Vector3 aimPosition = new Vector3(0f, -0.125f, 0.32f);
+    public float swayAmount = 0.016f;
+    public float maxSway = 0.045f;
+    public float swaySmooth = 14f;
 
     [Header("Recoil")]
-    public float recoilKickback = 0.08f;
-    public float recoilRotation = 4f;
-    public float recoilRecovery = 12f;
+    public float recoilKickback = 0.065f;
+    public float recoilRotation = 3.2f;
+    public float recoilRecovery = 14f;
 
     [Header("Aim Down Sights & Precision Scope")]
     public bool isScoped = false;
-    public float defaultFOV = 60f;
-    public float scopedFOV = 22f;
-    public float scopeZoomSpeed = 16f;
+    public float defaultFOV = 75f;
+    public float scopedFOV = 34f;
+    public float scopeZoomSpeed = 18f;
 
     private Camera _camera;
     private Transform _weaponRoot;
@@ -109,7 +109,8 @@ public class BlasterWeapon : MonoBehaviour
     private void Start()
     {
         _camera = GetComponentInParent<Camera>() ?? Camera.main;
-        if (_camera != null) defaultFOV = _camera.fieldOfView;
+        defaultFOV = 75f;
+        if (_camera != null) _camera.fieldOfView = defaultFOV;
 
         _fpc = GetComponentInParent<StarterAssets.FirstPersonController>();
         if (_fpc != null) _origRotationSpeed = _fpc.RotationSpeed;
@@ -416,30 +417,30 @@ public class BlasterWeapon : MonoBehaviour
                 switch (currentArchetype)
                 {
                     case WeaponArchetype.StandardRifle:
-                        targetFOV = 18f; // High-powered 6x marksman optic magnification!
+                        targetFOV = 34f; // Crisp 2.2x Tactical Marksman Optic
                         break;
                     case WeaponArchetype.DefenseCarbine:
-                        targetFOV = 36f;
+                        targetFOV = 46f;
                         break;
                     case WeaponArchetype.BombMortar:
-                        targetFOV = 42f;
+                        targetFOV = 52f;
                         break;
                     case WeaponArchetype.ScatterShotgun:
-                        targetFOV = 45f;
+                        targetFOV = 56f;
                         break;
                     case WeaponArchetype.DualPistols:
-                        targetFOV = 42f;
+                        targetFOV = 52f;
                         break;
                     case WeaponArchetype.ContinuousBeam:
                     default:
-                        targetFOV = 35f;
+                        targetFOV = 48f;
                         break;
                 }
             }
         }
         else if (is3rdAiming)
         {
-            targetFOV = currentArchetype == WeaponArchetype.StandardRifle ? 36f : 48f;
+            targetFOV = currentArchetype == WeaponArchetype.StandardRifle ? 44f : 56f;
         }
 
         if (_camera != null)
@@ -458,30 +459,36 @@ public class BlasterWeapon : MonoBehaviour
         if (_fpc != null)
         {
             bool isPrecisionAim = (!is3rdPerson && isScoped) || (is3rdPerson && is3rdAiming);
-            float aimSensitivity = currentArchetype == WeaponArchetype.StandardRifle ? 0.25f : 0.45f;
-            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * aimSensitivity) : _origRotationSpeed;
+            // Scale ADS sensitivity proportionally to FOV zoom so tracking feels natural and never sluggish
+            float currentFov = _camera != null ? _camera.fieldOfView : targetFOV;
+            float fovRatio = Mathf.Clamp(currentFov / Mathf.Max(45f, defaultFOV), 0.50f, 1.0f);
+            _fpc.RotationSpeed = isPrecisionAim ? (_origRotationSpeed * fovRatio) : _origRotationSpeed;
         }
 
         if (_scopeCanvas != null)
         {
-            _scopeCanvas.SetActive(!is3rdPerson && isScoped);
-            if (!is3rdPerson && _scopeRangeText != null && _camera != null)
+            bool showHudOptic = (!is3rdPerson && isScoped) || (is3rdPerson && is3rdAiming);
+            if (_scopeCanvas.activeSelf != showHudOptic)
+            {
+                _scopeCanvas.SetActive(showHudOptic);
+            }
+            if (showHudOptic && _scopeRangeText != null && _camera != null)
             {
                 Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-                if (Physics.Raycast(ray, out RaycastHit hit, 350f))
+                if (Physics.Raycast(ray, out RaycastHit hit, 350f, Physics.AllLayers, QueryTriggerInteraction.Ignore))
                 {
-                    _scopeRangeText.text = $"RANGE: {hit.distance:F1}M";
+                    _scopeRangeText.text = $"TARGET RANGE: {hit.distance:F1}M";
                 }
                 else
                 {
-                    _scopeRangeText.text = "RANGE: ---";
+                    _scopeRangeText.text = "TARGET RANGE: ---";
                 }
             }
-            if (_scopeWeaponLabel != null)
+            if (showHudOptic && _scopeWeaponLabel != null)
             {
                 _scopeWeaponLabel.text = currentArchetype == WeaponArchetype.StandardRifle
-                    ? "[ 6X LONG-RANGE PRECISION OPTIC // CALIBRATED ]"
-                    : $"[ TACTICAL HOLOSIGHT // {weaponDisplayName.ToUpper()} ]";
+                    ? $"[ 2.2X MARKSMAN OPTIC // {weaponDisplayName.ToUpper()} ]"
+                    : $"[ REFLEX HOLOSIGHT // {weaponDisplayName.ToUpper()} ]";
             }
         }
     }
@@ -493,10 +500,16 @@ public class BlasterWeapon : MonoBehaviour
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
         OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
 
-        // Apply multi-axis physical gun recoil impulse (axial kickback + muzzle climb + dynamic roll)
-        float adsMultiplier = isScoped ? 0.45f : 1.0f;
-        _currentRecoilPos += new Vector3(Random.Range(-0.008f, 0.008f), 0.022f * adsMultiplier, -recoilKickback * adsMultiplier);
-        _currentRecoilRot += new Vector3(-recoilRotation * adsMultiplier, Random.Range(-1.6f, 1.6f) * adsMultiplier, Random.Range(-2.2f, 2.2f));
+        // Apply multi-axis physical gun recoil impulse (tighter & more controllable when aiming down sights)
+        float adsMultiplier = isScoped ? 0.35f : 1.0f;
+        _currentRecoilPos += new Vector3(Random.Range(-0.005f, 0.005f) * adsMultiplier, 0.014f * adsMultiplier, -recoilKickback * adsMultiplier);
+        _currentRecoilRot += new Vector3(-recoilRotation * adsMultiplier, Random.Range(-1.1f, 1.1f) * adsMultiplier, Random.Range(-1.4f, 1.4f) * adsMultiplier);
+
+        if (_fpc != null)
+        {
+            float camPitchKick = (currentArchetype == WeaponArchetype.ScatterShotgun || currentArchetype == WeaponArchetype.BombMortar) ? 0.75f : 0.32f;
+            _fpc.AddWeaponRecoilPitchYaw(camPitchKick * (isScoped ? 0.55f : 1.0f), Random.Range(-0.15f, 0.15f) * adsMultiplier);
+        }
 
         bool isHeavyShot = (currentArchetype == WeaponArchetype.ScatterShotgun ||
                             currentArchetype == WeaponArchetype.BombMortar ||
@@ -764,19 +777,8 @@ public class BlasterWeapon : MonoBehaviour
             BlasterVFX.SpawnImpact(bestHit.point, bestHit.normal, bestHit.collider.GetComponentInParent<OasisCombatAI>() != null);
         }
 
-        // Align weapon model bore straight at targetPoint so laser shoots dead straight along the gun
         bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
-        Vector3 muzzlePos;
-        if (!is3rd && _weaponRoot != null && _muzzleTransform != null)
-        {
-            Vector3 aimDir = (targetPoint - _weaponRoot.position).normalized;
-            _weaponRoot.rotation = Quaternion.LookRotation(aimDir, _camera.transform.up);
-            muzzlePos = _muzzleTransform.position;
-        }
-        else
-        {
-            muzzlePos = GetMuzzlePosition(targetPoint);
-        }
+        Vector3 muzzlePos = (!is3rd && _muzzleTransform != null) ? _muzzleTransform.position : GetMuzzlePosition(targetPoint);
 
         // Update LineRenderer directly from muzzle point along the physical gun line
         if (_continuousBeamLine != null)
@@ -1031,10 +1033,8 @@ public class BlasterWeapon : MonoBehaviour
         float bobY = Mathf.Abs(Mathf.Sin(_stridePhase)) * (-bobAmp * 1.35f) + _verticalVelocitySway;
         float bobRoll = Mathf.Sin(_stridePhase) * (horizSpeed > 0.35f ? 1.8f * swayScale : 0.2f);
 
-        // Determine base stance position & rotation (ADS vs Hip vs Tactical Sprint vs Multi-Stage Reload)
-        Vector3 desiredBasePos = isScoped
-            ? (currentArchetype == WeaponArchetype.StandardRifle ? new Vector3(0f, -0.42f, 0.40f) : aimPosition)
-            : hipPosition;
+        // Determine base stance position & rotation (ADS centers weapon reflex sight directly on screen center)
+        Vector3 desiredBasePos = isScoped ? aimPosition : hipPosition;
         Quaternion desiredBaseRot = Quaternion.Euler(0f, 0f, bobRoll - mouseX * 1.4f * swayScale);
 
         bool isSprinting = (horizSpeed > 7.8f && !isScoped && (Time.time - (_nextFireTime - fireRate)) > 0.25f && !_isBeamActive && !_isReloading);
@@ -1104,6 +1104,85 @@ public class BlasterWeapon : MonoBehaviour
     /// Loads and displays the authentic weapon mesh held by the character model.
     /// Completely avoids blocky primitive cubes/cylinders ("polygon gun").
     /// </summary>
+    /// <summary>
+    /// Transforms the SkinnedMeshRenderer AssaultRifle mesh from character bind-pose space
+    /// into centered, forward-aligned first-person weapon space (+Z barrel forward, +Y top rail up, +X right).
+    /// </summary>
+    private Mesh CreateAlignedFirstPersonRifleMesh(Mesh srcMesh, SkinnedMeshRenderer smr)
+    {
+        if (srcMesh == null || !srcMesh.isReadable) return srcMesh;
+
+        Mesh aligned = Instantiate(srcMesh);
+        aligned.name = "Aligned_FP_AssaultRifle";
+
+        Vector3[] verts = aligned.vertices;
+        Vector3[] norms = aligned.normals;
+        bool hasNorms = norms != null && norms.Length == verts.Length;
+
+        // Find ArmPosition_Right bindpose matrix (which transforms from character bind-pose to weapon grip space)
+        Matrix4x4 toGripSpace = Matrix4x4.identity;
+        bool foundBindpose = false;
+        if (smr != null && smr.bones != null && srcMesh.bindposes != null && smr.bones.Length == srcMesh.bindposes.Length)
+        {
+            for (int i = 0; i < smr.bones.Length; i++)
+            {
+                if (smr.bones[i] != null && smr.bones[i].name == "ArmPosition_Right")
+                {
+                    toGripSpace = srcMesh.bindposes[i];
+                    foundBindpose = true;
+                    break;
+                }
+            }
+        }
+
+        if (foundBindpose)
+        {
+            for (int i = 0; i < verts.Length; i++)
+            {
+                Vector3 p = toGripSpace.MultiplyPoint3x4(verts[i]);
+                // In ArmPosition_Right space: -Y is barrel forward (+Z), +X is top rail up (+Y), -Z is right (+X)
+                verts[i] = new Vector3(-p.z, p.x, -p.y) * 0.01f;
+                if (hasNorms)
+                {
+                    Vector3 n = toGripSpace.MultiplyVector(norms[i]);
+                    norms[i] = new Vector3(-n.z, n.x, -n.y).normalized;
+                }
+            }
+        }
+        else
+        {
+            // Fallback using known ArmPosition_Right bind rotation (-56.48 deg Z) and center
+            Vector3 c = srcMesh.bounds.center;
+            Quaternion invRot = Quaternion.Inverse(new Quaternion(0.0025357f, -0.0073522f, -0.4731384f, 0.8809539f));
+            for (int i = 0; i < verts.Length; i++)
+            {
+                Vector3 p = invRot * (verts[i] - c);
+                verts[i] = new Vector3(-p.z, p.x, -p.y) * 0.01f;
+                if (hasNorms)
+                {
+                    Vector3 n = invRot * norms[i];
+                    norms[i] = new Vector3(-n.z, n.x, -n.y).normalized;
+                }
+            }
+        }
+
+        aligned.vertices = verts;
+        if (hasNorms) aligned.normals = norms;
+        aligned.RecalculateBounds();
+
+        // Center the mesh cleanly so X=0 is the bore axis, Y=0 is the upper receiver, and Z=0.14m is forward of grip
+        Vector3 bCenter = aligned.bounds.center;
+        float topY = aligned.bounds.max.y;
+        Vector3 shift = new Vector3(-bCenter.x, -(topY - 0.045f), -bCenter.z + 0.14f);
+        for (int i = 0; i < verts.Length; i++)
+        {
+            verts[i] += shift;
+        }
+        aligned.vertices = verts;
+        aligned.RecalculateBounds();
+        return aligned;
+    }
+
     private void BuildProceduralGunModel()
     {
         if (_weaponRoot != null)
@@ -1121,9 +1200,10 @@ public class BlasterWeapon : MonoBehaviour
 
         Color energyColor = GetWeaponEnergyColor();
 
-        // Find authentic AssaultRifle mesh from character model / RobotHero
+        // Find authentic AssaultRifle mesh & SkinnedMeshRenderer from character model / RobotHero
         Mesh rifleMesh = null;
         Material rifleMat = null;
+        SkinnedMeshRenderer foundSmr = null;
 
         if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.robotHeroVisual != null)
         {
@@ -1132,6 +1212,7 @@ public class BlasterWeapon : MonoBehaviour
             {
                 if (smr.name == "AssaultRifle" || smr.name.Contains("Rifle"))
                 {
+                    foundSmr = smr;
                     rifleMesh = smr.sharedMesh;
                     rifleMat = smr.sharedMaterial;
                     break;
@@ -1149,6 +1230,7 @@ public class BlasterWeapon : MonoBehaviour
                 {
                     if (smr.name == "AssaultRifle" || smr.name.Contains("Rifle"))
                     {
+                        foundSmr = smr;
                         rifleMesh = smr.sharedMesh;
                         rifleMat = smr.sharedMaterial;
                         break;
@@ -1162,24 +1244,34 @@ public class BlasterWeapon : MonoBehaviour
             rifleMat = Resources.Load<Material>("RobotHero_URP");
         }
 
-        Vector3 muzzleLocalPos = new Vector3(0.02f, 0.04f, 0.58f);
+        float opticCenterY = 0.082f;
+        Vector3 muzzleLocalPos = new Vector3(0f, 0.01f, 0.56f);
 
         if (rifleMesh != null)
         {
+            Mesh alignedMesh = CreateAlignedFirstPersonRifleMesh(rifleMesh, foundSmr);
             GameObject authenticRifle = new GameObject("Authentic_AssaultRifle");
             authenticRifle.transform.SetParent(_weaponRoot, false);
-            // Position the authentic rifle cleanly in the lower-right first person view
-            authenticRifle.transform.localPosition = new Vector3(0.06f, -0.14f, 0.18f);
-            authenticRifle.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
-            authenticRifle.transform.localScale = Vector3.one * 0.01f;
+            authenticRifle.transform.localPosition = Vector3.zero;
+            authenticRifle.transform.localRotation = Quaternion.identity;
+            authenticRifle.transform.localScale = Vector3.one;
 
             MeshFilter mf = authenticRifle.AddComponent<MeshFilter>();
-            mf.sharedMesh = rifleMesh;
+            mf.sharedMesh = alignedMesh;
 
             MeshRenderer mr = authenticRifle.AddComponent<MeshRenderer>();
             mr.sharedMaterial = rifleMat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            opticCenterY = alignedMesh.bounds.max.y + 0.028f;
+            muzzleLocalPos = new Vector3(0f, alignedMesh.bounds.max.y - 0.035f, alignedMesh.bounds.max.z + 0.04f);
         }
+
+        // Mount a 3D Tactical Reflex Holosight on the top rail so ADS looks directly through the sight window
+        BuildTopReflexSight(_weaponRoot, opticCenterY, energyColor);
+
+        // Calibrate aimPosition so holding Right-Click aligns the 3D reflex sight dot directly with screen center (0, 0)
+        aimPosition = new Vector3(0f, -opticCenterY, 0.30f);
 
         // Muzzle Point
         GameObject muzzle = new GameObject("MuzzlePoint");
@@ -1198,8 +1290,63 @@ public class BlasterWeapon : MonoBehaviour
         _muzzleFlashLight.enabled = false;
     }
 
+    private void BuildTopReflexSight(Transform weaponParent, float centerY, Color energyColor)
+    {
+        GameObject sightRoot = new GameObject("ReflexHoloSight_3D");
+        sightRoot.transform.SetParent(weaponParent, false);
+        sightRoot.transform.localPosition = new Vector3(0f, centerY, 0.06f);
+        sightRoot.transform.localRotation = Quaternion.identity;
+
+        Material frameMat = new Material(OasisShaderHelper.GetLitShader());
+        frameMat.color = new Color(0.10f, 0.12f, 0.15f);
+
+        Material dotMat = OasisShaderHelper.CreateUnlitMaterial(energyColor);
+
+        // Base mount
+        GameObject basePlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        basePlate.transform.SetParent(sightRoot.transform, false);
+        basePlate.transform.localPosition = new Vector3(0f, -0.022f, 0f);
+        basePlate.transform.localScale = new Vector3(0.038f, 0.008f, 0.075f);
+        Destroy(basePlate.GetComponent<Collider>());
+        basePlate.GetComponent<Renderer>().sharedMaterial = frameMat;
+        basePlate.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // Left & Right Sight Hood Struts
+        for (int side = -1; side <= 1; side += 2)
+        {
+            GameObject strut = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            strut.transform.SetParent(sightRoot.transform, false);
+            strut.transform.localPosition = new Vector3(side * 0.020f, 0f, 0f);
+            strut.transform.localScale = new Vector3(0.004f, 0.038f, 0.048f);
+            Destroy(strut.GetComponent<Collider>());
+            strut.GetComponent<Renderer>().sharedMaterial = frameMat;
+            strut.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        // Top Hood Arch
+        GameObject topBar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        topBar.transform.SetParent(sightRoot.transform, false);
+        topBar.transform.localPosition = new Vector3(0f, 0.020f, 0f);
+        topBar.transform.localScale = new Vector3(0.044f, 0.004f, 0.048f);
+        Destroy(topBar.GetComponent<Collider>());
+        topBar.GetComponent<Renderer>().sharedMaterial = frameMat;
+        topBar.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // Glowing Holographic Reflex Dot inside the lens window
+        GameObject holoDot = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        holoDot.transform.SetParent(sightRoot.transform, false);
+        holoDot.transform.localPosition = new Vector3(0f, 0f, 0.01f);
+        holoDot.transform.localRotation = Quaternion.identity;
+        holoDot.transform.localScale = new Vector3(0.0055f, 0.0055f, 0.0055f);
+        Destroy(holoDot.GetComponent<Collider>());
+        holoDot.GetComponent<Renderer>().sharedMaterial = dotMat;
+        holoDot.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+    }
+
     private void BuildScopeOverlayUI()
     {
+        if (_scopeCanvas != null) Destroy(_scopeCanvas);
+
         _scopeCanvas = new GameObject("Oasis_PrecisionScope_Canvas");
         Canvas canvas = _scopeCanvas.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -1212,103 +1359,66 @@ public class BlasterWeapon : MonoBehaviour
 
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-        // Vignette
-        GameObject vignette = new GameObject("Scope_PeripheralVignette");
-        vignette.transform.SetParent(_scopeCanvas.transform, false);
-        RectTransform vRT = vignette.AddComponent<RectTransform>();
-        vRT.anchorMin = Vector2.zero;
-        vRT.anchorMax = Vector2.one;
-        vRT.offsetMin = Vector2.zero;
-        vRT.offsetMax = Vector2.zero;
-        Image vImg = vignette.AddComponent<Image>();
-        vImg.color = new Color(0.01f, 0.02f, 0.04f, 0.82f);
-
-        // Center Lens
+        // Open-Center Holographic Frame (100% transparent center so the target is crystal clear!)
         GameObject lensAperture = new GameObject("Scope_LensFrame");
         lensAperture.transform.SetParent(_scopeCanvas.transform, false);
         RectTransform lRT = lensAperture.AddComponent<RectTransform>();
         lRT.anchorMin = new Vector2(0.5f, 0.5f);
         lRT.anchorMax = new Vector2(0.5f, 0.5f);
-        lRT.sizeDelta = new Vector2(640f, 640f);
+        lRT.sizeDelta = new Vector2(520f, 520f);
         lRT.anchoredPosition = Vector2.zero;
 
-        // Outer Ring
-        GameObject ring1 = new GameObject("Ring_Outer");
-        ring1.transform.SetParent(lensAperture.transform, false);
-        RectTransform r1RT = ring1.AddComponent<RectTransform>();
-        r1RT.anchorMin = Vector2.zero;
-        r1RT.anchorMax = Vector2.one;
-        Image r1Img = ring1.AddComponent<Image>();
-        r1Img.color = new Color(0.15f, 0.85f, 1.0f, 0.65f);
+        Color reticleCyan = new Color(0.2f, 0.95f, 1.0f, 0.78f);
+        Color milDotColor = new Color(0.35f, 1.0f, 0.85f, 0.65f);
 
-        // Glass
-        GameObject lensGlass = new GameObject("Lens_Glass");
-        lensGlass.transform.SetParent(lensAperture.transform, false);
-        RectTransform lgRT = lensGlass.AddComponent<RectTransform>();
-        lgRT.anchorMin = Vector2.zero;
-        lgRT.anchorMax = Vector2.one;
-        lgRT.offsetMin = new Vector2(3, 3);
-        lgRT.offsetMax = new Vector2(-3, -3);
-        Image lgImg = lensGlass.AddComponent<Image>();
-        lgImg.color = new Color(0.02f, 0.06f, 0.12f, 0.28f);
-
-        Color reticleCyan = new Color(0.2f, 0.95f, 1.0f, 0.9f);
-        Color milDotColor = new Color(0.35f, 1.0f, 0.85f, 0.8f);
-
-        CreateScopeLine(lensAperture.transform, new Vector2(-190, 0), new Vector2(240, 2), reticleCyan);
-        CreateScopeLine(lensAperture.transform, new Vector2(190, 0), new Vector2(240, 2), reticleCyan);
-        CreateScopeLine(lensAperture.transform, new Vector2(0, 190), new Vector2(2, 240), reticleCyan);
-        CreateScopeLine(lensAperture.transform, new Vector2(0, -190), new Vector2(2, 240), reticleCyan);
-
-        for (int m = 1; m <= 4; m++)
+        // Corner brackets (open center)
+        float bDist = 175f;
+        float bLen = 48f;
+        float bThick = 2f;
+        for (int sx = -1; sx <= 1; sx += 2)
         {
-            float offset = m * 38f;
-            CreateScopeLine(lensAperture.transform, new Vector2(-offset, 0), new Vector2(2, 10), milDotColor);
-            CreateScopeLine(lensAperture.transform, new Vector2(offset, 0), new Vector2(2, 10), milDotColor);
-            CreateScopeLine(lensAperture.transform, new Vector2(0, -offset), new Vector2(10 + m * 3, 2), milDotColor);
+            for (int sy = -1; sy <= 1; sy += 2)
+            {
+                CreateScopeLine(lensAperture.transform, new Vector2(sx * (bDist - bLen * 0.5f), sy * bDist), new Vector2(bLen, bThick), reticleCyan);
+                CreateScopeLine(lensAperture.transform, new Vector2(sx * bDist, sy * (bDist - bLen * 0.5f)), new Vector2(bThick, bLen), reticleCyan);
+            }
         }
 
-        // Center Precision Dot
-        GameObject centerDot = new GameObject("Center_PrecisionDot");
-        centerDot.transform.SetParent(lensAperture.transform, false);
-        RectTransform cdRT = centerDot.AddComponent<RectTransform>();
-        cdRT.anchorMin = new Vector2(0.5f, 0.5f);
-        cdRT.anchorMax = new Vector2(0.5f, 0.5f);
-        cdRT.sizeDelta = new Vector2(4f, 4f);
-        cdRT.anchoredPosition = Vector2.zero;
-        Image cdImg = centerDot.AddComponent<Image>();
-        cdImg.color = new Color(1.0f, 0.25f, 0.2f, 1.0f);
+        // Fine precision stadia lines outside the center
+        CreateScopeLine(lensAperture.transform, new Vector2(-95, 0), new Vector2(70, 1.5f), milDotColor);
+        CreateScopeLine(lensAperture.transform, new Vector2(95, 0), new Vector2(70, 1.5f), milDotColor);
+        CreateScopeLine(lensAperture.transform, new Vector2(0, -95), new Vector2(1.5f, 70), milDotColor);
 
-        // Rangefinder
+        // Rangefinder readout below reticle
         GameObject rangeObj = new GameObject("Scope_RangeText");
         rangeObj.transform.SetParent(lensAperture.transform, false);
         RectTransform rngRT = rangeObj.AddComponent<RectTransform>();
         rngRT.anchorMin = new Vector2(0.5f, 0.5f);
         rngRT.anchorMax = new Vector2(0.5f, 0.5f);
-        rngRT.sizeDelta = new Vector2(200, 30);
-        rngRT.anchoredPosition = new Vector2(125, -60);
+        rngRT.sizeDelta = new Vector2(260, 26);
+        rngRT.anchoredPosition = new Vector2(0, -148);
         _scopeRangeText = rangeObj.AddComponent<Text>();
         _scopeRangeText.font = font;
-        _scopeRangeText.fontSize = 14;
+        _scopeRangeText.fontSize = 13;
         _scopeRangeText.fontStyle = FontStyle.Bold;
-        _scopeRangeText.text = "RANGE: ---";
-        _scopeRangeText.color = new Color(0.2f, 0.95f, 1.0f, 0.95f);
-        _scopeRangeText.alignment = TextAnchor.MiddleLeft;
+        _scopeRangeText.text = "TARGET RANGE: ---";
+        _scopeRangeText.color = new Color(0.25f, 0.95f, 1.0f, 0.92f);
+        _scopeRangeText.alignment = TextAnchor.MiddleCenter;
 
-        // Weapon Label
+        // Weapon Optic Header Label
         GameObject topLabel = new GameObject("Scope_TopLabel");
         topLabel.transform.SetParent(lensAperture.transform, false);
         RectTransform tlRT = topLabel.AddComponent<RectTransform>();
         tlRT.anchorMin = new Vector2(0.5f, 0.5f);
         tlRT.anchorMax = new Vector2(0.5f, 0.5f);
-        tlRT.sizeDelta = new Vector2(450, 30);
-        tlRT.anchoredPosition = new Vector2(0, 250);
+        tlRT.sizeDelta = new Vector2(460, 26);
+        tlRT.anchoredPosition = new Vector2(0, 198);
         _scopeWeaponLabel = topLabel.AddComponent<Text>();
         _scopeWeaponLabel.font = font;
-        _scopeWeaponLabel.fontSize = 13;
+        _scopeWeaponLabel.fontSize = 12;
         _scopeWeaponLabel.fontStyle = FontStyle.Bold;
-        _scopeWeaponLabel.text = "[ 6X LONG-RANGE PRECISION OPTIC // CALIBRATED ]";
-        _scopeWeaponLabel.color = new Color(0.2f, 0.95f, 1.0f, 0.85f);
+        _scopeWeaponLabel.text = "[ REFLEX HOLOSIGHT // CALIBRATED ]";
+        _scopeWeaponLabel.color = new Color(0.25f, 0.95f, 1.0f, 0.80f);
         _scopeWeaponLabel.alignment = TextAnchor.MiddleCenter;
 
         _scopeCanvas.SetActive(false);

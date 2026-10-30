@@ -45,7 +45,7 @@ public class OasisCombatMovement : MonoBehaviour
     [Header("Robot Hero Character Model")]
     public GameObject robotHeroVisual;
     public Animator robotHeroAnimator;
-    public bool isThirdPerson = true;
+    public bool isThirdPerson = false;
     public bool isAimingThirdPerson = false;
     public bool isHoldingLeftClickAim = false;
 
@@ -80,12 +80,12 @@ public class OasisCombatMovement : MonoBehaviour
     public Transform gunArmBone => _gunArmBone;
 
     [Header("Third Person Dynamic Camera & Zoom")]
-    [System.NonSerialized] public float minCameraDistance = 1.2f;
-    [System.NonSerialized] public float maxCameraDistance = 5.5f;
-    [System.NonSerialized] public float defaultCameraDistance = 3.2f;
-    [System.NonSerialized] public float currentCameraDistance = 3.2f;
-    [System.NonSerialized] public float cameraZoomSpeed = 1.5f;
-    private float _targetCameraDistance = 3.2f;
+    [System.NonSerialized] public float minCameraDistance = 1.15f;
+    [System.NonSerialized] public float maxCameraDistance = 4.5f;
+    [System.NonSerialized] public float defaultCameraDistance = 2.35f;
+    [System.NonSerialized] public float currentCameraDistance = 2.35f;
+    [System.NonSerialized] public float cameraZoomSpeed = 1.35f;
+    private float _targetCameraDistance = 2.35f;
 
     public Vector3 GetThirdPersonMuzzlePosition(Vector3 targetPoint)
     {
@@ -271,7 +271,7 @@ public class OasisCombatMovement : MonoBehaviour
         else if (_wasMenuOrMatchEnded)
         {
             _wasMenuOrMatchEnded = false;
-            SetThirdPersonMode(true); // Seamlessly enter gameplay in authentic third-person over-the-shoulder mode
+            SetThirdPersonMode(false); // Enter gameplay in natural First-Person Shooter view by default (V toggles 3rd-person)
         }
 
         HandleCameraViewToggle();
@@ -880,28 +880,34 @@ public class OasisCombatMovement : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Process mouse look rotation immediately BEFORE reading _cameraTarget so there is zero 1-frame camera lag
+        if (_fpc != null)
+        {
+            _fpc.UpdateCameraRotation();
+        }
+
         Camera cam = Camera.main;
         if (cam == null || _cameraTarget == null) return;
 
         if (!isThirdPerson)
         {
-            // First-person view: place camera directly at eye-level target
-            cam.transform.position = _cameraTarget.position;
+            // Natural First-Person FPS view: place camera at eye-level with slight forward head offset
+            cam.transform.position = _cameraTarget.position + transform.forward * 0.06f;
             cam.transform.rotation = _cameraTarget.rotation;
         }
         else
         {
-            // Third-person over-the-shoulder view with dynamic scroll zoom:
-            currentCameraDistance = Mathf.Lerp(currentCameraDistance, _targetCameraDistance, Time.deltaTime * 14f);
+            // Natural Over-The-Shoulder Third-Person view (toggled via V or scroll wheel):
+            currentCameraDistance = Mathf.Lerp(currentCameraDistance, _targetCameraDistance, Time.deltaTime * 16f);
 
             float activeDist = isAimingThirdPerson
-                ? Mathf.Min(currentCameraDistance * 0.65f, 2.0f)
+                ? Mathf.Min(currentCameraDistance * 0.62f, 1.45f)
                 : currentCameraDistance;
 
-            // Elevated and widened shoulder offset to ensure bulky shoulder armor & backpack never obstruct forward sightlines
+            // Balanced over-the-shoulder framing with minimal horizontal parallax
             Vector3 shoulderOffset = isAimingThirdPerson
-                ? new Vector3(0.70f, 0.28f, -activeDist)
-                : new Vector3(0.85f, 0.38f, -activeDist);
+                ? new Vector3(0.34f, 0.16f, -activeDist)
+                : new Vector3(0.42f, 0.20f, -activeDist);
 
             Vector3 desiredPos = _cameraTarget.position + _cameraTarget.rotation * shoulderOffset;
             Vector3 origin = _cameraTarget.position;
@@ -1066,6 +1072,25 @@ public class OasisCombatMovement : MonoBehaviour
         if (vPressed)
         {
             SetThirdPersonMode(!isThirdPerson);
+        }
+
+        // Mouse sensitivity quick-adjust hotkeys: [ (decrease) and ] (increase)
+        if (_fpc != null)
+        {
+            bool sensDown = false;
+            bool sensUp = false;
+#if ENABLE_INPUT_SYSTEM
+            if (Keyboard.current != null)
+            {
+                sensDown = Keyboard.current.leftBracketKey.wasPressedThisFrame || Keyboard.current.minusKey.wasPressedThisFrame;
+                sensUp = Keyboard.current.rightBracketKey.wasPressedThisFrame || Keyboard.current.equalsKey.wasPressedThisFrame;
+            }
+#else
+            sensDown = Input.GetKeyDown(KeyCode.LeftBracket) || Input.GetKeyDown(KeyCode.Minus);
+            sensUp = Input.GetKeyDown(KeyCode.RightBracket) || Input.GetKeyDown(KeyCode.Equals);
+#endif
+            if (sensDown) _fpc.AdjustMouseSensitivity(-0.10f);
+            if (sensUp) _fpc.AdjustMouseSensitivity(0.10f);
         }
     }
 
@@ -1443,19 +1468,10 @@ public class OasisCombatMovement : MonoBehaviour
             {
                 if (firstPerson)
                 {
-                    // In First-Person: disable head and backpack so they never block forward camera sightline,
-                    // while preserving the character's arms and authentic weapon in view!
-                    string rName = r.name.ToLower();
-                    if (rName.Contains("head") || rName.Contains("pack") || rName.Contains("body"))
-                    {
-                        r.enabled = false;
-                        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
-                    }
-                    else
-                    {
-                        r.enabled = true;
-                        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
-                    }
+                    // In First-Person: set full-body character mesh to ShadowsOnly so the player casts a realistic
+                    // shadow on the ground without third-person shoulder armor or waist rifle clipping into the camera!
+                    r.enabled = true;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
                 }
                 else
                 {

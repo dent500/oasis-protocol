@@ -55,8 +55,12 @@ namespace StarterAssets
         [Tooltip("How far in degrees can you move the camera down")]
         public float BottomClamp = -90.0f;
 
-        // cinemachine
+        // cinemachine & precision mouse look
         private float _cinemachineTargetPitch;
+        public float UserMouseSensitivity = 1.0f;
+        private int _lastCameraRotationFrame = -1;
+        private float _pendingRecoilPitch = 0f;
+        private float _pendingRecoilYaw = 0f;
 
         // player
         private float _speed;
@@ -133,6 +137,8 @@ namespace StarterAssets
             Debug.LogError( "Starter Assets package is missing dependencies. Please use Tools/Starter Assets/Reinstall Dependencies to fix it");
 #endif
 
+            UserMouseSensitivity = Mathf.Clamp(PlayerPrefs.GetFloat("OasisMouseSensitivity", 1.0f), 0.2f, 3.0f);
+
             // Ensure camera starts leveled at horizon
             ResetCameraPitch(0f);
 
@@ -166,6 +172,27 @@ namespace StarterAssets
 
         private void LateUpdate()
         {
+            UpdateCameraRotation();
+        }
+
+        public void AdjustMouseSensitivity(float delta)
+        {
+            UserMouseSensitivity = Mathf.Clamp(Mathf.Round((UserMouseSensitivity + delta) * 20f) / 20f, 0.2f, 3.0f);
+            PlayerPrefs.SetFloat("OasisMouseSensitivity", UserMouseSensitivity);
+            PlayerPrefs.Save();
+            OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>MOUSE AIM SENSITIVITY: {UserMouseSensitivity:F2}x  ( [ / ] TO ADJUST )</color>", 2.0f);
+        }
+
+        public void AddWeaponRecoilPitchYaw(float pitchKick, float yawKick)
+        {
+            _pendingRecoilPitch += pitchKick;
+            _pendingRecoilYaw += yawKick;
+        }
+
+        public void UpdateCameraRotation()
+        {
+            if (_lastCameraRotationFrame == Time.frameCount) return;
+            _lastCameraRotationFrame = Time.frameCount;
             CameraRotation();
         }
 
@@ -215,28 +242,68 @@ namespace StarterAssets
 
         private void CameraRotation()
         {
-            // if there is an input
-            if (_input.look.sqrMagnitude >= _threshold)
+            if (_input != null && _input.ShouldKeepCursorUnlocked())
             {
-                // Mouse look: Calibrated 0.045 degrees per pixel for smooth, controllable turning
-                float baseLookScale = 0.105f;
+                _input.look = Vector2.zero;
+                _pendingRecoilPitch = 0f;
+                _pendingRecoilYaw = 0f;
+                return;
+            }
 
-                // Gamepad look: 120 degrees per second scaled by delta time.
-                // Multiplied by RotationSpeed (which ADS aim drops for steady sniping).
-                float lookMultiplier = IsCurrentDeviceMouse
-                    ? (baseLookScale * RotationSpeed)
-                    : (120.0f * Time.deltaTime * RotationSpeed);
+            float yawDelta = 0f;
+            float pitchDelta = 0f;
 
-                _cinemachineTargetPitch += _input.look.y * lookMultiplier * 0.85f;
-                _rotationVelocity = _input.look.x * lookMultiplier;
+            if (IsCurrentDeviceMouse)
+            {
+                Vector2 rawMouse = Vector2.zero;
+#if ENABLE_INPUT_SYSTEM
+                if (Mouse.current != null)
+                {
+                    rawMouse = Mouse.current.delta.ReadValue();
+                }
+                else if (_input != null)
+                {
+                    // Fallback: undo the 9x ScaleVector2 processor from FirstPersonInputActions
+                    rawMouse = new Vector2(_input.look.x / 9f, -_input.look.y / 9f);
+                }
+#else
+                rawMouse = new Vector2(Input.GetAxisRaw("Mouse X") * 12f, Input.GetAxisRaw("Mouse Y") * 12f);
+#endif
+                if (_input != null) _input.look = Vector2.zero;
 
-                // clamp our pitch rotation
-                _cinemachineTargetPitch = ClampAngle(_cinemachineTargetPitch, BottomClamp, TopClamp);
+                // Natural FPS 1:1 isotropic mouse sensitivity (0.085 deg per raw mouse count at 1.0x)
+                float degPerCount = 0.085f * UserMouseSensitivity * RotationSpeed;
+                yawDelta = rawMouse.x * degPerCount;
+                pitchDelta = -rawMouse.y * degPerCount;
+            }
+            else if (_input != null && _input.look.sqrMagnitude >= _threshold)
+            {
+                float stickScale = 1.65f * Time.deltaTime * UserMouseSensitivity * RotationSpeed;
+                yawDelta = _input.look.x * stickScale;
+                pitchDelta = _input.look.y * stickScale;
+            }
 
-                // Update Cinemachine camera target pitch
-                CinemachineCameraTarget.transform.localRotation = Quaternion.Euler(_cinemachineTargetPitch, 0.0f, 0.0f);
+            // Apply smooth weapon recoil kick
+            if (Mathf.Abs(_pendingRecoilPitch) > 0.001f || Mathf.Abs(_pendingRecoilYaw) > 0.001f)
+            {
+                float stepPitch = _pendingRecoilPitch * Mathf.Clamp01(Time.deltaTime * 28f);
+                float stepYaw = _pendingRecoilYaw * Mathf.Clamp01(Time.deltaTime * 28f);
+                pitchDelta -= stepPitch;
+                yawDelta += stepYaw;
+                _pendingRecoilPitch -= stepPitch;
+                _pendingRecoilYaw -= stepYaw;
+            }
 
-                // rotate the player left and right
+            if (Mathf.Abs(yawDelta) > 0.0001f || Mathf.Abs(pitchDelta) > 0.0001f)
+            {
+                _cinemachineTargetPitch = ClampAngle(_cinemachineTargetPitch + pitchDelta, -85.0f, 85.0f);
+                _rotationVelocity = yawDelta;
+
+                if (CinemachineCameraTarget != null)
+                {
+                    CinemachineCameraTarget.transform.localRotation = Quaternion.Euler(_cinemachineTargetPitch, 0.0f, 0.0f);
+                }
+
                 transform.Rotate(Vector3.up * _rotationVelocity);
             }
         }
