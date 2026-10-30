@@ -47,11 +47,13 @@ public class BlasterWeapon : MonoBehaviour
     private const float beamTickDamage = 11f;
 
     [Header("Weapon Positioning")]
-    public Vector3 hipPosition = new Vector3(0.20f, -0.19f, 0.42f);
-    public Vector3 aimPosition = new Vector3(0f, -0.125f, 0.32f);
+    public Vector3 hipPosition = new Vector3(0.22f, -0.15f, 0.36f);
+    public Vector3 aimPosition = new Vector3(0f, -0.095f, 0.28f);
     public float swayAmount = 0.016f;
     public float maxSway = 0.045f;
     public float swaySmooth = 14f;
+
+    private MeshRenderer _authenticRifleRenderer;
 
     [Header("Recoil")]
     public float recoilKickback = 0.065f;
@@ -103,6 +105,14 @@ public class BlasterWeapon : MonoBehaviour
         {
             bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
             _weaponRoot.gameObject.SetActive(active && !is3rd);
+        }
+    }
+
+    public void SyncWeaponMaterial(Material mat)
+    {
+        if (mat != null && _authenticRifleRenderer != null)
+        {
+            _authenticRifleRenderer.sharedMaterial = mat;
         }
     }
 
@@ -1119,49 +1129,52 @@ public class BlasterWeapon : MonoBehaviour
         Vector3[] norms = aligned.normals;
         bool hasNorms = norms != null && norms.Length == verts.Length;
 
-        // Find ArmPosition_Right bindpose matrix (which transforms from character bind-pose to weapon grip space)
-        Matrix4x4 toGripSpace = Matrix4x4.identity;
-        bool foundBindpose = false;
+        // First check if Trigger_Right is in the bone array (Trigger_Right is the exact axis-aligned rifle bone:
+        // localZ = World Right (+X), -localX = World Up (+Y), -localY = World Forward (+Z)).
+        Matrix4x4 toTriggerSpace = Matrix4x4.identity;
+        bool foundTriggerBindpose = false;
         if (smr != null && smr.bones != null && srcMesh.bindposes != null && smr.bones.Length == srcMesh.bindposes.Length)
         {
             for (int i = 0; i < smr.bones.Length; i++)
             {
-                if (smr.bones[i] != null && smr.bones[i].name == "ArmPosition_Right")
+                if (smr.bones[i] != null && smr.bones[i].name == "Trigger_Right")
                 {
-                    toGripSpace = srcMesh.bindposes[i];
-                    foundBindpose = true;
+                    toTriggerSpace = srcMesh.bindposes[i];
+                    foundTriggerBindpose = true;
                     break;
                 }
             }
         }
 
-        if (foundBindpose)
+        if (foundTriggerBindpose)
         {
             for (int i = 0; i < verts.Length; i++)
             {
-                Vector3 p = toGripSpace.MultiplyPoint3x4(verts[i]);
-                // In ArmPosition_Right space: -Y is barrel forward (+Z), +X is top rail up (+Y), -Z is right (+X)
-                verts[i] = new Vector3(-p.z, p.x, -p.y) * 0.01f;
+                Vector3 p = toTriggerSpace.MultiplyPoint3x4(verts[i]);
+                // In Trigger_Right space: +Z is Right (+X), -X is Up (+Y), -Y is Barrel Forward (+Z)
+                verts[i] = new Vector3(p.z, -p.x, -p.y) * 0.01f;
                 if (hasNorms)
                 {
-                    Vector3 n = toGripSpace.MultiplyVector(norms[i]);
-                    norms[i] = new Vector3(-n.z, n.x, -n.y).normalized;
+                    Vector3 n = toTriggerSpace.MultiplyVector(norms[i]);
+                    norms[i] = new Vector3(n.z, -n.x, -n.y).normalized;
                 }
             }
         }
         else
         {
-            // Fallback using known ArmPosition_Right bind rotation (-56.48 deg Z) and center
+            // In PBR_HP_Mesh.fbx, AssaultRifle's raw vertices are already axis-aligned in centimeter units:
+            // X = [-129.7, -111.4] (18.3cm width, +X is Right)
+            // Z = [34.3, 98.5] (64.3cm height, +Z is Top Sight Rail Up)
+            // Y = [49.9, 226.1] (176.2cm length, -Y is Front Barrel Forward)
             Vector3 c = srcMesh.bounds.center;
-            Quaternion invRot = Quaternion.Inverse(new Quaternion(0.0025357f, -0.0073522f, -0.4731384f, 0.8809539f));
             for (int i = 0; i < verts.Length; i++)
             {
-                Vector3 p = invRot * (verts[i] - c);
-                verts[i] = new Vector3(-p.z, p.x, -p.y) * 0.01f;
+                Vector3 p = verts[i] - c;
+                verts[i] = new Vector3(p.x, p.z, -p.y) * 0.01f;
                 if (hasNorms)
                 {
-                    Vector3 n = invRot * norms[i];
-                    norms[i] = new Vector3(-n.z, n.x, -n.y).normalized;
+                    Vector3 n = norms[i];
+                    norms[i] = new Vector3(n.x, n.z, -n.y).normalized;
                 }
             }
         }
@@ -1170,10 +1183,11 @@ public class BlasterWeapon : MonoBehaviour
         if (hasNorms) aligned.normals = norms;
         aligned.RecalculateBounds();
 
-        // Center the mesh cleanly so X=0 is the bore axis, Y=0 is the upper receiver, and Z=0.14m is forward of grip
+        // Center the mesh cleanly so X=0 is the bore axis, Y=0 is the upper receiver, and the front barrel
+        // assembly extends prominently forward into the camera's view (+0.28m forward offset)
         Vector3 bCenter = aligned.bounds.center;
         float topY = aligned.bounds.max.y;
-        Vector3 shift = new Vector3(-bCenter.x, -(topY - 0.045f), -bCenter.z + 0.14f);
+        Vector3 shift = new Vector3(-bCenter.x, -(topY - 0.095f), -bCenter.z + 0.28f);
         for (int i = 0; i < verts.Length; i++)
         {
             verts[i] += shift;
@@ -1232,20 +1246,24 @@ public class BlasterWeapon : MonoBehaviour
                     {
                         foundSmr = smr;
                         rifleMesh = smr.sharedMesh;
-                        rifleMat = smr.sharedMaterial;
+                        if (rifleMat == null) rifleMat = smr.sharedMaterial;
                         break;
                     }
                 }
             }
         }
 
-        if (rifleMat == null)
+        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.currentCharacterMaterial != null)
+        {
+            rifleMat = OasisCombatMovement.Instance.currentCharacterMaterial;
+        }
+        else if (rifleMat == null)
         {
             rifleMat = Resources.Load<Material>("RobotHero_URP");
         }
 
-        float opticCenterY = 0.082f;
-        Vector3 muzzleLocalPos = new Vector3(0f, 0.01f, 0.56f);
+        float opticCenterY = 0.095f;
+        Vector3 muzzleLocalPos = new Vector3(0f, 0.01f, 0.95f);
 
         if (rifleMesh != null)
         {
@@ -1259,19 +1277,16 @@ public class BlasterWeapon : MonoBehaviour
             MeshFilter mf = authenticRifle.AddComponent<MeshFilter>();
             mf.sharedMesh = alignedMesh;
 
-            MeshRenderer mr = authenticRifle.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = rifleMat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _authenticRifleRenderer = authenticRifle.AddComponent<MeshRenderer>();
+            _authenticRifleRenderer.sharedMaterial = rifleMat;
+            _authenticRifleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            opticCenterY = alignedMesh.bounds.max.y + 0.028f;
-            muzzleLocalPos = new Vector3(0f, alignedMesh.bounds.max.y - 0.035f, alignedMesh.bounds.max.z + 0.04f);
+            opticCenterY = alignedMesh.bounds.max.y + 0.015f;
+            muzzleLocalPos = new Vector3(0f, alignedMesh.bounds.max.y - 0.08f, alignedMesh.bounds.max.z + 0.04f);
         }
 
-        // Mount a 3D Tactical Reflex Holosight on the top rail so ADS looks directly through the sight window
-        BuildTopReflexSight(_weaponRoot, opticCenterY, energyColor);
-
-        // Calibrate aimPosition so holding Right-Click aligns the 3D reflex sight dot directly with screen center (0, 0)
-        aimPosition = new Vector3(0f, -opticCenterY, 0.30f);
+        // Calibrate aimPosition so holding Right-Click aligns the authentic rifle's built-in top sight directly under screen center (0, 0)
+        aimPosition = new Vector3(0f, -opticCenterY, 0.28f);
 
         // Muzzle Point
         GameObject muzzle = new GameObject("MuzzlePoint");
@@ -1288,59 +1303,6 @@ public class BlasterWeapon : MonoBehaviour
         _muzzleFlashLight.range = 6f;
         _muzzleFlashLight.intensity = 5f;
         _muzzleFlashLight.enabled = false;
-    }
-
-    private void BuildTopReflexSight(Transform weaponParent, float centerY, Color energyColor)
-    {
-        GameObject sightRoot = new GameObject("ReflexHoloSight_3D");
-        sightRoot.transform.SetParent(weaponParent, false);
-        sightRoot.transform.localPosition = new Vector3(0f, centerY, 0.06f);
-        sightRoot.transform.localRotation = Quaternion.identity;
-
-        Material frameMat = new Material(OasisShaderHelper.GetLitShader());
-        frameMat.color = new Color(0.10f, 0.12f, 0.15f);
-
-        Material dotMat = OasisShaderHelper.CreateUnlitMaterial(energyColor);
-
-        // Base mount
-        GameObject basePlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        basePlate.transform.SetParent(sightRoot.transform, false);
-        basePlate.transform.localPosition = new Vector3(0f, -0.022f, 0f);
-        basePlate.transform.localScale = new Vector3(0.038f, 0.008f, 0.075f);
-        Destroy(basePlate.GetComponent<Collider>());
-        basePlate.GetComponent<Renderer>().sharedMaterial = frameMat;
-        basePlate.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        // Left & Right Sight Hood Struts
-        for (int side = -1; side <= 1; side += 2)
-        {
-            GameObject strut = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            strut.transform.SetParent(sightRoot.transform, false);
-            strut.transform.localPosition = new Vector3(side * 0.020f, 0f, 0f);
-            strut.transform.localScale = new Vector3(0.004f, 0.038f, 0.048f);
-            Destroy(strut.GetComponent<Collider>());
-            strut.GetComponent<Renderer>().sharedMaterial = frameMat;
-            strut.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        // Top Hood Arch
-        GameObject topBar = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        topBar.transform.SetParent(sightRoot.transform, false);
-        topBar.transform.localPosition = new Vector3(0f, 0.020f, 0f);
-        topBar.transform.localScale = new Vector3(0.044f, 0.004f, 0.048f);
-        Destroy(topBar.GetComponent<Collider>());
-        topBar.GetComponent<Renderer>().sharedMaterial = frameMat;
-        topBar.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        // Glowing Holographic Reflex Dot inside the lens window
-        GameObject holoDot = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        holoDot.transform.SetParent(sightRoot.transform, false);
-        holoDot.transform.localPosition = new Vector3(0f, 0f, 0.01f);
-        holoDot.transform.localRotation = Quaternion.identity;
-        holoDot.transform.localScale = new Vector3(0.0055f, 0.0055f, 0.0055f);
-        Destroy(holoDot.GetComponent<Collider>());
-        holoDot.GetComponent<Renderer>().sharedMaterial = dotMat;
-        holoDot.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
     private void BuildScopeOverlayUI()

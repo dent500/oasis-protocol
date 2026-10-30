@@ -1499,6 +1499,8 @@ public class OasisCombatMovement : MonoBehaviour
         }
     }
 
+    [System.NonSerialized] public Material currentCharacterMaterial;
+
     public void ApplyCharacterSkin(Texture2D texture, Color accentColor, string skinName)
     {
         if (robotHeroVisual == null) SetupLocalRobotHero();
@@ -1523,10 +1525,20 @@ public class OasisCombatMovement : MonoBehaviour
             customMat.SetColor("_EmissionColor", accentColor * 1.5f);
         }
 
+        currentCharacterMaterial = customMat;
+
         var rends = robotHeroVisual.GetComponentsInChildren<Renderer>(true);
         foreach (var r in rends)
         {
             r.sharedMaterial = customMat;
+        }
+
+        // Sync the selected character skin material directly to the First-Person weapon mesh
+        var weapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+        if (weapon == null) weapon = FindAnyObjectByType<BlasterWeapon>();
+        if (weapon != null)
+        {
+            weapon.SyncWeaponMaterial(customMat);
         }
 
         SetMeshVisibility(!isThirdPerson);
