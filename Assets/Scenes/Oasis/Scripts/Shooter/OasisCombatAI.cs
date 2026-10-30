@@ -100,9 +100,11 @@ public class OasisCombatAI : MonoBehaviour
     private int _currentManeuver = 0; // 0 = Aggressive Push, 1 = Lateral Flank, 2 = Tactical Fallback
     private float _intendedMoveSpeed = 0f;
 
-    // Blaster Muzzle
+    // Blaster Muzzle & Combat Animation Reactions
     private Transform _muzzleTransform;
     public float stunTimer = 0f;
+    private float _hitFlinchTimer = 0f;
+    private float _shootPoseTimer = 0f;
 
     public void ApplyEMPStun(float duration)
     {
@@ -986,20 +988,33 @@ public class OasisCombatAI : MonoBehaviour
             }
         }
 
-        if (_isDead || isDowned || _currentTarget == null) return;
+        if (_hitFlinchTimer > 0f) _hitFlinchTimer -= Time.deltaTime;
+        if (_shootPoseTimer > 0f) _shootPoseTimer -= Time.deltaTime;
 
-        // Rotate upper body spine & gun arm to aim vertically towards target
+        if (_isDead || isDowned) return;
+
+        // Apply physical upper-body flinch when struck by blaster fire
+        if (_hitFlinchTimer > 0f && _spineBone != null)
+        {
+            float flinchAngle = Mathf.Sin((_hitFlinchTimer / 0.16f) * Mathf.PI) * 14f;
+            _spineBone.Rotate(transform.right, -flinchAngle, Space.World);
+        }
+
+        if (_currentTarget == null || isReloading) return;
+
+        // Rotate upper body spine & gun arm to aim vertically towards target + firing recoil kick
         Vector3 aimPoint = _currentTarget.position + Vector3.up * 1.2f;
         Vector3 dirToAim = aimPoint - transform.position;
         float pitch = Mathf.Asin(Mathf.Clamp(dirToAim.normalized.y, -0.85f, 0.85f)) * Mathf.Rad2Deg;
+        float recoilJolt = (_shootPoseTimer > 0.18f) ? (_shootPoseTimer - 0.18f) * 45f : 0f;
 
         if (_spineBone != null)
         {
-            _spineBone.Rotate(Vector3.forward, -pitch * 0.7f, Space.Self);
+            _spineBone.Rotate(Vector3.forward, (-pitch + recoilJolt * 0.5f) * 0.7f, Space.Self);
         }
         if (_gunArmBone != null)
         {
-            _gunArmBone.Rotate(Vector3.forward, pitch * 0.7f, Space.Self);
+            _gunArmBone.Rotate(Vector3.forward, (pitch - recoilJolt) * 0.7f, Space.Self);
         }
     }
 
@@ -1456,21 +1471,51 @@ public class OasisCombatAI : MonoBehaviour
             _visualRoot.localRotation = Quaternion.identity;
         }
 
-        // Update Animation States (Walk / Run / Idle)
+        // Update Directional Combat, Strafe, Shoot & Reload Animation States
         if (_animator != null)
         {
             _animator.speed = 1.0f;
-            if (horizontalSpeed > 4.2f)
+            if (isReloading && horizontalSpeed < 2.2f)
             {
-                _animator.Play("Run_guard_AR");
+                _animator.Play("Reload");
             }
-            else if (horizontalSpeed > 0.2f)
+            else if (horizontalSpeed > 0.25f)
             {
-                _animator.Play("WalkFront_Shoot_AR");
+                Vector3 localVel = transform.InverseTransformDirection(moveVelocity);
+                if (_currentTarget != null)
+                {
+                    if (Mathf.Abs(localVel.x) > Mathf.Abs(localVel.z) * 0.85f)
+                    {
+                        _animator.Play(localVel.x < 0f ? "WalkLeft_Shoot_AR" : "WalkRight_Shoot_AR");
+                    }
+                    else if (localVel.z < -0.35f)
+                    {
+                        _animator.Play("WalkBack_Shoot_AR");
+                    }
+                    else if (horizontalSpeed > 4.2f)
+                    {
+                        _animator.Play("Run_gunMiddle_AR");
+                    }
+                    else
+                    {
+                        _animator.Play("WalkFront_Shoot_AR");
+                    }
+                }
+                else
+                {
+                    _animator.Play(horizontalSpeed > 4.0f ? "Run_guard_AR" : "WalkFront_Shoot_AR");
+                }
             }
             else
             {
-                _animator.Play("Idle_Shoot_Ar");
+                if (_shootPoseTimer > 0f || _burstShotsRemaining > 0)
+                {
+                    _animator.Play("Shoot_BurstShot_AR");
+                }
+                else
+                {
+                    _animator.Play("Idle_Shoot_Ar");
+                }
             }
         }
     }
@@ -1567,8 +1612,9 @@ public class OasisCombatAI : MonoBehaviour
             return;
         }
 
-        // Consume weapon ammo
+        // Consume weapon ammo & trigger firing recoil animation pose
         currentAmmo--;
+        _shootPoseTimer = 0.28f;
         OasisAITelemetryLogger.Instance?.RecordShotFired(this);
 
         if (currentAmmo <= 0)
@@ -1730,6 +1776,7 @@ public class OasisCombatAI : MonoBehaviour
 
         _shieldRegenDelayTimer = 4.2f;
         _lastAttackerId = attackerId;
+        _hitFlinchTimer = 0.16f;
 
         // Slight revive setback when taking fire while reviving (0.08f instead of 0.25f so medics can power through)
         if (_downedAllyBot != null && _downedAllyBot.reviveProgress > 0f)
@@ -1741,10 +1788,14 @@ public class OasisCombatAI : MonoBehaviour
         if (currentShield > 0f)
         {
             currentShield -= amount;
-            if (currentShield < 0f)
+            if (currentShield <= 0f)
             {
-                currentHealth += currentShield; // Absorb remainder
+                if (currentShield < 0f)
+                {
+                    currentHealth += currentShield; // Absorb remainder
+                }
                 currentShield = 0f;
+                BlasterVFX.SpawnShieldBreak(transform.position + Vector3.up * 1.15f);
             }
         }
         else

@@ -1,9 +1,11 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
-/// Spawns and manages visual effects for raycast shooting:
-/// Laser beam tracer, muzzle flash, impact spark bursts, and drone explosion particles.
+/// Spawns and manages visual effects for raycast shooting and combat:
+/// Dual-layer plasma laser beam tracers, 3D volumetric muzzle flashes, ejecting plasma casings,
+/// floating 3D combat damage popups, shield shatter bursts, melee energy arcs, and explosions.
 /// </summary>
 public class BlasterVFX : MonoBehaviour
 {
@@ -29,45 +31,318 @@ public class BlasterVFX : MonoBehaviour
     }
 
     /// <summary>
-    /// Draws a laser beam line tracer from barrel to impact point.
+    /// Draws a dual-layered plasma laser beam tracer (hot white core + colored outer plasma sheath)
+    /// and triggers a 3D volumetric muzzle flash burst at the barrel.
     /// </summary>
     public static void SpawnLaserBeam(Vector3 start, Vector3 end, Color color)
     {
-        GameObject beamObj = new GameObject("LaserBeam");
+        Vector3 dir = (end - start);
+        if (dir.sqrMagnitude > 0.001f)
+        {
+            SpawnMuzzleFlash(start, dir.normalized, color);
+        }
+
+        // Outer Plasma Sheath
+        GameObject beamObj = new GameObject("LaserBeam_Outer");
         LineRenderer lr = beamObj.AddComponent<LineRenderer>();
-        lr.material = GetLaserMaterial();
+        lr.material = OasisShaderHelper.CreateUnlitMaterial(color);
         lr.startColor = color;
-        lr.endColor = color * 0.7f;
-        lr.startWidth = 0.06f;
-        lr.endWidth = 0.03f;
+        lr.endColor = new Color(color.r, color.g, color.b, 0.65f);
+        lr.startWidth = 0.085f;
+        lr.endWidth = 0.042f;
         lr.positionCount = 2;
         lr.SetPosition(0, start);
         lr.SetPosition(1, end);
         lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         lr.receiveShadows = false;
 
-        // Auto destroy with fade
-        BlasterVFXRunner.Instance.StartCoroutine(FadeAndDestroyBeam(beamObj, lr, 0.08f));
+        // Inner Hot-White Core
+        GameObject coreObj = new GameObject("LaserBeam_Core");
+        coreObj.transform.SetParent(beamObj.transform, false);
+        LineRenderer coreLr = coreObj.AddComponent<LineRenderer>();
+        Color hotCore = Color.Lerp(color, Color.white, 0.78f);
+        coreLr.material = OasisShaderHelper.CreateUnlitMaterial(hotCore);
+        coreLr.startColor = hotCore;
+        coreLr.endColor = hotCore;
+        coreLr.startWidth = 0.032f;
+        coreLr.endWidth = 0.016f;
+        coreLr.positionCount = 2;
+        coreLr.SetPosition(0, start);
+        coreLr.SetPosition(1, end);
+        coreLr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        coreLr.receiveShadows = false;
+
+        BlasterVFXRunner.Instance.StartCoroutine(FadeAndDestroyDualBeam(beamObj, lr, coreLr, 0.095f));
     }
 
-    private static IEnumerator FadeAndDestroyBeam(GameObject obj, LineRenderer lr, float duration)
+    private static IEnumerator FadeAndDestroyDualBeam(GameObject obj, LineRenderer outerLr, LineRenderer coreLr, float duration)
     {
         float elapsed = 0f;
-        Color initialStart = lr.startColor;
-        Color initialEnd = lr.endColor;
+        Color initialOuter = outerLr != null ? outerLr.startColor : Color.cyan;
+        Color initialCore = coreLr != null ? coreLr.startColor : Color.white;
 
-        while (elapsed < duration)
+        while (elapsed < duration && obj != null)
         {
             elapsed += Time.deltaTime;
-            float t = 1f - (elapsed / duration);
-            lr.startColor = new Color(initialStart.r, initialStart.g, initialStart.b, t);
-            lr.endColor = new Color(initialEnd.r, initialEnd.g, initialEnd.b, t);
-            lr.startWidth = 0.06f * t;
-            lr.endWidth = 0.03f * t;
+            float t = Mathf.Clamp01(1f - (elapsed / duration));
+            if (outerLr != null)
+            {
+                outerLr.startColor = new Color(initialOuter.r, initialOuter.g, initialOuter.b, t);
+                outerLr.endColor = new Color(initialOuter.r, initialOuter.g, initialOuter.b, t * 0.7f);
+                outerLr.startWidth = 0.085f * t;
+                outerLr.endWidth = 0.042f * t;
+            }
+            if (coreLr != null)
+            {
+                coreLr.startColor = new Color(initialCore.r, initialCore.g, initialCore.b, t);
+                coreLr.endColor = new Color(initialCore.r, initialCore.g, initialCore.b, t);
+                coreLr.startWidth = 0.032f * t;
+                coreLr.endWidth = 0.016f * t;
+            }
             yield return null;
         }
 
-        Destroy(obj);
+        if (obj != null) Destroy(obj);
+    }
+
+    /// <summary>
+    /// Spawns a 3D volumetric star-flare muzzle flash and point light burst at the gun barrel.
+    /// Visible in both 1st-person and 3rd-person perspectives.
+    /// </summary>
+    public static void SpawnMuzzleFlash(Vector3 muzzlePos, Vector3 forwardDir, Color color)
+    {
+        GameObject flashRoot = new GameObject("MuzzleFlashVFX");
+        flashRoot.transform.position = muzzlePos;
+        if (forwardDir.sqrMagnitude > 0.001f)
+        {
+            flashRoot.transform.rotation = Quaternion.LookRotation(forwardDir) * Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+        }
+
+        Color coreCol = Color.Lerp(color, Color.white, 0.55f);
+        Material flashMat = OasisShaderHelper.CreateUnlitMaterial(coreCol);
+
+        // Forward muzzle flame spike
+        GameObject spike = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Destroy(spike.GetComponent<Collider>());
+        spike.transform.SetParent(flashRoot.transform, false);
+        spike.transform.localPosition = new Vector3(0f, 0f, 0.14f);
+        spike.transform.localScale = new Vector3(0.09f, 0.09f, 0.34f);
+        var sRend = spike.GetComponent<Renderer>();
+        sRend.sharedMaterial = flashMat;
+        sRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // Cross star-flare fins
+        GameObject finA = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Destroy(finA.GetComponent<Collider>());
+        finA.transform.SetParent(flashRoot.transform, false);
+        finA.transform.localPosition = Vector3.zero;
+        finA.transform.localScale = new Vector3(0.28f, 0.035f, 0.035f);
+        var faRend = finA.GetComponent<Renderer>();
+        faRend.sharedMaterial = flashMat;
+        faRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        GameObject finB = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Destroy(finB.GetComponent<Collider>());
+        finB.transform.SetParent(flashRoot.transform, false);
+        finB.transform.localPosition = Vector3.zero;
+        finB.transform.localScale = new Vector3(0.035f, 0.28f, 0.035f);
+        var fbRend = finB.GetComponent<Renderer>();
+        fbRend.sharedMaterial = flashMat;
+        fbRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // Point light flash
+        Light l = flashRoot.AddComponent<Light>();
+        l.type = LightType.Point;
+        l.color = color;
+        l.range = 4.5f;
+        l.intensity = 3.8f;
+
+        Destroy(flashRoot, 0.055f);
+    }
+
+    /// <summary>
+    /// Ejects a spinning hot plasma shell casing from the weapon receiver.
+    /// </summary>
+    public static void SpawnShellCasing(Vector3 ejectPos, Vector3 rightDir, Color glowColor)
+    {
+        GameObject casing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        casing.name = "SpentPlasmaCasing";
+        Destroy(casing.GetComponent<Collider>());
+        casing.transform.position = ejectPos;
+        casing.transform.localScale = new Vector3(0.016f, 0.028f, 0.016f);
+
+        Color brassGlow = Color.Lerp(new Color(1f, 0.78f, 0.25f), glowColor, 0.35f);
+        Material casingMat = OasisShaderHelper.CreateUnlitMaterial(brassGlow);
+        var rend = casing.GetComponent<Renderer>();
+        rend.sharedMaterial = casingMat;
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        Vector3 vel = (rightDir.normalized * Random.Range(1.8f, 2.8f)) + (Vector3.up * Random.Range(1.4f, 2.2f)) + (Random.insideUnitSphere * 0.35f);
+        Vector3 angVel = new Vector3(Random.Range(360f, 720f), Random.Range(360f, 720f), Random.Range(360f, 720f));
+        BlasterVFXRunner.Instance.StartCoroutine(AnimateShellCasing(casing, vel, angVel, 0.65f));
+    }
+
+    private static IEnumerator AnimateShellCasing(GameObject casing, Vector3 velocity, Vector3 angularVel, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration && casing != null)
+        {
+            elapsed += Time.deltaTime;
+            velocity.y -= 12.5f * Time.deltaTime;
+            casing.transform.position += velocity * Time.deltaTime;
+            casing.transform.Rotate(angularVel * Time.deltaTime, Space.Self);
+            yield return null;
+        }
+        if (casing != null) Destroy(casing);
+    }
+
+    /// <summary>
+    /// Spawns a floating 3D combat damage number that rises and fades at the hit location.
+    /// </summary>
+    public static void SpawnDamagePopup(Vector3 worldPos, float damage, bool isCrit, bool isShield)
+    {
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
+
+        GameObject popupObj = new GameObject("CombatDamagePopup");
+        popupObj.transform.position = worldPos + Vector3.up * 0.35f + Random.insideUnitSphere * 0.18f;
+
+        Canvas canvas = popupObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingOrder = 220;
+        RectTransform rt = popupObj.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(160f, 50f);
+        popupObj.transform.localScale = Vector3.one * 0.012f;
+
+        GameObject txtObj = new GameObject("DmgText");
+        txtObj.transform.SetParent(popupObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = Vector2.zero;
+        txtRT.offsetMax = Vector2.zero;
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.fontStyle = FontStyle.Bold;
+        txt.fontSize = isCrit ? 24 : 18;
+        txt.text = isCrit ? $"{Mathf.RoundToInt(damage)} CRIT!" : $"{Mathf.RoundToInt(damage)}";
+
+        Color baseCol = isCrit
+            ? new Color(1.0f, 0.85f, 0.15f, 1f) // Gold Critical Headshot
+            : (isShield ? new Color(0.25f, 0.92f, 1.0f, 1f) : new Color(1.0f, 0.38f, 0.28f, 1f));
+        txt.color = baseCol;
+
+        Outline outline = txtObj.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.95f);
+        outline.effectDistance = new Vector2(1.4f, -1.4f);
+
+        BlasterVFXRunner.Instance.StartCoroutine(AnimateDamagePopup(popupObj, txt, baseCol, isCrit ? 0.85f : 0.65f));
+    }
+
+    private static IEnumerator AnimateDamagePopup(GameObject popupObj, Text txt, Color baseCol, float duration)
+    {
+        float elapsed = 0f;
+        Vector3 startPos = popupObj.transform.position;
+        Vector3 drift = new Vector3(Random.Range(-0.35f, 0.35f), 1.35f, Random.Range(-0.35f, 0.35f));
+
+        while (elapsed < duration && popupObj != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            popupObj.transform.position = startPos + drift * Mathf.Sin(t * Mathf.PI * 0.5f);
+
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                popupObj.transform.rotation = cam.transform.rotation;
+                float dist = Vector3.Distance(cam.transform.position, popupObj.transform.position);
+                float scale = Mathf.Clamp(dist * 0.00085f, 0.009f, 0.025f);
+                float popBump = t < 0.2f ? Mathf.Lerp(1.35f, 1.0f, t / 0.2f) : 1.0f;
+                popupObj.transform.localScale = Vector3.one * (scale * popBump);
+            }
+
+            if (txt != null && t > 0.5f)
+            {
+                float alpha = 1f - ((t - 0.5f) / 0.5f);
+                txt.color = new Color(baseCol.r, baseCol.g, baseCol.b, alpha);
+            }
+            yield return null;
+        }
+
+        if (popupObj != null) Destroy(popupObj);
+    }
+
+    /// <summary>
+    /// Spawns an electric cyan shield-shatter shockwave sphere when an operative's energy shield breaks.
+    /// </summary>
+    public static void SpawnShieldBreak(Vector3 position)
+    {
+        GameObject root = new GameObject("ShieldBreakVFX");
+        root.transform.position = position;
+
+        GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Destroy(sphere.GetComponent<Collider>());
+        sphere.transform.SetParent(root.transform, false);
+        sphere.transform.localPosition = Vector3.zero;
+        Material shieldMat = OasisShaderHelper.CreateUnlitMaterial(new Color(0.18f, 0.92f, 1.0f, 0.85f));
+        sphere.GetComponent<Renderer>().sharedMaterial = shieldMat;
+        BlasterVFXRunner.Instance.StartCoroutine(AnimateFireballSphere(sphere, 2.4f, 0.28f));
+
+        SpawnImpact(position, Vector3.up, false);
+        Destroy(root, 0.5f);
+    }
+
+    /// <summary>
+    /// Spawns a high-energy plasma blade slash arc for close-quarters melee combat.
+    /// </summary>
+    public static void SpawnMeleeArc(Vector3 origin, Vector3 forward, Color color)
+    {
+        GameObject arcObj = new GameObject("PlasmaMeleeArc");
+        arcObj.transform.position = origin;
+        if (forward.sqrMagnitude > 0.001f)
+        {
+            arcObj.transform.rotation = Quaternion.LookRotation(forward) * Quaternion.Euler(0f, 0f, -22f);
+        }
+
+        LineRenderer lr = arcObj.AddComponent<LineRenderer>();
+        lr.useWorldSpace = false;
+        lr.material = OasisShaderHelper.CreateUnlitMaterial(Color.Lerp(color, Color.white, 0.4f));
+        lr.startColor = new Color(color.r, color.g, color.b, 0.2f);
+        lr.endColor = Color.white;
+        lr.startWidth = 0.04f;
+        lr.endWidth = 0.14f;
+        int segments = 12;
+        lr.positionCount = segments;
+        for (int i = 0; i < segments; i++)
+        {
+            float frac = (float)i / (segments - 1);
+            float angle = Mathf.Lerp(-55f, 55f, frac) * Mathf.Deg2Rad;
+            float r = 1.45f;
+            lr.SetPosition(i, new Vector3(Mathf.Sin(angle) * r, 0f, Mathf.Cos(angle) * r));
+        }
+
+        BlasterVFXRunner.Instance.StartCoroutine(AnimateMeleeArc(arcObj, lr, 0.16f));
+    }
+
+    private static IEnumerator AnimateMeleeArc(GameObject obj, LineRenderer lr, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration && obj != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            obj.transform.localScale = Vector3.Lerp(Vector3.one * 0.7f, Vector3.one * 1.35f, t);
+            if (lr != null)
+            {
+                lr.startWidth = 0.04f * (1f - t);
+                lr.endWidth = 0.16f * (1f - t);
+            }
+            yield return null;
+        }
+        if (obj != null) Destroy(obj);
     }
 
     /// <summary>
@@ -77,7 +352,7 @@ public class BlasterVFX : MonoBehaviour
     {
         GameObject impact = new GameObject("BlasterImpact");
         impact.transform.position = position;
-        impact.transform.rotation = Quaternion.LookRotation(normal);
+        impact.transform.rotation = Quaternion.LookRotation(normal.sqrMagnitude > 0.001f ? normal : Vector3.up);
 
         ParticleSystem ps = impact.AddComponent<ParticleSystem>();
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -88,14 +363,14 @@ public class BlasterVFX : MonoBehaviour
         main.duration = 0.35f;
         main.loop = false;
         main.startLifetime = 0.25f;
-        main.startSpeed = isEnemy ? 9f : 6f;
-        main.startSize = 0.08f;
-        main.startColor = isEnemy ? new Color(1f, 0.3f, 0.1f) : new Color(0.9f, 0.85f, 0.5f);
+        main.startSpeed = isEnemy ? 9.5f : 6.5f;
+        main.startSize = isEnemy ? 0.095f : 0.08f;
+        main.startColor = isEnemy ? new Color(1f, 0.32f, 0.12f) : new Color(0.95f, 0.88f, 0.5f);
         main.gravityModifier = 2.5f;
 
         var emission = ps.emission;
         emission.rateOverTime = 0;
-        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, isEnemy ? 25 : 15) });
+        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, isEnemy ? 28 : 16) });
 
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Cone;

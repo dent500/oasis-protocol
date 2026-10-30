@@ -6,14 +6,17 @@ using UnityEngine.InputSystem;
 #endif
 
 /// <summary>
-/// First-Person Blaster Weapon supporting multi-archetype combat:
-/// 1. Standard Kinetic Rifle (balanced assault blaster)
+/// First-Person & Third-Person Blaster Weapon supporting multi-archetype combat:
+/// 1. Standard Kinetic Rifle (balanced precision marksman blaster)
 /// 2. Plasma Scatter Shotgun (8-pellet wide spread close-range punch)
 /// 3. Continuous Phase Laser Beam (sustained tracking heat beam)
 /// 4. Micro-Bomb Flak Mortar (ballistic plasma explosive bombs with AoE splash)
-/// 
-/// Features procedural 3D weapon models tailored to each archetype, procedural sound synthesis,
-/// recoil, sway, holographic ADS scope, and dynamic weapon swapping.
+/// 5. Tactical Defense Carbine (rapid-fire support carbine)
+/// 6. High-Caliber Dual Pistols (high-mobility gunslinger sidearms)
+///
+/// Features velocity-driven stride bobbing, sprint canting, multi-stage tactical reload animation,
+/// 3rd-person upper-body recoil synchronization, ejecting plasma casings, headshot critical multipliers,
+/// floating 3D damage popups, and holographic ADS optics.
 /// </summary>
 public class BlasterWeapon : MonoBehaviour
 {
@@ -46,9 +49,9 @@ public class BlasterWeapon : MonoBehaviour
     [Header("Weapon Positioning")]
     public Vector3 hipPosition = new Vector3(0.28f, -0.24f, 0.55f);
     public Vector3 aimPosition = new Vector3(0f, -0.16f, 0.45f);
-    public float swayAmount = 0.02f;
-    public float maxSway = 0.06f;
-    public float swaySmooth = 8f;
+    public float swayAmount = 0.022f;
+    public float maxSway = 0.065f;
+    public float swaySmooth = 11f;
 
     [Header("Recoil")]
     public float recoilKickback = 0.08f;
@@ -83,8 +86,16 @@ public class BlasterWeapon : MonoBehaviour
     private float _nextFireTime = 0f;
     private bool _isReloading = false;
     public bool isReloading => _isReloading;
+    private float _reloadStartTime = 0f;
+    private bool _reloadCasingEjected = false;
+    private bool _reloadBoltSlammed = false;
+
     private Vector3 _currentRecoilPos;
     private Vector3 _currentRecoilRot;
+    private Vector3 _smoothedBasePos;
+    private Quaternion _smoothedBaseRot = Quaternion.identity;
+    private float _stridePhase = 0f;
+    private float _verticalVelocitySway = 0f;
 
     public void SetWeaponVisualActive(bool active)
     {
@@ -102,6 +113,8 @@ public class BlasterWeapon : MonoBehaviour
 
         _fpc = GetComponentInParent<StarterAssets.FirstPersonController>();
         if (_fpc != null) _origRotationSpeed = _fpc.RotationSpeed;
+
+        _smoothedBasePos = hipPosition;
 
         // Create main audio source
         _audioSource = gameObject.AddComponent<AudioSource>();
@@ -142,6 +155,20 @@ public class BlasterWeapon : MonoBehaviour
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
     }
 
+    public Color GetWeaponEnergyColor()
+    {
+        switch (currentArchetype)
+        {
+            case WeaponArchetype.BombMortar: return new Color(1f, 0.45f, 0.1f);
+            case WeaponArchetype.ContinuousBeam: return new Color(0.2f, 0.95f, 1f);
+            case WeaponArchetype.ScatterShotgun: return new Color(1f, 0.38f, 0.14f);
+            case WeaponArchetype.DefenseCarbine: return new Color(0.25f, 1f, 0.55f);
+            case WeaponArchetype.DualPistols: return new Color(0.95f, 0.38f, 0.95f);
+            case WeaponArchetype.StandardRifle:
+            default: return new Color(0.2f, 0.95f, 1f);
+        }
+    }
+
     /// <summary>
     /// Configures weapon stats, displays, and 3D procedural chassis for the chosen archetype.
     /// </summary>
@@ -154,12 +181,12 @@ public class BlasterWeapon : MonoBehaviour
             case WeaponArchetype.ScatterShotgun:
                 weaponDisplayName = "Plasma Scatter Shotgun";
                 damage = 14f; // 14 x 8 pellets = 112 potential burst damage
-                fireRate = 0.65f;
+                fireRate = 0.62f;
                 range = 55f;
                 maxAmmo = 12;
-                reloadTime = 1.35f;
-                recoilKickback = 0.20f;
-                recoilRotation = 7.5f;
+                reloadTime = 1.30f;
+                recoilKickback = 0.22f;
+                recoilRotation = 8.5f;
                 recoilRecovery = 10f;
                 break;
 
@@ -170,8 +197,8 @@ public class BlasterWeapon : MonoBehaviour
                 range = 85f;
                 maxAmmo = 90;
                 reloadTime = 1.2f;
-                recoilKickback = 0.008f;
-                recoilRotation = 0.4f;
+                recoilKickback = 0.010f;
+                recoilRotation = 0.5f;
                 recoilRecovery = 16f;
                 break;
 
@@ -182,9 +209,9 @@ public class BlasterWeapon : MonoBehaviour
                 range = 220f;
                 maxAmmo = 10;
                 reloadTime = 1.3f;
-                recoilKickback = 0.20f;
-                recoilRotation = 6.5f;
-                recoilRecovery = 12f;
+                recoilKickback = 0.24f;
+                recoilRotation = 7.8f;
+                recoilRecovery = 11f;
                 break;
 
             case WeaponArchetype.DefenseCarbine:
@@ -194,8 +221,8 @@ public class BlasterWeapon : MonoBehaviour
                 range = 160f;
                 maxAmmo = 32;
                 reloadTime = 0.95f;
-                recoilKickback = 0.04f;
-                recoilRotation = 2.0f;
+                recoilKickback = 0.055f;
+                recoilRotation = 2.6f;
                 recoilRecovery = 16f;
                 break;
 
@@ -206,8 +233,8 @@ public class BlasterWeapon : MonoBehaviour
                 range = 110f;
                 maxAmmo = 24;
                 reloadTime = 0.85f;
-                recoilKickback = 0.06f;
-                recoilRotation = 3.0f;
+                recoilKickback = 0.075f;
+                recoilRotation = 3.6f;
                 recoilRecovery = 18f;
                 break;
 
@@ -219,8 +246,8 @@ public class BlasterWeapon : MonoBehaviour
                 range = 350f;
                 maxAmmo = 28;
                 reloadTime = 1.05f;
-                recoilKickback = 0.05f;
-                recoilRotation = 2.2f;
+                recoilKickback = 0.075f;
+                recoilRotation = 3.2f;
                 recoilRecovery = 15f;
                 break;
         }
@@ -328,10 +355,7 @@ public class BlasterWeapon : MonoBehaviour
 #endif
         reloadPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Reload);
 
-        bool is3rdPerson = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
-        bool is3rdAiming = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isAimingThirdPerson;
-
-        isScoped = scopeHeld;
+        isScoped = scopeHeld && !_isReloading;
 
         if (reloadPressed && currentAmmo < maxAmmo && !_isReloading)
         {
@@ -429,13 +453,6 @@ public class BlasterWeapon : MonoBehaviour
             {
                 _weaponRoot.gameObject.SetActive(!is3rdPerson);
             }
-            if (!is3rdPerson)
-            {
-                Vector3 targetPos = isScoped
-                    ? (currentArchetype == WeaponArchetype.StandardRifle ? new Vector3(0f, -0.42f, 0.40f) : aimPosition)
-                    : hipPosition;
-                _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, targetPos, Time.deltaTime * scopeZoomSpeed);
-            }
         }
 
         if (_fpc != null)
@@ -476,13 +493,19 @@ public class BlasterWeapon : MonoBehaviour
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
         OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
 
-        // Apply recoil impulse
-        _currentRecoilPos += new Vector3(0, 0.015f, -recoilKickback);
-        _currentRecoilRot += new Vector3(-recoilRotation, Random.Range(-1.2f, 1.2f), 0);
+        // Apply multi-axis physical gun recoil impulse (axial kickback + muzzle climb + dynamic roll)
+        float adsMultiplier = isScoped ? 0.45f : 1.0f;
+        _currentRecoilPos += new Vector3(Random.Range(-0.008f, 0.008f), 0.022f * adsMultiplier, -recoilKickback * adsMultiplier);
+        _currentRecoilRot += new Vector3(-recoilRotation * adsMultiplier, Random.Range(-1.6f, 1.6f) * adsMultiplier, Random.Range(-2.2f, 2.2f));
 
-        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.robotHeroAnimator != null)
+        bool isHeavyShot = (currentArchetype == WeaponArchetype.ScatterShotgun ||
+                            currentArchetype == WeaponArchetype.BombMortar ||
+                            currentArchetype == WeaponArchetype.StandardRifle);
+        float tpKickScale = (currentArchetype == WeaponArchetype.ScatterShotgun || currentArchetype == WeaponArchetype.BombMortar) ? 1.55f : 1.0f;
+
+        if (OasisCombatMovement.Instance != null)
         {
-            OasisCombatMovement.Instance.robotHeroAnimator.Play("Shoot_Autoshot_AR", 0, 0f);
+            OasisCombatMovement.Instance.TriggerWeaponShootAnim(tpKickScale, isHeavyShot);
         }
 
         if (_muzzleFlashLight != null)
@@ -492,6 +515,12 @@ public class BlasterWeapon : MonoBehaviour
 
         Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
         Vector3 muzzlePos = GetMuzzlePosition();
+
+        // Eject a spinning hot plasma shell casing from the weapon receiver
+        Vector3 ejectRight = _camera != null ? _camera.transform.right : transform.right;
+        Vector3 ejectPos = muzzlePos - (_camera != null ? _camera.transform.forward * 0.28f : transform.forward * 0.28f) + ejectRight * 0.08f;
+        BlasterVFX.SpawnShellCasing(ejectPos, ejectRight, GetWeaponEnergyColor());
+
         int localId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
         int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
         Transform playerRoot = OasisCombatMovement.Instance != null ? OasisCombatMovement.Instance.transform : null;
@@ -544,7 +573,7 @@ public class BlasterWeapon : MonoBehaviour
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.44f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.46f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
@@ -560,7 +589,7 @@ public class BlasterWeapon : MonoBehaviour
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetShotgunShotClip(), 0.55f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetShotgunShotClip(), 0.58f);
         }
 
         Color shotgunColor = new Color(1f, 0.45f, 0.1f);
@@ -594,6 +623,7 @@ public class BlasterWeapon : MonoBehaviour
         if (primaryHitAI != null && totalPelletDamageOnAI > 0f)
         {
             OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(primaryHitAI, totalPelletDamageOnAI, primaryHitDist);
+            BlasterVFX.SpawnDamagePopup(primaryHitAI.transform.position + Vector3.up * 1.4f, totalPelletDamageOnAI, totalPelletDamageOnAI >= 55f, primaryHitAI.currentShield > 0f);
         }
 
         Vector3 fallbackMuzzle = GetMuzzlePosition(ray.GetPoint(range));
@@ -623,6 +653,7 @@ public class BlasterWeapon : MonoBehaviour
         }
 
         Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+        BlasterVFX.SpawnMuzzleFlash(trueMuzzle, (targetPoint - trueMuzzle).normalized, new Color(1f, 0.55f, 0.15f));
 
         // Calculate smooth ballistic mortar arc towards targetPoint (speed ~55 m/s)
         Vector3 toTarget = targetPoint - trueMuzzle;
@@ -647,7 +678,7 @@ public class BlasterWeapon : MonoBehaviour
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.32f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.34f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
@@ -663,7 +694,7 @@ public class BlasterWeapon : MonoBehaviour
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.42f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.44f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
@@ -717,7 +748,7 @@ public class BlasterWeapon : MonoBehaviour
             if (playerRoot != null && (h.collider.transform.IsChildOf(playerRoot) || h.collider.transform == playerRoot)) continue;
 
             OasisCombatAI aiCheck = h.collider.GetComponentInParent<OasisCombatAI>();
-            if (aiCheck != null && aiCheck.teamId == localTeam) continue;
+            if (aiCheck != null && (aiCheck.teamId == localTeam || aiCheck.isDowned || aiCheck.isDead)) continue;
 
             if (h.distance < closestDist)
             {
@@ -761,15 +792,20 @@ public class BlasterWeapon : MonoBehaviour
             _nextBeamTickTime = Time.time + beamTickInterval;
             currentAmmo--;
             OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
+            OasisCombatMovement.Instance?.TriggerWeaponShootAnim(0.35f, false);
 
             if (hasHit)
             {
                 OasisCombatAI hitAI = bestHit.collider.GetComponentInParent<OasisCombatAI>();
-                if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead)
+                if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead && !hitAI.isDowned)
                 {
-                    hitAI.TakeDamage(damage, bestHit.point, bestHit.normal, localId, localTeam);
-                    OasisCombatMovement.Instance?.TriggerHitmarker();
-                    OasisShooterManager.Instance?.OnTargetHit(damage, hitAI.isDowned);
+                    bool isHeadshot = (bestHit.point.y - hitAI.transform.position.y) >= 1.42f;
+                    float finalDmg = isHeadshot ? damage * 1.4f : damage;
+                    bool hadShield = hitAI.currentShield > 0f;
+                    hitAI.TakeDamage(finalDmg, bestHit.point, bestHit.normal, localId, localTeam, bestHit.distance);
+                    BlasterVFX.SpawnDamagePopup(bestHit.point, finalDmg, isHeadshot, hadShield);
+                    OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
+                    OasisShooterManager.Instance?.OnTargetHit(finalDmg, hitAI.isDowned);
                     OasisShooterManager.Instance?.AddPlayerScore(5);
                     if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), 0.35f);
                 }
@@ -779,7 +815,7 @@ public class BlasterWeapon : MonoBehaviour
                     if (drone != null)
                     {
                         drone.TakeDamage(damage, bestHit.point, bestHit.normal, localId);
-                        OasisCombatMovement.Instance?.TriggerHitmarker();
+                        OasisCombatMovement.Instance?.TriggerHitmarker(false);
                     }
                 }
             }
@@ -793,7 +829,7 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Core Hitscan Resolver
+    // Core Hitscan Resolver (with Headshot Crit Detection & 3D Damage Popups)
     // ─────────────────────────────────────────────────────────────────────────────
     private Vector3 PerformRaycastShot(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId, float dmg, out bool hitHostile, bool isPellet = false)
     {
@@ -857,19 +893,26 @@ public class BlasterWeapon : MonoBehaviour
             if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead && !hitAI.isDowned)
             {
                 hitHostile = true;
+                bool isHeadshot = !isPellet && ((bestHit.point.y - hitAI.transform.position.y) >= 1.42f);
+                float finalDmg = isHeadshot ? (dmg * 1.5f) : dmg;
+                bool hadShield = hitAI.currentShield > 0f;
+
                 outHitAI = hitAI;
                 outHitDist = bestHit.distance;
                 if (!isPellet)
                 {
-                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, dmg, bestHit.distance);
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, finalDmg, bestHit.distance);
+                    BlasterVFX.SpawnDamagePopup(bestHit.point, finalDmg, isHeadshot, hadShield);
                 }
-                hitAI.TakeDamage(dmg, bestHit.point, bestHit.normal, localId, localTeam);
-                OasisCombatMovement.Instance?.TriggerHitmarker();
-                OasisShooterManager.Instance?.OnTargetHit(dmg, hitAI.isDowned);
-                OasisShooterManager.Instance?.AddPlayerScore(isPellet ? 2 : 15);
+                hitAI.TakeDamage(finalDmg, bestHit.point, bestHit.normal, localId, localTeam, bestHit.distance);
+                OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
+                OasisShooterManager.Instance?.OnTargetHit(finalDmg, hitAI.isDowned);
+                OasisShooterManager.Instance?.AddPlayerScore(isPellet ? 2 : (isHeadshot ? 25 : 15));
                 if (_audioSource != null && (!isPellet || Random.value < 0.3f))
                 {
-                    _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), 0.65f);
+                    _audioSource.pitch = isHeadshot ? 1.28f : 1.0f;
+                    _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), isHeadshot ? 0.85f : 0.65f);
+                    _audioSource.pitch = 1.0f;
                 }
             }
             else
@@ -879,7 +922,8 @@ public class BlasterWeapon : MonoBehaviour
                 {
                     hitHostile = true;
                     drone.TakeDamage(dmg, bestHit.point, bestHit.normal, localId);
-                    OasisCombatMovement.Instance?.TriggerHitmarker();
+                    BlasterVFX.SpawnDamagePopup(bestHit.point, dmg, false, false);
+                    OasisCombatMovement.Instance?.TriggerHitmarker(false);
                 }
                 else
                 {
@@ -912,22 +956,24 @@ public class BlasterWeapon : MonoBehaviour
     private IEnumerator Reload()
     {
         _isReloading = true;
+        _reloadStartTime = Time.time;
+        _reloadCasingEjected = false;
+        _reloadBoltSlammed = false;
+        isScoped = false;
+
         UpdateContinuousBeam(false);
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
         OasisAITelemetryLogger.Instance?.RecordPlayerReload();
 
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetReloadClip(), 0.8f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetReloadClip(), 0.85f);
         }
 
-        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.robotHeroAnimator != null)
+        if (OasisCombatMovement.Instance != null)
         {
-            OasisCombatMovement.Instance.robotHeroAnimator.Play("Reload", 0, 0f);
+            OasisCombatMovement.Instance.TriggerWeaponReloadAnim(reloadTime);
         }
-
-        Vector3 origRecoil = _currentRecoilPos;
-        _currentRecoilPos += new Vector3(0, -0.15f, -0.05f);
 
         yield return new WaitForSeconds(reloadTime);
 
@@ -955,15 +1001,97 @@ public class BlasterWeapon : MonoBehaviour
         mouseY = Input.GetAxis("Mouse Y");
 #endif
 
-        float moveX = Mathf.Clamp(-mouseX * swayAmount, -maxSway, maxSway);
-        float moveY = Mathf.Clamp(-mouseY * swayAmount, -maxSway, maxSway);
+        float swayScale = isScoped ? 0.25f : 1.0f;
+        float moveX = Mathf.Clamp(-mouseX * swayAmount * swayScale, -maxSway, maxSway);
+        float moveY = Mathf.Clamp(-mouseY * swayAmount * swayScale, -maxSway, maxSway);
 
-        float bobX = Mathf.Sin(Time.time * 8f) * 0.005f;
-        float bobY = Mathf.Cos(Time.time * 16f) * 0.005f;
+        // Velocity-driven stride bobbing & vertical jump/land inertia
+        float horizSpeed = 0f;
+        float vertVel = 0f;
+        if (OasisCombatMovement.Instance != null)
+        {
+            var cc = OasisCombatMovement.Instance.GetComponent<CharacterController>();
+            if (cc != null)
+            {
+                horizSpeed = new Vector2(cc.velocity.x, cc.velocity.z).magnitude;
+                vertVel = cc.velocity.y;
+            }
+        }
 
-        Vector3 targetPos = hipPosition + new Vector3(moveX + bobX, moveY + bobY, 0) + _currentRecoilPos;
-        _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, targetPos, Time.deltaTime * swaySmooth);
-        _weaponRoot.localRotation = Quaternion.Euler(_currentRecoilRot);
+        _verticalVelocitySway = Mathf.Lerp(_verticalVelocitySway, Mathf.Clamp(-vertVel * 0.008f, -0.055f, 0.055f), Time.deltaTime * 10f);
+
+        float bobFreq = horizSpeed > 0.35f ? Mathf.Lerp(7.5f, 13.5f, Mathf.Clamp01(horizSpeed / 10f)) : 1.8f;
+        _stridePhase += Time.deltaTime * bobFreq;
+
+        float bobAmp = horizSpeed > 0.35f
+            ? Mathf.Lerp(0.006f, 0.022f, Mathf.Clamp01(horizSpeed / 10f)) * swayScale
+            : 0.002f * swayScale;
+
+        float bobX = Mathf.Cos(_stridePhase) * bobAmp;
+        float bobY = Mathf.Abs(Mathf.Sin(_stridePhase)) * (-bobAmp * 1.35f) + _verticalVelocitySway;
+        float bobRoll = Mathf.Sin(_stridePhase) * (horizSpeed > 0.35f ? 1.8f * swayScale : 0.2f);
+
+        // Determine base stance position & rotation (ADS vs Hip vs Tactical Sprint vs Multi-Stage Reload)
+        Vector3 desiredBasePos = isScoped
+            ? (currentArchetype == WeaponArchetype.StandardRifle ? new Vector3(0f, -0.42f, 0.40f) : aimPosition)
+            : hipPosition;
+        Quaternion desiredBaseRot = Quaternion.Euler(0f, 0f, bobRoll - mouseX * 1.4f * swayScale);
+
+        bool isSprinting = (horizSpeed > 7.8f && !isScoped && (Time.time - (_nextFireTime - fireRate)) > 0.25f && !_isBeamActive && !_isReloading);
+        if (isSprinting)
+        {
+            // Tactical sprint ready cant: tuck rifle slightly inward and angled across chest
+            desiredBasePos = hipPosition + new Vector3(-0.08f, -0.06f, -0.04f);
+            desiredBaseRot = Quaternion.Euler(12f, -24f, 18f + bobRoll * 1.5f);
+        }
+
+        if (_isReloading)
+        {
+            float rFrac = Mathf.Clamp01((Time.time - _reloadStartTime) / Mathf.Max(0.2f, reloadTime));
+            if (rFrac < 0.32f)
+            {
+                // Stage 1: Tilt weapon 36 deg to inspect chamber & drop empty plasma cell
+                float t = rFrac / 0.32f;
+                desiredBasePos = hipPosition + Vector3.Lerp(Vector3.zero, new Vector3(-0.06f, -0.14f, -0.06f), Mathf.Sin(t * Mathf.PI * 0.5f));
+                desiredBaseRot = Quaternion.Euler(Mathf.Lerp(0f, 24f, t), Mathf.Lerp(0f, -18f, t), Mathf.Lerp(0f, 38f, t));
+
+                if (rFrac > 0.16f && !_reloadCasingEjected)
+                {
+                    _reloadCasingEjected = true;
+                    Vector3 ejectRight = _camera != null ? _camera.transform.right : transform.right;
+                    BlasterVFX.SpawnShellCasing(_weaponRoot.position, -ejectRight, GetWeaponEnergyColor());
+                }
+            }
+            else if (rFrac < 0.72f)
+            {
+                // Stage 2: Insert fresh plasma cell with upward slam impulse at 60%
+                float t = (rFrac - 0.32f) / 0.40f;
+                float slamBump = (t > 0.55f && t < 0.85f) ? Mathf.Sin(((t - 0.55f) / 0.30f) * Mathf.PI) * 0.065f : 0f;
+                if (t > 0.58f && !_reloadBoltSlammed)
+                {
+                    _reloadBoltSlammed = true;
+                    _currentRecoilPos += new Vector3(0f, 0.045f, 0.025f);
+                    _currentRecoilRot += new Vector3(-6.5f, 0f, -8f);
+                }
+                desiredBasePos = hipPosition + new Vector3(-0.05f, -0.12f + slamBump, -0.05f);
+                desiredBaseRot = Quaternion.Euler(22f - slamBump * 140f, -14f, 34f);
+            }
+            else
+            {
+                // Stage 3: Rack charging bolt and snap back to level combat stance
+                float t = (rFrac - 0.72f) / 0.28f;
+                float rackPull = Mathf.Sin(t * Mathf.PI) * -0.055f;
+                desiredBasePos = Vector3.Lerp(hipPosition + new Vector3(-0.04f, -0.08f, -0.04f + rackPull), hipPosition, t);
+                desiredBaseRot = Quaternion.Slerp(Quaternion.Euler(16f, -10f, 28f), Quaternion.identity, t);
+            }
+        }
+
+        _smoothedBasePos = Vector3.Lerp(_smoothedBasePos, desiredBasePos, Time.deltaTime * scopeZoomSpeed);
+        _smoothedBaseRot = Quaternion.Slerp(_smoothedBaseRot, desiredBaseRot, Time.deltaTime * swaySmooth);
+
+        Vector3 finalPos = _smoothedBasePos + new Vector3(moveX + bobX, moveY + bobY, 0f) + _currentRecoilPos;
+        _weaponRoot.localPosition = Vector3.Lerp(_weaponRoot.localPosition, finalPos, Time.deltaTime * (swaySmooth * 1.3f));
+        _weaponRoot.localRotation = _smoothedBaseRot * Quaternion.Euler(_currentRecoilRot);
     }
 
     private void RecoverRecoil()
@@ -991,12 +1119,7 @@ public class BlasterWeapon : MonoBehaviour
         bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
         _weaponRoot.gameObject.SetActive(!is3rd);
 
-        Color energyColor = currentArchetype == WeaponArchetype.BombMortar ? new Color(1f, 0.45f, 0.1f) :
-                            currentArchetype == WeaponArchetype.ContinuousBeam ? new Color(0.2f, 0.95f, 1f) :
-                            currentArchetype == WeaponArchetype.ScatterShotgun ? new Color(1f, 0.35f, 0.15f) :
-                            currentArchetype == WeaponArchetype.DefenseCarbine ? new Color(0.3f, 1f, 0.6f) :
-                            currentArchetype == WeaponArchetype.DualPistols ? new Color(1f, 0.85f, 0.2f) :
-                            new Color(0.1f, 0.95f, 1f);
+        Color energyColor = GetWeaponEnergyColor();
 
         // Find authentic AssaultRifle mesh from character model / RobotHero
         Mesh rifleMesh = null;
@@ -1178,28 +1301,28 @@ public class BlasterWeapon : MonoBehaviour
         RectTransform tlRT = topLabel.AddComponent<RectTransform>();
         tlRT.anchorMin = new Vector2(0.5f, 0.5f);
         tlRT.anchorMax = new Vector2(0.5f, 0.5f);
-        tlRT.sizeDelta = new Vector2(320, 24);
-        tlRT.anchoredPosition = new Vector2(0, 160);
+        tlRT.sizeDelta = new Vector2(450, 30);
+        tlRT.anchoredPosition = new Vector2(0, 250);
         _scopeWeaponLabel = topLabel.AddComponent<Text>();
         _scopeWeaponLabel.font = font;
-        _scopeWeaponLabel.fontSize = 12;
+        _scopeWeaponLabel.fontSize = 13;
         _scopeWeaponLabel.fontStyle = FontStyle.Bold;
-        _scopeWeaponLabel.text = "[ HOLOGRAPHIC TARGETING SYS ]";
-        _scopeWeaponLabel.color = new Color(0.2f, 0.95f, 1.0f, 0.75f);
+        _scopeWeaponLabel.text = "[ 6X LONG-RANGE PRECISION OPTIC // CALIBRATED ]";
+        _scopeWeaponLabel.color = new Color(0.2f, 0.95f, 1.0f, 0.85f);
         _scopeWeaponLabel.alignment = TextAnchor.MiddleCenter;
 
         _scopeCanvas.SetActive(false);
     }
 
-    private void CreateScopeLine(Transform parent, Vector2 pos, Vector2 size, Color color)
+    private void CreateScopeLine(Transform parent, Vector2 anchoredPos, Vector2 size, Color color)
     {
-        GameObject line = new GameObject("ReticleLine");
+        GameObject line = new GameObject("ScopeReticleLine");
         line.transform.SetParent(parent, false);
         RectTransform rt = line.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = size;
-        rt.anchoredPosition = pos;
+        rt.anchoredPosition = anchoredPos;
         Image img = line.AddComponent<Image>();
         img.color = color;
     }

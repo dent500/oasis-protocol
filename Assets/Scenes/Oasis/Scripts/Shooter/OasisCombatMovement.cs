@@ -132,6 +132,18 @@ public class OasisCombatMovement : MonoBehaviour
     private float _origSprintSpeed = 10.0f;
     private bool _wasDowned = false;
 
+    // Weapon Animation, Recoil IK & Close-Quarters Melee State
+    private float _shootAnimTimer = 0f;
+    private string _shootAnimClip = "Shoot_Autoshot_AR";
+    private float _reloadAnimTimer = 0f;
+    private float _reloadTotalDuration = 1.1f;
+    private float _tpRecoilPitch = 0f;
+    private float _tpRecoilYaw = 0f;
+    private float _meleeCooldownTimer = 0f;
+    private float _meleeAnimTimer = 0f;
+    private bool _isCritHitmarker = false;
+    private float _reticleBloom = 0f;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -332,6 +344,7 @@ public class OasisCombatMovement : MonoBehaviour
         HandleRevivalInteractions();
         HandleCrouchInput();
         HandleDashInput();
+        HandleMeleeInput();
         HandleAbilityInput();
         HandleAimCameraInput();
         HandleJumpEffect();
@@ -994,10 +1007,19 @@ public class OasisCombatMovement : MonoBehaviour
         float camPitch = _cameraTarget != null ? _cameraTarget.localEulerAngles.x : cam.transform.eulerAngles.x;
         if (camPitch > 180f) camPitch -= 360f;
 
-        // 1. Spine pitch & horizontal parallax convergence
+        // Decay procedural 3rd-person recoil and reticle bloom smoothly
+        _tpRecoilPitch = Mathf.Lerp(_tpRecoilPitch, 0f, Time.deltaTime * 15f);
+        _tpRecoilYaw = Mathf.Lerp(_tpRecoilYaw, 0f, Time.deltaTime * 15f);
+        _reticleBloom = Mathf.Lerp(_reticleBloom, 0f, Time.deltaTime * 12f);
+
+        // Blend down arm IK override while reloading so the two-handed magazine swap animation plays naturally
+        float ikWeight = (_reloadAnimTimer > 0f) ? 0.25f : 1.0f;
+
+        // 1. Spine pitch, recoil kick & horizontal parallax convergence
         if (_spineBone != null)
         {
-            _spineBone.Rotate(cam.transform.right, camPitch * 0.55f, Space.World);
+            float spinePitch = (camPitch * 0.55f - _tpRecoilPitch * 0.45f) * ikWeight;
+            _spineBone.Rotate(cam.transform.right, spinePitch, Space.World);
 
             if (isThirdPerson)
             {
@@ -1005,14 +1027,16 @@ public class OasisCombatMovement : MonoBehaviour
                 Vector3 localDir = transform.InverseTransformDirection(toTarget);
                 float yawOffset = Mathf.Atan2(localDir.x, localDir.z) * Mathf.Rad2Deg;
                 yawOffset = Mathf.Clamp(yawOffset, -25f, 25f);
-                _spineBone.Rotate(Vector3.up, yawOffset * 0.45f, Space.World);
+                float meleeTwist = (_meleeAnimTimer > 0f) ? Mathf.Sin((_meleeAnimTimer / 0.28f) * Mathf.PI) * -32f : 0f;
+                _spineBone.Rotate(Vector3.up, (yawOffset * 0.45f + _tpRecoilYaw * 0.4f) * ikWeight + meleeTwist, Space.World);
             }
         }
 
-        // 2. Gun arm pitch & aim convergence
-        if (_gunArmBone != null)
+        // 2. Gun arm pitch, recoil kick & aim convergence
+        if (_gunArmBone != null && ikWeight > 0.3f)
         {
-            _gunArmBone.Rotate(cam.transform.right, camPitch * 0.45f, Space.World);
+            float armPitch = (camPitch * 0.45f - _tpRecoilPitch * 0.85f) * ikWeight;
+            _gunArmBone.Rotate(cam.transform.right, armPitch, Space.World);
 
             if (isThirdPerson)
             {
@@ -1020,7 +1044,7 @@ public class OasisCombatMovement : MonoBehaviour
                 Vector3 localDir = transform.InverseTransformDirection(toTarget);
                 float yawOffset = Mathf.Atan2(localDir.x, localDir.z) * Mathf.Rad2Deg;
                 yawOffset = Mathf.Clamp(yawOffset, -30f, 30f);
-                _gunArmBone.Rotate(Vector3.up, yawOffset * 0.55f, Space.World);
+                _gunArmBone.Rotate(Vector3.up, (yawOffset * 0.55f + _tpRecoilYaw * 0.6f) * ikWeight, Space.World);
             }
         }
     }
@@ -1066,13 +1090,153 @@ public class OasisCombatMovement : MonoBehaviour
 
     }
 
+    public void TriggerWeaponShootAnim(float kickIntensity = 1.0f, bool isHeavySingleShot = false)
+    {
+        _shootAnimTimer = isHeavySingleShot ? 0.34f : 0.22f;
+        _shootAnimClip = isHeavySingleShot ? "Shoot_SingleShot_AR" : "Shoot_Autoshot_AR";
+        _tpRecoilPitch = Mathf.Min(22f, _tpRecoilPitch + 8.5f * kickIntensity);
+        _tpRecoilYaw = Random.Range(-3.2f, 3.2f) * kickIntensity;
+        _reticleBloom = Mathf.Min(18f, _reticleBloom + 4.8f * kickIntensity);
+
+        if (robotHeroAnimator != null && _reloadAnimTimer <= 0f && !isCrouching)
+        {
+            float horizontalSpeed = _characterController != null
+                ? new Vector3(_characterController.velocity.x, 0f, _characterController.velocity.z).magnitude
+                : 0f;
+            if (horizontalSpeed <= 0.35f)
+            {
+                robotHeroAnimator.speed = 1.0f;
+                robotHeroAnimator.Play(_shootAnimClip, 0, 0f);
+            }
+        }
+    }
+
+    public void TriggerWeaponReloadAnim(float duration)
+    {
+        _reloadTotalDuration = Mathf.Max(0.45f, duration);
+        _reloadAnimTimer = _reloadTotalDuration;
+        _shootAnimTimer = 0f;
+
+        if (robotHeroAnimator != null && !isCrouching)
+        {
+            robotHeroAnimator.speed = 1.35f / _reloadTotalDuration;
+            robotHeroAnimator.Play("Reload", 0, 0f);
+        }
+    }
+
+    private void HandleMeleeInput()
+    {
+        if (_meleeCooldownTimer > 0f)
+        {
+            _meleeCooldownTimer -= Time.deltaTime;
+        }
+        if (_meleeAnimTimer > 0f)
+        {
+            _meleeAnimTimer -= Time.deltaTime;
+        }
+
+        if (_meleeCooldownTimer > 0f) return;
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned) return;
+
+        bool meleePressed = false;
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null && Keyboard.current.qKey.wasPressedThisFrame)
+        {
+            meleePressed = true;
+        }
+        if (Mouse.current != null && Mouse.current.middleButton.wasPressedThisFrame)
+        {
+            meleePressed = true;
+        }
+#else
+        if (Input.GetKeyDown(KeyCode.Q) || Input.GetMouseButtonDown(2))
+        {
+            meleePressed = true;
+        }
+#endif
+        if (meleePressed)
+        {
+            ExecutePlasmaMeleeStrike();
+        }
+    }
+
+    private void ExecutePlasmaMeleeStrike()
+    {
+        _meleeCooldownTimer = 0.68f;
+        _meleeAnimTimer = 0.28f;
+        _tpRecoilPitch = -6f;
+
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetDashClip(), 0.95f);
+        }
+
+        Camera cam = Camera.main;
+        Vector3 strikeOrigin = (cam != null && !isThirdPerson)
+            ? cam.transform.position + cam.transform.forward * 0.45f - cam.transform.up * 0.15f
+            : transform.position + Vector3.up * 1.25f + transform.forward * 0.45f;
+        Vector3 strikeForward = (cam != null) ? cam.transform.forward : transform.forward;
+        Vector3 strikeRight = (cam != null) ? cam.transform.right : transform.right;
+
+        // Forward combat lunge
+        if (_characterController != null)
+        {
+            Vector3 lungeDir = new Vector3(strikeForward.x, 0f, strikeForward.z).normalized;
+            _characterController.Move(lungeDir * 0.85f);
+        }
+
+        BlasterVFX.SpawnMeleeArc(strikeOrigin, strikeForward, new Color(0.2f, 0.95f, 1.0f));
+
+        if (robotHeroAnimator != null && !isCrouching)
+        {
+            robotHeroAnimator.speed = 1.85f;
+            robotHeroAnimator.Play("Shoot_SingleShot_AR", 0, 0f);
+        }
+
+        int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        int localId = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.myPlayerId : 0;
+        bool landedHit = false;
+
+        foreach (var bot in OasisCombatAI.ActiveBots)
+        {
+            if (bot == null || bot.isDead || bot.teamId == localTeam) continue;
+            Vector3 toBot = (bot.transform.position + Vector3.up * 1.0f) - transform.position;
+            float dist = toBot.magnitude;
+            if (dist <= 3.8f)
+            {
+                Vector3 flatToBot = new Vector3(toBot.x, 0f, toBot.z).normalized;
+                Vector3 flatFwd = new Vector3(strikeForward.x, 0f, strikeForward.z).normalized;
+                if (Vector3.Dot(flatFwd, flatToBot) >= 0.25f || dist <= 1.8f)
+                {
+                    float meleeDmg = 65f;
+                    Vector3 hitPos = bot.transform.position + Vector3.up * 1.2f;
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(bot, meleeDmg, dist);
+                    bot.TakeDamage(meleeDmg, hitPos, -flatToBot, localId, localTeam, dist);
+                    BlasterVFX.SpawnDamagePopup(hitPos, meleeDmg, true, false);
+                    TriggerHitmarker(true);
+                    landedHit = true;
+                }
+            }
+        }
+
+        if (landedHit && OasisShooterManager.Instance != null)
+        {
+            OasisShooterManager.Instance.currentHealth = Mathf.Min(
+                OasisShooterManager.Instance.maxHealth,
+                OasisShooterManager.Instance.currentHealth + 20f);
+            OasisShooterManager.Instance.AddPlayerScore(25);
+        }
+    }
+
     private void UpdateCharacterAnimation()
     {
         if (robotHeroAnimator == null) return;
 
-        float horizontalSpeed = _characterController != null 
-            ? new Vector3(_characterController.velocity.x, 0f, _characterController.velocity.z).magnitude 
-            : 0f;
+        if (_shootAnimTimer > 0f) _shootAnimTimer -= Time.deltaTime;
+        if (_reloadAnimTimer > 0f) _reloadAnimTimer -= Time.deltaTime;
+
+        Vector3 vel = _characterController != null ? _characterController.velocity : Vector3.zero;
+        float horizontalSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
 
         if (isCrouching)
         {
@@ -1096,22 +1260,69 @@ public class OasisCombatMovement : MonoBehaviour
                 robotHeroAnimator.speed = 0.85f;
                 robotHeroAnimator.Play("WalkFront_Shoot_AR");
             }
+            return;
+        }
+
+        if (robotHeroVisual != null)
+        {
+            robotHeroVisual.transform.localRotation = Quaternion.identity;
+        }
+
+        // Priority 1: Close-quarters Melee Slash animation
+        if (_meleeAnimTimer > 0f)
+        {
+            robotHeroAnimator.speed = 1.85f;
+            robotHeroAnimator.Play("Shoot_SingleShot_AR");
+            return;
+        }
+
+        // Priority 2: Active Weapon Reload animation (when stationary or walking)
+        if (_reloadAnimTimer > 0f && horizontalSpeed < 4.5f)
+        {
+            robotHeroAnimator.speed = Mathf.Clamp(1.35f / _reloadTotalDuration, 0.75f, 1.8f);
+            robotHeroAnimator.Play("Reload");
+            return;
+        }
+
+        // Priority 3: Directional Aimed Locomotion & Firing Animations
+        bool isCombatPosture = isAimingThirdPerson || isHoldingLeftClickAim || _shootAnimTimer > 0f;
+
+        if (horizontalSpeed > 0.35f)
+        {
+            Vector3 localVel = transform.InverseTransformDirection(vel);
+            robotHeroAnimator.speed = 1.0f;
+
+            if (isCombatPosture || horizontalSpeed <= 5.2f)
+            {
+                if (Mathf.Abs(localVel.x) > Mathf.Abs(localVel.z) * 0.85f)
+                {
+                    robotHeroAnimator.Play(localVel.x < 0f ? "WalkLeft_Shoot_AR" : "WalkRight_Shoot_AR");
+                }
+                else if (localVel.z < -0.35f)
+                {
+                    robotHeroAnimator.Play("WalkBack_Shoot_AR");
+                }
+                else if (horizontalSpeed > 3.8f)
+                {
+                    robotHeroAnimator.Play("Run_gunMiddle_AR");
+                }
+                else
+                {
+                    robotHeroAnimator.Play("WalkFront_Shoot_AR");
+                }
+            }
+            else
+            {
+                // Full sprint out of combat
+                robotHeroAnimator.Play("Run_guard_AR");
+            }
         }
         else
         {
             robotHeroAnimator.speed = 1.0f;
-            if (robotHeroVisual != null)
+            if (_shootAnimTimer > 0f || isHoldingLeftClickAim)
             {
-                robotHeroVisual.transform.localRotation = Quaternion.identity;
-            }
-
-            if (horizontalSpeed > 2.0f)
-            {
-                robotHeroAnimator.Play("Run_guard_AR");
-            }
-            else if (horizontalSpeed > 0.35f)
-            {
-                robotHeroAnimator.Play("WalkFront_Shoot_AR");
+                robotHeroAnimator.Play(_shootAnimClip);
             }
             else
             {
@@ -1412,9 +1623,10 @@ public class OasisCombatMovement : MonoBehaviour
     private Texture2D _crosshairWhiteTex;
     private float _hitmarkerDisplayTimer = 0f;
 
-    public void TriggerHitmarker()
+    public void TriggerHitmarker(bool isCrit = false)
     {
-        _hitmarkerDisplayTimer = 0.15f;
+        _hitmarkerDisplayTimer = isCrit ? 0.24f : 0.16f;
+        _isCritHitmarker = isCrit;
     }
 
     private void OnGUI()
@@ -1460,8 +1672,12 @@ public class OasisCombatMovement : MonoBehaviour
         // 1. Center Aim Dot (4x4)
         GUI.DrawTexture(new Rect(centerX - 2, centerY - 2, 4, 4), _crosshairWhiteTex);
 
-        // 2. Aiming Reticle Ticks / Ring (Circle aesthetic)
-        float radius = isAimingThirdPerson ? 12f : 18f;
+        // 2. Dynamic Aiming Reticle Ticks (expands with firing bloom & movement velocity)
+        float moveSpeedSpread = (_characterController != null)
+            ? Mathf.Min(6f, new Vector2(_characterController.velocity.x, _characterController.velocity.z).magnitude * 0.55f)
+            : 0f;
+        float baseRadius = isAimingThirdPerson ? 10f : 16f;
+        float radius = baseRadius + _reticleBloom + (isAimingThirdPerson ? moveSpeedSpread * 0.4f : moveSpeedSpread);
         float tickLen = isAimingThirdPerson ? 5f : 7f;
         float tickThick = 2f;
 
@@ -1474,17 +1690,26 @@ public class OasisCombatMovement : MonoBehaviour
         // Right tick
         GUI.DrawTexture(new Rect(centerX + radius, centerY - (tickThick * 0.5f), tickLen, tickThick), _crosshairWhiteTex);
 
-        // 3. Diagonal Hitmarker ticks if hit enemy
+        // 3. Hitmarker Ticks (Gold double-bracket for Headshot/Melee CRIT, Crimson for standard hit)
         if (_hitmarkerDisplayTimer > 0f)
         {
-            GUI.color = new Color(1f, 0.15f, 0.15f, 0.95f);
-            float hmDist = 10f;
-            float hmLen = 6f;
-            // Draw diagonal hit indicators
-            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY - hmDist - hmLen, hmLen, 2), _crosshairWhiteTex);
-            GUI.DrawTexture(new Rect(centerX + hmDist, centerY - hmDist - hmLen, hmLen, 2), _crosshairWhiteTex);
-            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY + hmDist, hmLen, 2), _crosshairWhiteTex);
-            GUI.DrawTexture(new Rect(centerX + hmDist, centerY + hmDist, hmLen, 2), _crosshairWhiteTex);
+            GUI.color = _isCritHitmarker ? new Color(1f, 0.88f, 0.15f, 1.0f) : new Color(1f, 0.18f, 0.18f, 0.95f);
+            float hmDist = _isCritHitmarker ? 11f : 9f;
+            float hmLen = _isCritHitmarker ? 8f : 6f;
+            float hmThick = _isCritHitmarker ? 3f : 2f;
+            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY - hmDist - hmLen, hmLen, hmThick), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX + hmDist, centerY - hmDist - hmLen, hmLen, hmThick), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY + hmDist, hmLen, hmThick), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(centerX + hmDist, centerY + hmDist, hmLen, hmThick), _crosshairWhiteTex);
+
+            if (_isCritHitmarker)
+            {
+                // Vertical cross bars on diagonal corners for CRIT
+                GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY - hmDist - hmLen, hmThick, hmLen), _crosshairWhiteTex);
+                GUI.DrawTexture(new Rect(centerX + hmDist + hmLen - hmThick, centerY - hmDist - hmLen, hmThick, hmLen), _crosshairWhiteTex);
+                GUI.DrawTexture(new Rect(centerX - hmDist - hmLen, centerY + hmDist - hmLen + hmThick, hmThick, hmLen), _crosshairWhiteTex);
+                GUI.DrawTexture(new Rect(centerX + hmDist + hmLen - hmThick, centerY + hmDist - hmLen + hmThick, hmThick, hmLen), _crosshairWhiteTex);
+            }
         }
 
         GUI.color = Color.white;
