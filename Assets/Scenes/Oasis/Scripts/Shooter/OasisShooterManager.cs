@@ -1855,6 +1855,17 @@ public class OasisShooterManager : MonoBehaviour
         return string.Join(" | ", parts);
     }
 
+    private void DrawRectOutline(Rect r, Color col, float thickness)
+    {
+        Color prevCol = GUI.color;
+        GUI.color = col;
+        GUI.DrawTexture(new Rect(r.x, r.y, r.width, thickness), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(r.x, r.yMax - thickness, r.width, thickness), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(r.x, r.y, thickness, r.height), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(r.xMax - thickness, r.y, thickness, r.height), Texture2D.whiteTexture);
+        GUI.color = prevCol;
+    }
+
     private void OnGUI()
     {
         // 1. Post-Match Victory / Summary Modal Card (Renders for BOTH Character Play & Simulation Mode)
@@ -1875,8 +1886,7 @@ public class OasisShooterManager : MonoBehaviour
             // Card background & outline
             GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.96f);
             GUI.DrawTexture(new Rect(cardX, cardY, cardW, cardH), Texture2D.whiteTexture);
-            GUI.color = accentCol * 0.85f;
-            GUI.Box(new Rect(cardX, cardY, cardW, cardH), "");
+            DrawRectOutline(new Rect(cardX, cardY, cardW, cardH), accentCol * 0.85f, 2f);
             GUI.color = Color.white;
 
             // Header Style
@@ -1951,7 +1961,7 @@ public class OasisShooterManager : MonoBehaviour
                 GUI.DrawTexture(new Rect(curX, tableY, colWidth, 30f), Texture2D.whiteTexture);
                 GUI.color = Color.white;
 
-                int tKills = (t < teamKills.Length) ? teamKills[t] : 0;
+                int tKills = (teamKills != null && t < teamKills.Length) ? teamKills[t] : 0;
                 string sShort = GetTeamShortName(t);
 
                 GUIStyle thStyleLeft = new GUIStyle(GUI.skin.label)
@@ -2018,7 +2028,8 @@ public class OasisShooterManager : MonoBehaviour
                     GUI.color = Color.white;
 
                     // Operative Name
-                    string cleanName = entry.playerName.Replace($"[{sShort}] ", "");
+                    string rawName = string.IsNullOrEmpty(entry.playerName) ? "Operative" : entry.playerName;
+                    string cleanName = rawName.Replace($"[{sShort}] ", "");
                     string displayName = entry.isLocal ? "YOU (OPERATIVE)" : cleanName;
 
                     GUIStyle rowStyleLeft = new GUIStyle(GUI.skin.label)
@@ -2530,6 +2541,7 @@ public class OasisShooterManager : MonoBehaviour
         isTeamBattleActive = false;
         isTimerRunning = false;
         isMatchFinished = true;
+        Time.timeScale = 1f;
         matchWinningTeam = winningTeam;
         matchTimeRemaining = 0f;
 
