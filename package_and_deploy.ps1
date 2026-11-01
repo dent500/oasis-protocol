@@ -7,7 +7,7 @@ Write-Host "========================================"
 powershell -ExecutionPolicy Bypass -File .\build_game.ps1
 
 $sourceDir = (Resolve-Path "Builds\Release\OasisProtocol-v1.1.0-Win64").Path
-$version = "v1.1.2"
+$version = "v1.1.3"
 $zipName = "Oasis-Protocol-$version-Windows.zip"
 $destZip = Join-Path (Resolve-Path "Builds\Release").Path $zipName
 

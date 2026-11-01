@@ -651,6 +651,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
         sb.AppendLine($"# Oasis FPS - AI Simulation Match Telemetry Report ({nTeams} Teams × {pPerTeam} Players)");
         sb.AppendLine($"**Session ID:** `{sessionMatchId}`  ");
         sb.AppendLine($"**Match Duration:** `{Mathf.FloorToInt(matchElapsedTime / 60):00}:{Mathf.FloorToInt(matchElapsedTime % 60):00}`  ");
+        OasisShooterManager.Instance?.ReconcileTeamScores();
         string scoreLine = (OasisShooterManager.Instance != null) 
             ? OasisShooterManager.Instance.FormatAllTeamScoresPlain() 
             : "ALPHA: 0 | BRAVO: 0";
@@ -670,6 +671,31 @@ public class OasisAITelemetryLogger : MonoBehaviour
             var b = kvp.Value;
             string teamStr = OasisShooterManager.GetTeamShortName(b.teamId);
             sb.AppendLine($"| **{b.botName}** | {teamStr} | {b.operativeClass} | {b.eliminationsCompleted} / {b.fullDeaths} | {b.Accuracy:F1}% ({b.shotsHit}/{b.shotsFired}) | {b.totalDamageDealt:F0} | {b.totalDamageTaken:F0} | {b.AverageEngagementRange:F1}m | {b.stuckIncidents} |");
+        }
+
+        if (OasisNetworkManager.Instance != null)
+        {
+            var entries = OasisNetworkManager.Instance.GetScoreboardData();
+            foreach (var e in entries)
+            {
+                if (!e.isLocal && !_botMetricsMap.ContainsKey(e.playerName))
+                {
+                    bool exists = false;
+                    foreach (var b in _botMetricsMap.Values)
+                    {
+                        if (b.botName == e.playerName || (!string.IsNullOrEmpty(b.botName) && e.playerName.EndsWith(b.botName)))
+                        {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists)
+                    {
+                        string teamStr = OasisShooterManager.GetTeamShortName(e.teamId);
+                        sb.AppendLine($"| **{e.playerName}** | {teamStr} | {e.className} | {e.kills} / 0 | -- | -- | -- | -- | 0 |");
+                    }
+                }
+            }
         }
         sb.AppendLine();
 

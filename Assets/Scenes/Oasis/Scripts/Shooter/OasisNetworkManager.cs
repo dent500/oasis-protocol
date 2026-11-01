@@ -339,6 +339,20 @@ public class OasisNetworkManager : MonoBehaviour
     public int localScore = 0;
     public int localKills = 0;
 
+    public void ResetMatchStats()
+    {
+        localScore = 0;
+        localKills = 0;
+        foreach (var rp in _remotePlayers.Values)
+        {
+            if (rp != null)
+            {
+                rp.score = 0;
+                rp.kills = 0;
+            }
+        }
+    }
+
     /// <summary>
     /// Returns transforms of all active operatives (local player + all connected remote operatives)
     /// for intelligent drone AI target acquisition.
@@ -1910,6 +1924,7 @@ public class OasisNetworkManager : MonoBehaviour
                 {
                     rp.score = sc;
                     rp.kills = kl;
+                    OasisShooterManager.Instance?.ReconcileTeamScores();
                 }
                 BroadcastToClients(msg, senderId);
             }
@@ -2170,6 +2185,7 @@ public class OasisNetworkManager : MonoBehaviour
                 {
                     rp.score = sc;
                     rp.kills = kl;
+                    OasisShooterManager.Instance?.ReconcileTeamScores();
                 }
             }
             else if (cmd == "RESTART_GAME")
@@ -3447,8 +3463,13 @@ public class OasisNetworkManager : MonoBehaviour
             Color teamColor = OasisShooterManager.GetTeamColor(t);
             thBg.color = new Color(teamColor.r * 0.45f, teamColor.g * 0.45f, teamColor.b * 0.45f, 0.95f);
 
+            var teamPlayers = allEntries.FindAll(e => e.teamId == t);
+            teamPlayers.Sort((a, b) => b.score.CompareTo(a.score));
+            int sumKills = 0;
+            for (int p = 0; p < teamPlayers.Count; p++) sumKills += teamPlayers[p].kills;
+
             int tKills = (OasisShooterManager.Instance != null && t < OasisShooterManager.Instance.teamKills.Length) 
-                ? OasisShooterManager.Instance.teamKills[t] : 0;
+                ? Mathf.Max(OasisShooterManager.Instance.teamKills[t], sumKills) : sumKills;
 
             string sShort = OasisShooterManager.GetTeamShortName(t);
             CreateLabel(teamHdrObj.transform, $"[{sShort}]", 14, new Vector2(-colWidth * 0.30f, 0), new Vector2(colWidth * 0.38f, 28), FontStyle.Bold, Color.white);
@@ -3468,10 +3489,6 @@ public class OasisNetworkManager : MonoBehaviour
             opLabel.alignment = TextAnchor.MiddleLeft;
             CreateLabel(subHdr.transform, "K", 10, new Vector2(colWidth * 0.16f, 0), new Vector2(30, 20), FontStyle.Bold, new Color(1f, 0.4f, 0.3f));
             CreateLabel(subHdr.transform, "PTS", 10, new Vector2(colWidth * 0.36f, 0), new Vector2(40, 20), FontStyle.Bold, new Color(1f, 0.85f, 0.25f));
-
-            // Populate Players for this team
-            var teamPlayers = allEntries.FindAll(e => e.teamId == t);
-            teamPlayers.Sort((a, b) => b.score.CompareTo(a.score));
 
             for (int r = 0; r < teamPlayers.Count; r++)
             {
