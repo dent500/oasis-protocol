@@ -189,6 +189,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
     private StarterAssets.StarterAssetsInputs _starterInputs;
 
+    public bool isLocalReady = false;
+
     public bool IsLocalPlayerClient()
     {
         return OasisNetworkManager.Instance != null &&
@@ -197,7 +199,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
     public bool CanLocalPlayerStartGame()
     {
-        return !IsLocalPlayerClient();
+        if (OasisNetworkManager.Instance == null) return true;
+        return OasisNetworkManager.Instance.currentRole != OasisNetworkManager.NetworkRole.Client;
     }
 
     public void OnRoleHeaderButtonClicked()
@@ -211,7 +214,22 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
         if (IsLocalPlayerClient())
         {
-            SwitchToHostRoleInStaging();
+            string hostName = "HOST";
+            if (OasisNetworkManager.Instance != null)
+            {
+                var ops = OasisNetworkManager.Instance.GetRemoteOperatives();
+                var h = ops.Find(x => x.isHost);
+                if (!string.IsNullOrEmpty(h.playerName)) hostName = h.playerName;
+            }
+            OasisShooterManager.Instance?.ShowNotificationBanner($"CONNECTED TO SQUAD HOST: {hostName}", 2.5f);
+            return;
+        }
+
+        if (OasisNetworkManager.Instance != null && OasisNetworkManager.Instance.currentRole == OasisNetworkManager.NetworkRole.Host)
+        {
+            string ip = OasisNetworkManager.GetLocalIPAddress();
+            GUIUtility.systemCopyBuffer = ip;
+            OasisShooterManager.Instance?.ShowNotificationBanner($"HOST IP {ip} COPIED TO CLIPBOARD!", 3f);
         }
     }
 
@@ -219,8 +237,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
     {
         if (_roleHeaderBtnBg == null || _roleHeaderBtnText == null) return;
 
-        bool canStart = CanLocalPlayerStartGame();
-        if (canStart)
+        bool isClient = IsLocalPlayerClient();
+        if (!isClient)
         {
             _roleHeaderBtnBg.color = new Color(0.08f, 0.45f, 0.28f, 0.96f);
             string relayCode = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.activeRelayJoinCode : "";
@@ -239,20 +257,119 @@ public class OasisCharacterCustomizer : MonoBehaviour
         }
         else
         {
-            _roleHeaderBtnBg.color = new Color(0.52f, 0.32f, 0.08f, 0.96f);
-            _roleHeaderBtnText.text = "<color=#FFEA00>● ROLE: CLIENT — WAITING FOR HOST  [CLICK FOR HOST]</color>";
+            _roleHeaderBtnBg.color = new Color(0.12f, 0.35f, 0.50f, 0.96f);
+            bool welcomed = OasisNetworkManager.Instance != null && OasisNetworkManager.Instance.HasReceivedWelcome;
+            string hostName = "HOST";
+            if (OasisNetworkManager.Instance != null)
+            {
+                var ops = OasisNetworkManager.Instance.GetRemoteOperatives();
+                var h = ops.Find(x => x.isHost);
+                if (!string.IsNullOrEmpty(h.playerName)) hostName = h.playerName;
+            }
+
+            if (welcomed)
+            {
+                _roleHeaderBtnText.text = $"<color=#70D6FF>● ROLE: OPERATIVE (CLIENT) // SQUAD HOST: <b>{hostName.ToUpper()}</b></color>";
+            }
+            else
+            {
+                string code = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.activeRelayJoinCode : "";
+                _roleHeaderBtnText.text = $"<color=#70D6FF>● CONNECTING TO SQUAD ({code})...</color>";
+            }
         }
     }
 
-    public void SwitchToHostRoleInStaging()
+    public void OnConfirmOrReadyButtonClicked()
     {
-        if (OasisNetworkManager.Instance != null)
+        if (IsLocalPlayerClient())
         {
-            OasisNetworkManager.Instance.EnsureHostSessionForStaging();
-            OasisNetworkManager.Instance.BroadcastLobbySelection(selectedTeam, selectedOperativeIndex, selectedNumTeams, selectedPlayersPerTeam);
+            // Real client toggles their ready status
+            isLocalReady = !isLocalReady;
+            if (OasisNetworkManager.Instance != null)
+            {
+                OasisNetworkManager.Instance.SendReadyState(isLocalReady);
+            }
+            RefreshConfirmButtonState();
+            UpdateRosterDisplay();
+            PlayCountdownSound(isLocalReady);
         }
-        RefreshMatchSettingsUI();
-        UpdatePreviewAndDossier();
+        else
+        {
+            // Host deploys the match (guaranteeing all connected real clients are ready)
+            if (OasisNetworkManager.Instance != null && !OasisNetworkManager.Instance.AreAllRealPlayersReady())
+            {
+                int total = OasisNetworkManager.Instance.GetRealPlayerCount();
+                int ready = OasisNetworkManager.Instance.GetReadyRealPlayerCount();
+                OasisShooterManager.Instance?.ShowNotificationBanner($"CANNOT LAUNCH: SQUAD NOT READY! ({ready}/{total} READY)", 3f);
+                PlayCountdownSound(false);
+                return;
+            }
+
+            PromptOrStartDeployment(isSpectatorMode);
+        }
+    }
+
+    public void RefreshConfirmButtonState()
+    {
+        if (_confirmButton == null || _confirmButtonText == null || _confirmButtonBg == null) return;
+
+        UpdateMatchFormatString();
+        bool isClient = IsLocalPlayerClient();
+
+        if (isClient)
+        {
+            _confirmButton.interactable = true;
+            if (isLocalReady)
+            {
+                _confirmButtonBg.color = new Color(0.08f, 0.65f, 0.38f, 1.0f);
+                _confirmButtonText.text = "✔ SQUAD OPERATIVE READY!   //   WAITING FOR HOST TO DEPLOY (CLICK TO CANCEL)";
+            }
+            else
+            {
+                _confirmButtonBg.color = new Color(0.85f, 0.45f, 0.08f, 1.0f);
+                _confirmButtonText.text = "● CLICK TO READY UP   //   NOT READY (READY UP TO DEPLOY)";
+            }
+        }
+        else
+        {
+            int realCount = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetRealPlayerCount() : 1;
+            bool allReady = (OasisNetworkManager.Instance == null || OasisNetworkManager.Instance.AreAllRealPlayersReady());
+
+            if (realCount > 1)
+            {
+                int readyCount = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetReadyRealPlayerCount() : 1;
+                if (allReady)
+                {
+                    _confirmButton.interactable = true;
+                    _confirmButtonBg.color = isSpectatorMode
+                        ? new Color(0.12f, 0.48f, 0.72f, 1.0f)
+                        : new Color(0.08f, 0.65f, 0.38f, 1.0f);
+                    _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (ALL {realCount} OPERATIVES READY!)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM";
+                }
+                else
+                {
+                    _confirmButton.interactable = true;
+                    _confirmButtonBg.color = new Color(0.35f, 0.28f, 0.15f, 1.0f);
+                    _confirmButtonText.text = $"WAITING FOR PLAYERS TO READY UP  ({readyCount}/{realCount} READY)   //   ONLY HOST CAN LAUNCH";
+                }
+            }
+            else
+            {
+                _confirmButton.interactable = true;
+                _confirmButtonBg.color = isSpectatorMode
+                    ? new Color(0.12f, 0.48f, 0.72f, 1.0f)
+                    : new Color(0.08f, 0.65f, 0.38f, 1.0f);
+                string teamLabel = OasisShooterManager.GetTeamFullName(selectedTeam);
+                if (isSpectatorMode)
+                {
+                    _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  SPECTATOR AI SIMULATION";
+                }
+                else
+                {
+                    _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  {teamLabel}";
+                }
+            }
+        }
     }
 
     public void ReturnToMainMenu()
@@ -364,9 +481,19 @@ public class OasisCharacterCustomizer : MonoBehaviour
         StartCoroutine(EnforceLaunchSelectionState());
     }
 
+    private float _lobbyRefreshTimer = 0f;
+
     private void Update()
     {
         if (!isSelectionActive) return;
+
+        _lobbyRefreshTimer += Time.unscaledDeltaTime;
+        if (_lobbyRefreshTimer >= 0.25f)
+        {
+            _lobbyRefreshTimer = 0f;
+            UpdateRoleHeaderBadge();
+            RefreshConfirmButtonState();
+        }
 
         // Handle active 10s countdown shortcuts (ONLY the Host can skip or cancel the countdown)
         if (_isCountingDown && CanLocalPlayerStartGame())
@@ -705,58 +832,9 @@ public class OasisCharacterCustomizer : MonoBehaviour
             _dossierPassiveText.text = $"PASSIVE [<color=#{ColorUtility.ToHtmlStringRGB(op.themeColor)}>{op.passiveTrait}</color>]: {op.passiveDescription}";
         }
 
-        // 4. Unified Launch Game Mode Button (ONLY the Host can start the game!)
-        UpdateMatchFormatString();
-        bool canStart = CanLocalPlayerStartGame();
-        if (_confirmButton != null)
-        {
-            _confirmButton.interactable = canStart;
-        }
-        if (_confirmButtonText != null)
-        {
-            if (!canStart)
-            {
-                string teamLabel = OasisShooterManager.GetTeamFullName(selectedTeam);
-                _confirmButtonText.text = $"WAITING FOR HOST TO START GAME...   //   ONLY THE HOST CAN START THE GAME  ({teamLabel})";
-            }
-            else if (isSpectatorMode)
-            {
-                _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  SPECTATOR AI SIMULATION";
-            }
-            else
-            {
-                string teamLabel = OasisShooterManager.GetTeamFullName(selectedTeam);
-                _confirmButtonText.text = $"HOST: LAUNCH 3:00 MATCH (START FOR ALL)   //   {selectedNumTeams} TEAMS × {selectedPlayersPerTeam}/TEAM  •  {teamLabel}";
-            }
-        }
-        if (_confirmButtonBg != null)
-        {
-            if (!canStart)
-            {
-                _confirmButtonBg.color = new Color(0.16f, 0.20f, 0.28f, 0.96f);
-            }
-            else
-            {
-                _confirmButtonBg.color = isSpectatorMode
-                    ? new Color(0.12f, 0.48f, 0.72f, 1.0f)
-                    : new Color(0.08f, 0.65f, 0.38f, 1.0f);
-            }
-        }
-
-        if (_roleHeaderBtnBg != null && _roleHeaderBtnText != null)
-        {
-            if (canStart)
-            {
-                _roleHeaderBtnBg.color = new Color(0.08f, 0.45f, 0.28f, 0.96f);
-                _roleHeaderBtnText.text = "<color=#38EF7D>★ ROLE: SQUAD HOST (HOST STARTS GAME)</color>";
-            }
-            else
-            {
-                _roleHeaderBtnBg.color = new Color(0.52f, 0.32f, 0.08f, 0.96f);
-                _roleHeaderBtnText.text = "<color=#FFEA00>● ROLE: CLIENT — [CLICK TO SWITCH TO HOST]</color>";
-            }
-        }
-
+        // 4. Update Ready / Deploy Button, Role Badge, and Squad Roster
+        RefreshConfirmButtonState();
+        UpdateRoleHeaderBadge();
         UpdateRosterDisplay();
     }
 
@@ -1040,13 +1118,21 @@ public class OasisCharacterCustomizer : MonoBehaviour
                     int opIdx = Mathf.Clamp(rop.operativeIndex, 0, operatives.Count - 1);
                     var rProfile = operatives[opIdx];
                     string roleBadge = rop.isHost ? $"{rop.playerName.ToUpper()} (HOST)" : rop.playerName.ToUpper();
+                    string readyTag = rop.isHost
+                        ? "<color=#38EF7D>[HOST ✔]</color>"
+                        : (rop.isReady ? "<color=#38EF7D>[READY ✔]</color>" : "<color=#FFA500>[NOT READY ⏳]</color>");
+                    if (rop.isLocalPlaceholder)
+                    {
+                        readyTag = rop.isHost ? "<color=#38EF7D>[HOST]</color>" : "<color=#8FA0B5>[CONNECTING...]</color>";
+                    }
+
                     if (numTeams >= 3)
                     {
-                        sb.AppendLine($"<color=#38EF7D>● {roleBadge} (Real)</color>\n  <b>{rProfile.name}</b> <color={colorHex}>[{rProfile.id}]</color>");
+                        sb.AppendLine($"<color=#38EF7D>● {roleBadge}</color> {readyTag}\n  <b>{rProfile.name}</b> <color={colorHex}>[{rProfile.id}]</color>");
                     }
                     else
                     {
-                        sb.AppendLine($"<color=#38EF7D>● {roleBadge} (Real Player)</color> — <b>{rProfile.name}</b> <color={colorHex}>[{rProfile.id}]</color>\n    <color=#94A8BE>{rProfile.role}</color>");
+                        sb.AppendLine($"<color=#38EF7D>● {roleBadge} (Real)</color> {readyTag} — <b>{rProfile.name}</b> <color={colorHex}>[{rProfile.id}]</color>\n    <color=#94A8BE>{rProfile.role}</color>");
                     }
                 }
             }
@@ -1060,13 +1146,17 @@ public class OasisCharacterCustomizer : MonoBehaviour
                     ? OasisNetworkManager.Instance.myPlayerName.ToUpper()
                     : "YOU";
                 string youLabel = isLocalHost ? $"{myName} (HOST / YOU)" : $"{myName} (YOU)";
+                string myReadyTag = isLocalHost
+                    ? "<color=#38EF7D>[HOST ✔]</color>"
+                    : (isLocalReady ? "<color=#38EF7D>[READY ✔]</color>" : "<color=#FFA500>[NOT READY ⏳]</color>");
+
                 if (numTeams >= 3)
                 {
-                    sb.AppendLine($"<color=#FFEA00>★ {youLabel}</color>\n  <b>{chosenOp.name}</b> <color={colorHex}>[{chosenOp.id}]</color>");
+                    sb.AppendLine($"<color=#FFEA00>★ {youLabel}</color> {myReadyTag}\n  <b>{chosenOp.name}</b> <color={colorHex}>[{chosenOp.id}]</color>");
                 }
                 else
                 {
-                    sb.AppendLine($"<color=#FFEA00>★ {youLabel}</color> — <b>{chosenOp.name}</b> <color={colorHex}>[{chosenOp.id}]</color>\n    <color=#94A8BE>{chosenOp.role}</color>");
+                    sb.AppendLine($"<color=#FFEA00>★ {youLabel}</color> {myReadyTag} — <b>{chosenOp.name}</b> <color={colorHex}>[{chosenOp.id}]</color>\n    <color=#94A8BE>{chosenOp.role}</color>");
                 }
             }
 
@@ -2020,7 +2110,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         _roleHeaderBtnBg.color = new Color(0.08f, 0.48f, 0.30f, 0.95f);
         Button roleBtn = roleBtnObj.AddComponent<Button>();
         roleBtn.targetGraphic = _roleHeaderBtnBg;
-        roleBtn.onClick.AddListener(SwitchToHostRoleInStaging);
+        roleBtn.onClick.AddListener(OnRoleHeaderButtonClicked);
 
         GameObject roleTxtObj = new GameObject("Label");
         roleTxtObj.transform.SetParent(roleBtnObj.transform, false);
@@ -2815,9 +2905,10 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
         Button deployBtn = deployBtnObj.AddComponent<Button>();
         deployBtn.targetGraphic = _confirmButtonBg;
-        deployBtn.interactable = CanLocalPlayerStartGame();
-        deployBtn.onClick.AddListener(() => PromptOrStartDeployment(isSpectatorMode));
+        deployBtn.interactable = true;
+        deployBtn.onClick.AddListener(OnConfirmOrReadyButtonClicked);
         _confirmButton = deployBtn;
+        RefreshConfirmButtonState();
 
         GameObject depTextObj = new GameObject("Text");
         depTextObj.transform.SetParent(deployBtnObj.transform, false);

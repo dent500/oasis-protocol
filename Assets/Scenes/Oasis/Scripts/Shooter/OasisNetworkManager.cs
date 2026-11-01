@@ -151,6 +151,7 @@ public class OasisNetworkManager : MonoBehaviour
         public int teamId;
         public int operativeIndex;
         public bool isLocalPlaceholder;
+        public bool isReady;
     }
 
     public struct ConnectedOperativeInfo
@@ -161,6 +162,82 @@ public class OasisNetworkManager : MonoBehaviour
         public int operativeIndex;
         public bool isHost;
         public bool isLocalPlaceholder;
+        public bool isReady;
+    }
+
+    public bool HasReceivedWelcome => _clientReceivedWelcome;
+
+    public bool AreAllRealPlayersReady()
+    {
+        foreach (var kvp in _remotePlayers)
+        {
+            if (kvp.Value != null && !kvp.Value.isLocalPlaceholder)
+            {
+                if (!kvp.Value.isReady) return false;
+            }
+        }
+        return true;
+    }
+
+    public int GetRealPlayerCount()
+    {
+        int count = 1; // local player
+        foreach (var kvp in _remotePlayers)
+        {
+            if (kvp.Value != null && !kvp.Value.isLocalPlaceholder)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int GetReadyRealPlayerCount()
+    {
+        int count = 1; // local host or player if ready
+        if (currentRole == NetworkRole.Client)
+        {
+            count = (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isLocalReady) ? 1 : 0;
+            // Remote Host is always counted as ready
+            count += 1;
+        }
+
+        foreach (var kvp in _remotePlayers)
+        {
+            if (kvp.Value != null && !kvp.Value.isLocalPlaceholder)
+            {
+                if (currentRole == NetworkRole.Host && kvp.Value.isReady)
+                {
+                    count++;
+                }
+                else if (currentRole == NetworkRole.Client && kvp.Value.id != 0 && kvp.Value.isReady)
+                {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    public void SendReadyState(bool ready)
+    {
+        string packet = $"READY|{myPlayerId}|{(ready ? 1 : 0)}";
+        if (currentRole == NetworkRole.Host)
+        {
+            BroadcastToClients(packet, myPlayerId);
+            if (isUsingRelay && _relayDriver.IsCreated)
+            {
+                _relayDriver.ScheduleUpdate().Complete();
+            }
+        }
+        else if (currentRole == NetworkRole.Client)
+        {
+            SendPacketToServer(packet);
+            if (isUsingRelay && _relayDriver.IsCreated)
+            {
+                _relayDriver.ScheduleUpdate().Complete();
+            }
+        }
     }
 
     public List<ConnectedOperativeInfo> GetRemoteOperatives()
@@ -176,7 +253,8 @@ public class OasisNetworkManager : MonoBehaviour
                 teamId = kvp.Value.teamId,
                 operativeIndex = kvp.Value.operativeIndex,
                 isHost = (kvp.Value.id == 0),
-                isLocalPlaceholder = kvp.Value.isLocalPlaceholder
+                isLocalPlaceholder = kvp.Value.isLocalPlaceholder,
+                isReady = kvp.Value.isReady
             });
         }
         list.Sort((a, b) => a.playerId.CompareTo(b.playerId));
@@ -514,6 +592,7 @@ public class OasisNetworkManager : MonoBehaviour
                     int pTeam = rp.teamId;
                     int pOpIdx = rp.operativeIndex;
                     bool pPlaceholder = rp.isLocalPlaceholder;
+                    bool pReady = rp.isReady;
                     if (rp.gameObject != null)
                     {
                         Destroy(rp.gameObject);
@@ -527,6 +606,7 @@ public class OasisNetworkManager : MonoBehaviour
                         newRp.teamId = pTeam;
                         newRp.operativeIndex = pOpIdx;
                         newRp.isLocalPlaceholder = pPlaceholder;
+                        newRp.isReady = pReady;
                     }
                 }
             }
@@ -653,15 +733,19 @@ public class OasisNetworkManager : MonoBehaviour
         // 2. Transmit local player updates if online
         if (currentRole != NetworkRole.Offline)
         {
-            if (currentRole == NetworkRole.Client && !isUsingRelay && !_clientReceivedWelcome && _udpClient != null)
+            if (currentRole == NetworkRole.Client && !_clientReceivedWelcome)
             {
                 _joinRetryTimer += Time.unscaledDeltaTime;
-                if (_joinRetryTimer >= 0.8f)
+                if (_joinRetryTimer >= 0.75f)
                 {
                     _joinRetryTimer = 0f;
                     int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
                     int myOp = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
                     SendPacketToServer($"JOIN|{myPlayerName}|{myTeam}|{myOp}");
+                    if (isUsingRelay && _relayDriver.IsCreated)
+                    {
+                        _relayDriver.ScheduleUpdate().Complete();
+                    }
                 }
             }
 
@@ -1412,6 +1496,8 @@ public class OasisNetworkManager : MonoBehaviour
                             _relayConnectionToPlayerId.Remove(conn);
                             BroadcastToClients($"PLAYER_LEFT|{leavingId}");
                             UpdatePlayerListUI();
+                            OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+                            OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
                         }
                         _relayIncomingConnections[i] = default(NetworkConnection);
                         break;
@@ -1432,6 +1518,10 @@ public class OasisNetworkManager : MonoBehaviour
                     int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
                     int myOp = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
                     SendRelayMessage(_relayServerConn, $"JOIN|{myPlayerName}|{myTeam}|{myOp}");
+                    if (_relayDriver.IsCreated)
+                    {
+                        _relayDriver.ScheduleUpdate().Complete();
+                    }
                 }
                 else if (cmd == NetworkEvent.Type.Data)
                 {
@@ -1476,42 +1566,60 @@ public class OasisNetworkManager : MonoBehaviour
 
         if (cmd == "JOIN")
         {
-            if (_relayClientConnections.Count >= 3)
-            {
-                SendRelayMessage(senderConn, "REJECT|ROOM_FULL");
-                return;
-            }
-
             ClearLocalPlaceholders();
 
-            int newId = _nextClientId++;
-            string clientName = parts.Length > 1 ? parts[1] : $"Operative #{newId + 1}";
+            int targetId = -1;
+            if (_relayConnectionToPlayerId.TryGetValue(senderConn, out int existingId))
+            {
+                targetId = existingId;
+            }
+            else
+            {
+                if (_relayClientConnections.Count >= 3)
+                {
+                    SendRelayMessage(senderConn, "REJECT|ROOM_FULL");
+                    return;
+                }
+                targetId = _nextClientId++;
+                _relayClientConnections[targetId] = senderConn;
+                _relayConnectionToPlayerId[senderConn] = targetId;
+            }
+
+            string clientName = parts.Length > 1 ? parts[1] : $"Operative #{targetId + 1}";
             int clientTeam = (parts.Length > 2 && int.TryParse(parts[2], out int ct)) ? ct : 0;
             int clientOp = (parts.Length > 3 && int.TryParse(parts[3], out int co)) ? co : 1;
 
-            _relayClientConnections[newId] = senderConn;
-            _relayConnectionToPlayerId[senderConn] = newId;
-
             // Welcome
-            SendRelayMessage(senderConn, $"WELCOME|{newId}");
+            SendRelayMessage(senderConn, $"WELCOME|{targetId}");
 
-            // Spawn remote player on host
-            SpawnRemotePlayer(newId, clientName, clientTeam, clientOp, false);
+            // Spawn or update remote player on host
+            if (_remotePlayers.TryGetValue(targetId, out var existingRp) && existingRp != null)
+            {
+                existingRp.name = clientName;
+                existingRp.teamId = clientTeam;
+                existingRp.operativeIndex = clientOp;
+                existingRp.isLocalPlaceholder = false;
+                ApplyOperativeSkinToRemotePlayer(existingRp);
+            }
+            else
+            {
+                SpawnRemotePlayer(targetId, clientName, clientTeam, clientOp, false);
+            }
 
             // Broadcast to other clients
-            BroadcastToClients($"PLAYER_JOINED|{newId}|{clientName}|{clientTeam}|{clientOp}");
+            BroadcastToClients($"PLAYER_JOINED|{targetId}|{clientName}|{clientTeam}|{clientOp}|-1|-1|0", targetId);
 
             // Send Host and all existing players to new client with their selected Team & Operative
             int hostTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
             int hostOp = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
             int hostNumTeams = PlayerPrefs.GetInt("OasisNumTeams", 2);
             int hostPerTeam = PlayerPrefs.GetInt("OasisPlayersPerTeam", 2);
-            SendRelayMessage(senderConn, $"PLAYER_JOINED|0|SQUAD HOST|{hostTeam}|{hostOp}|{hostNumTeams}|{hostPerTeam}");
+            SendRelayMessage(senderConn, $"PLAYER_JOINED|0|{myPlayerName}|{hostTeam}|{hostOp}|{hostNumTeams}|{hostPerTeam}|1");
             foreach (var rp in _remotePlayers)
             {
-                if (rp.Key != newId && rp.Value != null)
+                if (rp.Key != targetId && rp.Value != null)
                 {
-                    SendRelayMessage(senderConn, $"PLAYER_JOINED|{rp.Key}|{rp.Value.name}|{rp.Value.teamId}|{rp.Value.operativeIndex}");
+                    SendRelayMessage(senderConn, $"PLAYER_JOINED|{rp.Key}|{rp.Value.name}|{rp.Value.teamId}|{rp.Value.operativeIndex}|-1|-1|{(rp.Value.isReady ? 1 : 0)}");
                 }
             }
 
@@ -1538,8 +1646,14 @@ public class OasisNetworkManager : MonoBehaviour
                 }
             }
 
+            if (_relayDriver.IsCreated)
+            {
+                _relayDriver.ScheduleUpdate().Complete();
+            }
+
             UpdatePlayerListUI();
             OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+            OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
             OasisShooterManager.Instance?.ShowNotificationBanner($"{clientName} JOINED! SQUAD READY!", 3f);
         }
         else
@@ -1640,6 +1754,30 @@ public class OasisNetworkManager : MonoBehaviour
             return;
         }
 
+        if (cmd == "READY" && parts.Length >= 3)
+        {
+            int senderId = int.Parse(parts[1]);
+            bool isReady = (parts[2] == "1");
+
+            if (_remotePlayers.TryGetValue(senderId, out var rp) && rp != null)
+            {
+                rp.isReady = isReady;
+            }
+
+            if (currentRole == NetworkRole.Host)
+            {
+                BroadcastToClients(msg, senderId);
+                if (isUsingRelay && _relayDriver.IsCreated)
+                {
+                    _relayDriver.ScheduleUpdate().Complete();
+                }
+            }
+
+            OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+            OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
+            return;
+        }
+
         if (currentRole == NetworkRole.Host)
         {
             // Host Packet Handling
@@ -1737,19 +1875,19 @@ public class OasisNetworkManager : MonoBehaviour
                 }
 
                 // Broadcast new player to all other clients
-                BroadcastToClients($"PLAYER_JOINED|{newId}|{clientName}|{clientTeam}|{clientOp}");
+                BroadcastToClients($"PLAYER_JOINED|{newId}|{clientName}|{clientTeam}|{clientOp}|-1|-1|0", newId);
 
                 // Send Host and all existing players to the new client
                 int hostTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
                 int hostOp = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
                 int hostNumTeams = PlayerPrefs.GetInt("OasisNumTeams", 2);
                 int hostPerTeam = PlayerPrefs.GetInt("OasisPlayersPerTeam", 2);
-                SendToEndpoint(senderEP, $"PLAYER_JOINED|0|SQUAD HOST|{hostTeam}|{hostOp}|{hostNumTeams}|{hostPerTeam}");
+                SendToEndpoint(senderEP, $"PLAYER_JOINED|0|{myPlayerName}|{hostTeam}|{hostOp}|{hostNumTeams}|{hostPerTeam}|1");
                 foreach (var rp in _remotePlayers)
                 {
                     if (rp.Key != newId && rp.Value != null)
                     {
-                        SendToEndpoint(senderEP, $"PLAYER_JOINED|{rp.Key}|{rp.Value.name}|{rp.Value.teamId}|{rp.Value.operativeIndex}");
+                        SendToEndpoint(senderEP, $"PLAYER_JOINED|{rp.Key}|{rp.Value.name}|{rp.Value.teamId}|{rp.Value.operativeIndex}|-1|-1|{(rp.Value.isReady ? 1 : 0)}");
                     }
                 }
 
@@ -1779,6 +1917,7 @@ public class OasisNetworkManager : MonoBehaviour
 
                 UpdatePlayerListUI();
                 OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+                OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
                 OasisShooterManager.Instance?.ShowNotificationBanner($"{clientName} JOINED! SQUAD READY!", 3f);
             }
             else if (cmd == "STATE")
@@ -1846,7 +1985,15 @@ public class OasisNetworkManager : MonoBehaviour
                 int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
                 int myOp = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
                 BroadcastLobbySelection(myTeam, myOp, PlayerPrefs.GetInt("OasisNumTeams", 2), PlayerPrefs.GetInt("OasisPlayersPerTeam", 2));
+                if (_remotePlayers.TryGetValue(0, out var hostRp) && hostRp != null)
+                {
+                    hostRp.isLocalPlaceholder = false;
+                    hostRp.isReady = true;
+                }
+                bool isReady = (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isLocalReady);
+                SendReadyState(isReady);
                 OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+                OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
                 OasisShooterManager.Instance?.ShowNotificationBanner($"CONNECTED TO SQUAD HOST! (OPERATIVE #{myPlayerId + 1})", 2.5f);
             }
             else if (cmd == "SYNC_WAVE")
@@ -1865,6 +2012,7 @@ public class OasisNetworkManager : MonoBehaviour
                 int pOp = (parts.Length > 4 && int.TryParse(parts[4], out int po)) ? po : 0;
                 int nTeams = (parts.Length > 5 && int.TryParse(parts[5], out int nt)) ? nt : -1;
                 int perTeam = (parts.Length > 6 && int.TryParse(parts[6], out int ppt)) ? ppt : -1;
+                bool pReady = (parts.Length > 7 && parts[7] == "1") || (id == 0);
 
                 if (id != myPlayerId)
                 {
@@ -1874,11 +2022,16 @@ public class OasisNetworkManager : MonoBehaviour
                         existingRp.teamId = pTeam;
                         existingRp.operativeIndex = pOp;
                         existingRp.isLocalPlaceholder = false;
+                        existingRp.isReady = pReady;
                         ApplyOperativeSkinToRemotePlayer(existingRp);
                     }
                     else
                     {
                         SpawnRemotePlayer(id, pName, pTeam, pOp, false);
+                        if (_remotePlayers.TryGetValue(id, out var newRp) && newRp != null)
+                        {
+                            newRp.isReady = pReady;
+                        }
                     }
 
                     if (id == 0 && nTeams >= 2 && perTeam >= 1 && OasisCharacterCustomizer.Instance != null)
@@ -1887,6 +2040,7 @@ public class OasisNetworkManager : MonoBehaviour
                     }
                     UpdatePlayerListUI();
                     OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
+                    OasisCharacterCustomizer.Instance?.RefreshConfirmButtonState();
                     OasisShooterManager.Instance?.ShowNotificationBanner($"{pName} IN STAGING BAY!", 2f);
                 }
             }
@@ -2199,7 +2353,7 @@ public class OasisNetworkManager : MonoBehaviour
     {
         if (currentRole == NetworkRole.Offline) return;
 
-        string pName = (currentRole == NetworkRole.Host) ? "SQUAD HOST" : $"OPERATIVE #{myPlayerId + 1}";
+        string pName = myPlayerName;
         string packet = $"LOBBY_SELECT|{myPlayerId}|{pName}|{teamId}|{operativeIndex}|{numTeams}|{playersPerTeam}";
 
         if (currentRole == NetworkRole.Host)
@@ -2213,6 +2367,10 @@ public class OasisNetworkManager : MonoBehaviour
         else if (currentRole == NetworkRole.Client)
         {
             SendPacketToServer(packet);
+            if (isUsingRelay && _relayDriver.IsCreated)
+            {
+                _relayDriver.ScheduleUpdate().Complete();
+            }
         }
     }
 
@@ -2263,6 +2421,10 @@ public class OasisNetworkManager : MonoBehaviour
                 {
                     SendRelayMessage(kvp.Value, message);
                 }
+            }
+            if (_relayDriver.IsCreated)
+            {
+                _relayDriver.ScheduleUpdate().Complete();
             }
             return;
         }
@@ -2683,7 +2845,8 @@ public class OasisNetworkManager : MonoBehaviour
             kills = prevKills,
             teamId = teamId,
             operativeIndex = operativeIndex,
-            isLocalPlaceholder = isPlaceholder
+            isLocalPlaceholder = isPlaceholder,
+            isReady = (id == 0) // Host is always ready by default
         };
 
         // Add CapsuleCollider so weapons and lasers register hits on remote operatives
@@ -3489,7 +3652,7 @@ public class OasisNetworkManager : MonoBehaviour
         _playerListText.text = sb.ToString();
     }
 
-    private static string GetLocalIPAddress()
+    public static string GetLocalIPAddress()
     {
         try
         {
