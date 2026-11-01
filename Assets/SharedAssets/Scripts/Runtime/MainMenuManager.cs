@@ -378,6 +378,8 @@ public class MainMenuManager : MonoBehaviour
     private Text _sensitivityValueText;
     private Text _fullscreenBtnText;
     private Image _fullscreenBtnBg;
+    private Text _outplayedSettingsBtnText;
+    private Image _outplayedSettingsBtnBg;
     private readonly Image[] _qualityBtnBgs = new Image[3];
     private readonly Text[] _qualityBtnTexts = new Text[3];
     private int _selectedQualityTier = 2; // 0 = Low, 1 = Medium, 2 = High/Ultra
@@ -760,6 +762,12 @@ public class MainMenuManager : MonoBehaviour
         }
     }
 
+    private void ToggleOutplayedSettings()
+    {
+        OasisOutplayedOverlay.AutoRecordEnabled = !OasisOutplayedOverlay.AutoRecordEnabled;
+        RefreshSettingsModalUI();
+    }
+
     public void CloseSettingsModal()
     {
         _awaitingRebindAction = null;
@@ -872,6 +880,18 @@ public class MainMenuManager : MonoBehaviour
             new Vector2(0.04f, 0.155f), new Vector2(0.40f, 0.22f), ToggleFullscreenMode);
         _fullscreenBtnBg = fsBtn.GetComponent<Image>();
         _fullscreenBtnText = fsBtn.GetComponentInChildren<Text>();
+
+        // 5. Outplayed Auto-Record
+        CreateAnchoredText(card.transform, font, "Lbl_Outplayed",
+            "OUTPLAYED MATCH RECORDER",
+            12, FontStyle.Bold, new Color(0.82f, 0.90f, 0.98f),
+            new Vector2(0.04f, 0.08f), new Vector2(0.40f, 0.14f), TextAnchor.MiddleLeft);
+
+        Button opBtn = CreateAnchoredButton(card.transform, font, "Btn_OutplayedAutoRec",
+            "● OUTPLAYED: AUTO-RECORD ON", 11, new Color(0.72f, 0.15f, 0.15f, 0.95f), Color.white,
+            new Vector2(0.04f, 0.015f), new Vector2(0.40f, 0.075f), ToggleOutplayedSettings);
+        _outplayedSettingsBtnBg = opBtn.GetComponent<Image>();
+        _outplayedSettingsBtnText = opBtn.GetComponentInChildren<Text>();
 
         // =====================================================================
         // RIGHT COLUMN: KEYBIND SELECTION GRID (0.45 .. 0.97)
@@ -1035,6 +1055,17 @@ public class MainMenuManager : MonoBehaviour
         if (_fullscreenBtnText != null)
         {
             _fullscreenBtnText.text = isFs ? "● FULLSCREEN MODE: ENABLED" : "WINDOWED MODE: ENABLED";
+        }
+
+        if (_outplayedSettingsBtnBg != null && _outplayedSettingsBtnText != null)
+        {
+            bool opEnabled = OasisOutplayedOverlay.AutoRecordEnabled;
+            _outplayedSettingsBtnBg.color = opEnabled
+                ? new Color(0.72f, 0.15f, 0.15f, 0.95f)
+                : new Color(0.12f, 0.20f, 0.30f, 0.95f);
+            _outplayedSettingsBtnText.text = opEnabled
+                ? "● AUTO-RECORD: ON [AUTO-STOP AT END]"
+                : "○ AUTO-RECORD: OFF [MANUAL ONLY]";
         }
 
         // Refresh Keybind Buttons

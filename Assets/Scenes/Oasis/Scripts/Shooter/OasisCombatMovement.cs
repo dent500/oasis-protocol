@@ -255,6 +255,7 @@ public class OasisCombatMovement : MonoBehaviour
             (OasisShooterManager.Instance != null && (OasisShooterManager.Instance.isSimulationMode || OasisShooterManager.Instance.isMatchFinished)) ||
             (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.isSelectionActive);
 
+        // Pause is authoritatively handled by InGamePauseManager to avoid double-toggle race conditions.
         if (menuOrMatchEnded)
         {
             _wasMenuOrMatchEnded = true;
@@ -274,6 +275,12 @@ public class OasisCombatMovement : MonoBehaviour
         {
             _wasMenuOrMatchEnded = false;
             SetThirdPersonMode(false); // Enter gameplay in natural First-Person Shooter view by default (V toggles 3rd-person)
+            if (_inputs != null)
+            {
+                _inputs.SetCursorState(true);
+            }
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
 
         HandleCameraViewToggle();
@@ -307,10 +314,15 @@ public class OasisCombatMovement : MonoBehaviour
                 _fpc.MoveSpeed = 1.15f; // Slow prone crawl speed
                 _fpc.SprintSpeed = 1.15f;
             }
+            if (_characterController != null)
+            {
+                _characterController.height = 0.55f;
+                _characterController.center = new Vector3(0f, 0.28f, 0f);
+            }
             if (_cameraTarget != null)
             {
                 Vector3 camPos = _cameraTarget.localPosition;
-                camPos.y = Mathf.Lerp(camPos.y, 0.45f, Time.deltaTime * 6f);
+                camPos.y = Mathf.Lerp(camPos.y, 0.35f, Time.deltaTime * 8f);
                 _cameraTarget.localPosition = camPos;
             }
             float crawlSpeed = _characterController != null
@@ -321,7 +333,7 @@ public class OasisCombatMovement : MonoBehaviour
             if (robotHeroVisual != null)
             {
                 float crawlSway = isCrawling ? Mathf.Sin(Time.time * 5.2f) * 6.0f : 0f;
-                robotHeroVisual.transform.localPosition = Vector3.Lerp(robotHeroVisual.transform.localPosition, new Vector3(0f, 0.22f, -0.40f), Time.deltaTime * 10f);
+                robotHeroVisual.transform.localPosition = Vector3.Lerp(robotHeroVisual.transform.localPosition, new Vector3(0f, 0.18f, -0.40f), Time.deltaTime * 10f);
                 robotHeroVisual.transform.localRotation = Quaternion.Slerp(robotHeroVisual.transform.localRotation, Quaternion.Euler(82f, 0f, crawlSway), Time.deltaTime * 10f);
             }
             if (robotHeroAnimator != null)
@@ -1750,13 +1762,22 @@ public class OasisCombatMovement : MonoBehaviour
 
         GUI.color = Color.white;
 
-        // 4. Downed Player HUD Overlay
+        // 4. Downed Player HUD Overlay (Vignette + Crawl Status)
         if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned)
         {
-            float bw = 420f;
+            // Fullscreen pulsing red/dark vignette around screen edges to communicate critical chassis state
+            float pulse = 0.35f + Mathf.Sin(Time.time * 4f) * 0.15f;
+            GUI.color = new Color(0.6f, 0.05f, 0.05f, pulse);
+            float edgeThick = 45f;
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, edgeThick), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(0, Screen.height - edgeThick, Screen.width, edgeThick), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(0, 0, edgeThick, Screen.height), _crosshairWhiteTex);
+            GUI.DrawTexture(new Rect(Screen.width - edgeThick, 0, edgeThick, Screen.height), _crosshairWhiteTex);
+
+            float bw = 460f;
             float bh = 95f;
             float bx = centerX - (bw * 0.5f);
-            float by = Screen.height * 0.62f;
+            float by = Screen.height * 0.58f;
 
             // Dark Backdrop
             GUI.color = new Color(0.08f, 0.04f, 0.04f, 0.92f);
@@ -1879,95 +1900,125 @@ public class OasisCombatMovement : MonoBehaviour
         if (mgr == null || !mgr.isTeamBattleActive) return;
 
         int nTeams = Mathf.Clamp(mgr.activeNumTeams, 2, 4);
-        float sbW = nTeams > 2 ? 560f : 480f;
-        float sbH = 48f;
-        float sbX = centerX - (sbW * 0.5f);
-        float sbY = 14f;
+        float topY = 12f;
 
-        // Dark tactical backdrop
-        GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.92f);
-        GUI.DrawTexture(new Rect(sbX, sbY, sbW, sbH), _crosshairWhiteTex);
+        // 1. Center Prominent Match Timer Box
+        float timerW = 136f;
+        float timerH = 50f;
+        float timerX = centerX - (timerW * 0.5f);
 
-        // Sleek top & bottom accent borders
-        GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.85f);
-        GUI.DrawTexture(new Rect(sbX, sbY, sbW, 2), _crosshairWhiteTex);
-        GUI.color = new Color(0.12f, 0.20f, 0.28f, 0.9f);
-        GUI.DrawTexture(new Rect(sbX, sbY + sbH - 2, sbW, 2), _crosshairWhiteTex);
+        GUI.color = new Color(0.03f, 0.06f, 0.11f, 0.95f);
+        GUI.DrawTexture(new Rect(timerX, topY, timerW, timerH), _crosshairWhiteTex);
 
-        GUIStyle teamStyle = new GUIStyle(GUI.skin.label);
-        teamStyle.fontSize = nTeams > 2 ? 15 : 18;
-        teamStyle.fontStyle = FontStyle.Bold;
-        teamStyle.richText = true;
+        bool lowTime = mgr.matchTimeRemaining <= 30f;
+        Color timerAccent = lowTime ? new Color(1.0f, 0.30f, 0.25f, 0.95f) : new Color(0.20f, 0.90f, 1.0f, 0.95f);
+        GUI.color = timerAccent;
+        GUI.DrawTexture(new Rect(timerX, topY, timerW, 3f), _crosshairWhiteTex);
+        GUI.color = new Color(0.18f, 0.32f, 0.45f, 0.9f);
+        GUI.DrawTexture(new Rect(timerX, topY + timerH - 2f, timerW, 2f), _crosshairWhiteTex);
 
-        if (nTeams <= 2)
-        {
-            // ALPHA Score (Left)
-            teamStyle.alignment = TextAnchor.MiddleLeft;
-            teamStyle.normal.textColor = new Color(0.15f, 0.85f, 1.0f);
-            GUI.Label(new Rect(sbX + 18, sbY + 4, 150, 24), $"ALPHA  {mgr.alphaKills}", teamStyle);
-
-            // BRAVO Score (Right)
-            teamStyle.alignment = TextAnchor.MiddleRight;
-            teamStyle.normal.textColor = new Color(1.0f, 0.35f, 0.25f);
-            GUI.Label(new Rect(sbX + sbW - 168, sbY + 4, 150, 24), $"{mgr.bravoKills}  BRAVO", teamStyle);
-        }
-        else
-        {
-            // Left side teams (ALPHA & CHARLIE)
-            teamStyle.alignment = TextAnchor.MiddleLeft;
-            GUI.Label(new Rect(sbX + 14, sbY + 4, 200, 24),
-                $"<color=#26D9FF>ALPHA {mgr.alphaKills}</color>   <color=#38EF7D>CHARLIE {mgr.charlieKills}</color>", teamStyle);
-
-            // Right side teams (BRAVO & DELTA)
-            teamStyle.alignment = TextAnchor.MiddleRight;
-            string rightTeams = nTeams >= 4
-                ? $"<color=#FF5544>BRAVO {mgr.bravoKills}</color>   <color=#FFBD2E>DELTA {mgr.deltaKills}</color>"
-                : $"<color=#FF5544>{mgr.bravoKills} BRAVO</color>";
-            GUI.Label(new Rect(sbX + sbW - 214, sbY + 4, 200, 24), rightTeams, teamStyle);
-        }
-
-        // Center 3:00 Countdown Timer
         int minutes = Mathf.FloorToInt(mgr.matchTimeRemaining / 60f);
         int seconds = Mathf.FloorToInt(mgr.matchTimeRemaining % 60f);
         string timeStr = $"{minutes:00}:{seconds:00}";
 
+        GUI.color = Color.white;
         GUIStyle timerStyle = new GUIStyle(GUI.skin.label);
         timerStyle.alignment = TextAnchor.MiddleCenter;
-        timerStyle.fontSize = 20;
+        timerStyle.fontSize = 22;
         timerStyle.fontStyle = FontStyle.Bold;
-        timerStyle.normal.textColor = mgr.matchTimeRemaining <= 30f ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.25f, 0.95f, 1.0f);
-        GUI.Label(new Rect(sbX + (sbW * 0.5f) - 65, sbY + 3, 130, 24), timeStr, timerStyle);
+        timerStyle.normal.textColor = lowTime ? new Color(1.0f, 0.38f, 0.32f) : Color.white;
+        GUI.Label(new Rect(timerX, topY + 3f, timerW, 28f), timeStr, timerStyle);
 
-        // Subtitle: 3:00 Timed Match & Score Limit + ESC Menu hint
-        GUIStyle subStyle = new GUIStyle(GUI.skin.label);
-        subStyle.alignment = TextAnchor.MiddleCenter;
-        subStyle.fontSize = 10;
-        subStyle.fontStyle = FontStyle.Bold;
-        subStyle.richText = true;
-        subStyle.normal.textColor = new Color(0.68f, 0.80f, 0.92f);
-        GUI.Label(new Rect(sbX + 12, sbY + 27, sbW - 24, 16),
-            $"3:00 TIMED MATCH  •  FIRST TO {mgr.targetKills} ELIMINATIONS  •  [ESC: PAUSE / SETTINGS]", subStyle);
+        // Subtitle under countdown timer
+        GUIStyle goalStyle = new GUIStyle(GUI.skin.label);
+        goalStyle.alignment = TextAnchor.MiddleCenter;
+        goalStyle.fontSize = 10;
+        goalStyle.fontStyle = FontStyle.Bold;
+        goalStyle.normal.textColor = new Color(0.45f, 0.90f, 1.0f);
+        GUI.Label(new Rect(timerX, topY + 30f, timerW, 16f), "3:00 TIMED MATCH", goalStyle);
 
-        if (OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.activeRelayJoinCode))
+        // Helper local method to draw each Team Score Card cleanly
+        void DrawTeamCard(float cardX, float cardW, string teamName, int score, Color accent, bool alignRight)
         {
-            string rCode = OasisNetworkManager.Instance.activeRelayJoinCode;
-            float rW = 320f;
-            float rH = 22f;
-            float rX = centerX - (rW * 0.5f);
-            float rY = sbY + sbH + 4f;
+            float cardY = topY + 3f;
+            float cardH = 44f;
 
-            GUI.color = new Color(0.02f, 0.08f, 0.05f, 0.88f);
-            GUI.DrawTexture(new Rect(rX, rY, rW, rH), _crosshairWhiteTex);
-            GUI.color = new Color(0.2f, 0.95f, 0.45f, 0.85f);
-            GUI.DrawTexture(new Rect(rX, rY, rW, 1), _crosshairWhiteTex);
+            GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.92f);
+            GUI.DrawTexture(new Rect(cardX, cardY, cardW, cardH), _crosshairWhiteTex);
 
-            GUIStyle relayStyle = new GUIStyle(GUI.skin.label);
-            relayStyle.fontSize = 11;
-            relayStyle.fontStyle = FontStyle.Bold;
-            relayStyle.alignment = TextAnchor.MiddleCenter;
-            relayStyle.normal.textColor = new Color(0.35f, 1.0f, 0.6f);
-            GUI.Label(new Rect(rX, rY, rW, rH), $"RELAY JOIN CODE: {rCode}  [F10 COPY]", relayStyle);
+            GUI.color = accent;
+            if (alignRight)
+                GUI.DrawTexture(new Rect(cardX + cardW - 4f, cardY, 4f, cardH), _crosshairWhiteTex);
+            else
+                GUI.DrawTexture(new Rect(cardX, cardY, 4f, cardH), _crosshairWhiteTex);
+
+            GUI.color = new Color(accent.r, accent.g, accent.b, 0.35f);
+            GUI.DrawTexture(new Rect(cardX, cardY + cardH - 2f, cardW, 2f), _crosshairWhiteTex);
+
+            GUI.color = Color.white;
+
+            GUIStyle nameStyle = new GUIStyle(GUI.skin.label);
+            nameStyle.fontSize = 13;
+            nameStyle.fontStyle = FontStyle.Bold;
+            nameStyle.normal.textColor = accent;
+            nameStyle.alignment = alignRight ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+
+            GUIStyle scoreStyle = new GUIStyle(GUI.skin.label);
+            scoreStyle.fontSize = 22;
+            scoreStyle.fontStyle = FontStyle.Bold;
+            scoreStyle.normal.textColor = Color.white;
+            scoreStyle.alignment = alignRight ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight;
+
+            if (alignRight)
+            {
+                GUI.Label(new Rect(cardX + 12f, cardY + 4f, 56f, 36f), score.ToString(), scoreStyle);
+                GUI.Label(new Rect(cardX + 54f, cardY + 4f, cardW - 66f, 36f), teamName, nameStyle);
+            }
+            else
+            {
+                GUI.Label(new Rect(cardX + 12f, cardY + 4f, cardW - 66f, 36f), teamName, nameStyle);
+                GUI.Label(new Rect(cardX + cardW - 68f, cardY + 4f, 56f, 36f), score.ToString(), scoreStyle);
+            }
         }
+
+        float gap = 8f;
+        float cardWidth = nTeams > 2 ? 132f : 154f;
+
+        // Left of Timer: ALPHA (inner left) and CHARLIE (outer left if 3+ teams)
+        DrawTeamCard(timerX - gap - cardWidth, cardWidth, "ALPHA", mgr.alphaKills, new Color(0.15f, 0.85f, 1.0f), false);
+        if (nTeams >= 3)
+        {
+            DrawTeamCard(timerX - (gap * 2f) - (cardWidth * 2f), cardWidth, "CHARLIE", mgr.charlieKills, new Color(0.22f, 0.94f, 0.49f), false);
+        }
+
+        // Right of Timer: BRAVO (inner right) and DELTA (outer right if 4 teams)
+        DrawTeamCard(timerX + timerW + gap, cardWidth, "BRAVO", mgr.bravoKills, new Color(1.0f, 0.35f, 0.27f), true);
+        if (nTeams >= 4)
+        {
+            DrawTeamCard(timerX + timerW + (gap * 2f) + cardWidth, cardWidth, "DELTA", mgr.deltaKills, new Color(1.0f, 0.74f, 0.18f), true);
+        }
+
+        // 2. Slim Sub-Header Bar below Timer & Team Cards (ESC Hint + Relay Code)
+        bool hasRelay = OasisNetworkManager.Instance != null && !string.IsNullOrEmpty(OasisNetworkManager.Instance.activeRelayJoinCode);
+        string subText = hasRelay
+            ? $"[ESC: PAUSE / SETTINGS]   •   RELAY JOIN CODE: {OasisNetworkManager.Instance.activeRelayJoinCode} [F10 COPY]"
+            : "3:00 TIMED MATCH   •   [ESC: PAUSE / SETTINGS]";
+
+        float subW = hasRelay ? 460f : 310f;
+        float subH = 20f;
+        float subX = centerX - (subW * 0.5f);
+        float subY = topY + timerH + 4f;
+
+        GUI.color = new Color(0.03f, 0.06f, 0.10f, 0.88f);
+        GUI.DrawTexture(new Rect(subX, subY, subW, subH), _crosshairWhiteTex);
+
+        GUI.color = Color.white;
+        GUIStyle subBarStyle = new GUIStyle(GUI.skin.label);
+        subBarStyle.fontSize = 11;
+        subBarStyle.fontStyle = FontStyle.Bold;
+        subBarStyle.alignment = TextAnchor.MiddleCenter;
+        subBarStyle.normal.textColor = hasRelay ? new Color(0.40f, 1.0f, 0.65f) : new Color(0.78f, 0.88f, 0.96f);
+        GUI.Label(new Rect(subX, subY, subW, subH), subText, subBarStyle);
 
         GUI.color = Color.white;
     }
@@ -1989,6 +2040,8 @@ public class OasisCombatMovement : MonoBehaviour
         // Cyan left accent bar
         GUI.color = new Color(0.2f, 0.95f, 1.0f, 0.9f);
         GUI.DrawTexture(new Rect(hpX, hpY, 3, hpH), _crosshairWhiteTex);
+
+        GUI.color = Color.white;
 
         // 1. Shield Bar (Top)
         float curHp = mgr.currentHealth;
@@ -2014,6 +2067,8 @@ public class OasisCombatMovement : MonoBehaviour
 
         GUI.color = new Color(0.15f, 0.85f, 1.0f, 0.95f);
         GUI.DrawTexture(new Rect(barX, hpY + 26, barW * shieldPercent, 8), _crosshairWhiteTex);
+
+        GUI.color = Color.white;
 
         // 2. Health Bar (Bottom)
         labelStyle.alignment = TextAnchor.MiddleLeft;
@@ -2054,21 +2109,25 @@ public class OasisCombatMovement : MonoBehaviour
         GUI.color = new Color(0.2f, 0.85f, 1.0f, 0.9f);
         GUI.DrawTexture(new Rect(amX + amW - 3, amY, 3, amH), _crosshairWhiteTex);
 
+        GUI.color = Color.white;
+
+        bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+
         // Weapon Label
         GUIStyle wStyle = new GUIStyle(GUI.skin.label);
         wStyle.fontSize = 11;
         wStyle.fontStyle = FontStyle.Bold;
         wStyle.alignment = TextAnchor.MiddleLeft;
-        wStyle.normal.textColor = new Color(0.3f, 0.85f, 1.0f);
-        GUI.Label(new Rect(amX + 14, amY + 8, 120, 16), "PULSE BLASTER", wStyle);
+        wStyle.normal.textColor = isDowned ? new Color(1.0f, 0.72f, 0.22f) : new Color(0.3f, 0.85f, 1.0f);
+        GUI.Label(new Rect(amX + 14, amY + 8, 130, 16), isDowned ? "SINGLE-ROUND FIRE" : "PULSE BLASTER", wStyle);
 
         // Controls hint
         GUIStyle hintStyle = new GUIStyle(GUI.skin.label);
         hintStyle.fontSize = 10;
         hintStyle.alignment = TextAnchor.MiddleRight;
-        hintStyle.normal.textColor = new Color(0.6f, 0.7f, 0.8f);
+        hintStyle.normal.textColor = isDowned ? new Color(1.0f, 0.72f, 0.22f) : new Color(0.75f, 0.85f, 0.95f);
         string relKey = OasisKeybindManager.FormatKeyName(OasisKeybindManager.GetKey(OasisAction.Reload));
-        GUI.Label(new Rect(amX + amW - 86, amY + 8, 72, 16), $"[{relKey}: RELOAD]", hintStyle);
+        GUI.Label(new Rect(amX + amW - 86, amY + 8, 72, 16), isDowned ? "[SEMI-AUTO]" : $"[{relKey}: RELOAD]", hintStyle);
 
         // Ammo Numbers
         GUIStyle ammoStyle = new GUIStyle(GUI.skin.label);
@@ -2084,7 +2143,7 @@ public class OasisCombatMovement : MonoBehaviour
         }
         else
         {
-            ammoStyle.normal.textColor = weapon.currentAmmo <= 3 ? new Color(1.0f, 0.3f, 0.3f) : new Color(0.2f, 0.95f, 1.0f);
+            ammoStyle.normal.textColor = weapon.currentAmmo <= 3 ? new Color(1.0f, 0.35f, 0.35f) : Color.white;
             GUI.Label(new Rect(amX + 14, amY + 26, amW - 28, 32), $"{weapon.currentAmmo} / {weapon.maxAmmo}", ammoStyle);
         }
 
@@ -2097,9 +2156,9 @@ public class OasisCombatMovement : MonoBehaviour
         if (mgr == null || string.IsNullOrEmpty(mgr.ActiveNotificationBanner)) return;
 
         float bnW = 560f;
-        float bnH = 48f;
+        float bnH = 44f;
         float bnX = centerX - (bnW * 0.5f);
-        float bnY = 82f;
+        float bnY = 92f;
 
         GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.92f);
         GUI.DrawTexture(new Rect(bnX, bnY, bnW, bnH), _crosshairWhiteTex);
@@ -2108,6 +2167,7 @@ public class OasisCombatMovement : MonoBehaviour
         GUI.DrawTexture(new Rect(bnX, bnY, bnW, 2), _crosshairWhiteTex);
         GUI.DrawTexture(new Rect(bnX, bnY + bnH - 2, bnW, 2), _crosshairWhiteTex);
 
+        GUI.color = Color.white;
         GUIStyle bannerStyle = new GUIStyle(GUI.skin.label);
         bannerStyle.alignment = TextAnchor.MiddleCenter;
         bannerStyle.fontSize = 14;
@@ -2133,11 +2193,13 @@ public class OasisCombatMovement : MonoBehaviour
         bool ready = abilityCooldownRemaining <= 0f;
         bool active = abilityActiveRemaining > 0f;
 
-        Color borderCol = active ? new Color(1.0f, 0.85f, 0.2f, 0.95f) : (ready ? new Color(0.2f, 0.95f, 1.0f, 0.95f) : new Color(0.35f, 0.4f, 0.45f, 0.6f));
+        Color borderCol = active ? new Color(1.0f, 0.85f, 0.2f, 0.95f) : (ready ? new Color(0.2f, 0.95f, 1.0f, 0.95f) : new Color(0.55f, 0.65f, 0.75f, 0.8f));
 
         // Top accent line
         GUI.color = borderCol;
         GUI.DrawTexture(new Rect(abX, abY, abW, 2), _crosshairWhiteTex);
+
+        GUI.color = Color.white;
 
         string abilityKey = OasisKeybindManager.FormatKeyName(OasisKeybindManager.GetKey(OasisAction.Ability));
 
@@ -2161,11 +2223,11 @@ public class OasisCombatMovement : MonoBehaviour
         else if (ready)
         {
             statusStyle.normal.textColor = new Color(0.2f, 0.95f, 1.0f);
-            GUI.Label(new Rect(abX + abW - 95, abY + 6, 83, 16), "READY [F]", statusStyle);
+            GUI.Label(new Rect(abX + abW - 95, abY + 6, 83, 16), $"READY [{abilityKey}]", statusStyle);
         }
         else
         {
-            statusStyle.normal.textColor = new Color(0.75f, 0.8f, 0.85f);
+            statusStyle.normal.textColor = new Color(0.85f, 0.90f, 0.95f);
             GUI.Label(new Rect(abX + abW - 95, abY + 6, 83, 16), $"{abilityCooldownRemaining:F1}s", statusStyle);
         }
 
@@ -2174,7 +2236,7 @@ public class OasisCombatMovement : MonoBehaviour
         descStyle.fontSize = 9;
         descStyle.fontStyle = FontStyle.Normal;
         descStyle.alignment = TextAnchor.MiddleLeft;
-        descStyle.normal.textColor = new Color(0.7f, 0.75f, 0.82f);
+        descStyle.normal.textColor = new Color(0.80f, 0.86f, 0.92f);
         GUI.Label(new Rect(abX + 12, abY + 23, abW - 24, 15), abilityDescription, descStyle);
 
         // Progress / Cooldown bar
@@ -2227,11 +2289,12 @@ public class OasisCombatMovement : MonoBehaviour
         GUI.color = ready ? new Color(0.2f, 0.95f, 1.0f, 0.95f) : new Color(0.95f, 0.55f, 0.15f, 0.85f);
         GUI.DrawTexture(new Rect(jX + 4, jY + jH - 3, (jW - 8) * cdPct, 2), _crosshairWhiteTex);
 
+        GUI.color = Color.white;
         GUIStyle jetStyle = new GUIStyle(GUI.skin.label);
         jetStyle.fontSize = 10;
         jetStyle.fontStyle = FontStyle.Bold;
         jetStyle.alignment = TextAnchor.MiddleCenter;
-        jetStyle.normal.textColor = ready ? new Color(0.2f, 0.95f, 1.0f) : new Color(0.7f, 0.75f, 0.8f);
+        jetStyle.normal.textColor = ready ? new Color(0.2f, 0.95f, 1.0f) : new Color(0.8f, 0.85f, 0.9f);
 
         string status = ready ? "[SPACE x2] JET BOOST READY" : $"JET CHARGING {_fpc.thrusterCooldownRemaining:F1}s";
         GUI.Label(new Rect(jX, jY + 1, jW, 16), status, jetStyle);

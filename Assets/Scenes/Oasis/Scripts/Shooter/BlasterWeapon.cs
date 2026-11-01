@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 /// 3. Continuous Phase Laser Beam (sustained tracking heat beam)
 /// 4. Micro-Bomb Flak Mortar (ballistic plasma explosive bombs with AoE splash)
 /// 5. Tactical Defense Carbine (rapid-fire support carbine)
-/// 6. High-Caliber Dual Pistols (high-mobility gunslinger sidearms)
+/// 6. Heavy Plasma Hand Cannon / DMR (high-impact semi-auto heavy sidearm)
 ///
 /// Features velocity-driven stride bobbing, sprint canting, multi-stage tactical reload animation,
 /// 3rd-person upper-body recoil synchronization, ejecting plasma casings, headshot critical multipliers,
@@ -47,7 +47,7 @@ public class BlasterWeapon : MonoBehaviour
     private const float beamTickDamage = 11f;
 
     [Header("Weapon Positioning")]
-    public Vector3 hipPosition = new Vector3(0.22f, -0.15f, 0.36f);
+    public Vector3 hipPosition = new Vector3(0.22f, -0.14f, 0.35f);
     public Vector3 aimPosition = new Vector3(0f, -0.095f, 0.28f);
     public float swayAmount = 0.016f;
     public float maxSway = 0.045f;
@@ -238,15 +238,15 @@ public class BlasterWeapon : MonoBehaviour
                 break;
 
             case WeaponArchetype.DualPistols:
-                weaponDisplayName = "High-Caliber Dual Pistols";
-                damage = 34f;
-                fireRate = 0.14f;
-                range = 110f;
-                maxAmmo = 24;
-                reloadTime = 0.85f;
-                recoilKickback = 0.075f;
-                recoilRotation = 3.6f;
-                recoilRecovery = 18f;
+                weaponDisplayName = "Heavy Plasma Hand Cannon";
+                damage = 48f; // Punchy high-impact semi-auto hand cannon
+                fireRate = 0.28f;
+                range = 140f;
+                maxAmmo = 10;
+                reloadTime = 1.15f;
+                recoilKickback = 0.16f;
+                recoilRotation = 5.8f;
+                recoilRecovery = 15f;
                 break;
 
             case WeaponArchetype.StandardRifle:
@@ -341,7 +341,7 @@ public class BlasterWeapon : MonoBehaviour
             case 5: // Combat Medic -> Tactical Defense Carbine
                 SetWeaponArchetype(WeaponArchetype.DefenseCarbine, false);
                 break;
-            case 6: // Cyber Outlaw Specialist -> High-Caliber Dual Pistols
+            case 6: // Cyber Outlaw Specialist -> Heavy Plasma Hand Cannon
                 SetWeaponArchetype(WeaponArchetype.DualPistols, false);
                 break;
             default:
@@ -353,6 +353,7 @@ public class BlasterWeapon : MonoBehaviour
     private void HandleInput()
     {
         bool fireHeld = false;
+        bool firePressedThisFrame = false;
         bool reloadPressed = false;
         bool scopeHeld = false;
 
@@ -360,27 +361,49 @@ public class BlasterWeapon : MonoBehaviour
         if (Mouse.current != null)
         {
             fireHeld = Mouse.current.leftButton.isPressed;
+            firePressedThisFrame = Mouse.current.leftButton.wasPressedThisFrame;
             scopeHeld = Mouse.current.rightButton.isPressed;
         }
 #else
         fireHeld = Input.GetMouseButton(0);
+        firePressedThisFrame = Input.GetMouseButtonDown(0);
         scopeHeld = Input.GetMouseButton(1);
 #endif
         reloadPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Reload);
+
+        bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+
+        // While downed, disable precision optics and primary weapons — only allow semi-auto single-round fire
+        if (isDowned)
+        {
+            isScoped = false;
+            UpdateContinuousBeam(false);
+
+            if (reloadPressed && currentAmmo < maxAmmo && !_isReloading)
+            {
+                StartCoroutine(Reload());
+            }
+
+            // Require a single trigger click per round (no holding down for auto/beam/mortar/shotgun)
+            if (firePressedThisFrame && Time.time >= _nextFireTime)
+            {
+                if (currentAmmo > 0 && !_isReloading)
+                {
+                    FireDownedSingleRound();
+                }
+                else if (currentAmmo <= 0 && !_isReloading)
+                {
+                    StartCoroutine(Reload());
+                }
+            }
+            return;
+        }
 
         isScoped = scopeHeld && !_isReloading;
 
         if (reloadPressed && currentAmmo < maxAmmo && !_isReloading)
         {
             StartCoroutine(Reload());
-        }
-
-        // Water sanctuary restriction
-        if (OasisWaterZone.IsInWater(transform.position) && fireHeld)
-        {
-            UpdateContinuousBeam(false);
-            OasisShooterManager.Instance?.ShowNotificationBanner("<color=#26D9FF>WATER NO-FIRE SANCTUARY // WEAPONS DISABLED IN WATER</color>", 1.5f);
-            return;
         }
 
         // Firing handling per archetype
@@ -507,6 +530,10 @@ public class BlasterWeapon : MonoBehaviour
 
     private void Fire()
     {
+        if (OasisShooterManager.Instance != null)
+        {
+            OasisShooterManager.Instance.playerSpawnShieldTimer = 0f;
+        }
         _nextFireTime = Time.time + fireRate;
         currentAmmo--;
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
@@ -573,6 +600,51 @@ public class BlasterWeapon : MonoBehaviour
                 FireStandardRifle(ray, muzzlePos, playerRoot, localTeam, localId);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Fires a single semi-automatic backup round while the player is downed.
+    /// Normal primary weapon archetypes (Mortar, Shotgun, Laser Beam, Full-Auto) cannot be used while downed.
+    /// </summary>
+    private void FireDownedSingleRound()
+    {
+        const float downedFireCooldown = 0.36f;
+        const float downedSingleRoundDamage = 18f;
+
+        _nextFireTime = Time.time + downedFireCooldown;
+        currentAmmo--;
+        OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
+        OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
+
+        _currentRecoilPos += new Vector3(Random.Range(-0.004f, 0.004f), 0.010f, -0.045f);
+        _currentRecoilRot += new Vector3(-2.2f, Random.Range(-0.8f, 0.8f), Random.Range(-1.0f, 1.0f));
+
+        if (_fpc != null)
+        {
+            _fpc.AddWeaponRecoilPitchYaw(0.24f, Random.Range(-0.12f, 0.12f));
+        }
+
+        if (_muzzleFlashLight != null)
+        {
+            StartCoroutine(FlashMuzzleLight());
+        }
+
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.38f);
+        }
+
+        Ray ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+        Vector3 muzzlePos = GetMuzzlePosition();
+
+        int localId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
+        int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        Transform playerRoot = OasisCombatMovement.Instance != null ? OasisCombatMovement.Instance.transform : null;
+
+        Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, downedSingleRoundDamage, out bool hitHostile);
+        Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(1.0f, 0.72f, 0.22f));
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
     }
 
     private Vector3 GetMuzzlePosition(Vector3 targetPoint)
@@ -713,13 +785,13 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 6: High-Caliber Dual Pistols (High Mobility Gunslinger)
+    // ARCHETYPE 6: Heavy Plasma Hand Cannon (High Impact Gunslinger Sidearm)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireDualPistols(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.44f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.58f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
@@ -806,6 +878,7 @@ public class BlasterWeapon : MonoBehaviour
             _nextBeamTickTime = Time.time + beamTickInterval;
             currentAmmo--;
             OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
+            OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
             OasisCombatMovement.Instance?.TriggerWeaponShootAnim(0.35f, false);
 
             if (hasHit)
@@ -816,6 +889,7 @@ public class BlasterWeapon : MonoBehaviour
                     bool isHeadshot = (bestHit.point.y - hitAI.transform.position.y) >= 1.42f;
                     float finalDmg = isHeadshot ? damage * 1.4f : damage;
                     bool hadShield = hitAI.currentShield > 0f;
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, finalDmg, bestHit.distance);
                     hitAI.TakeDamage(finalDmg, bestHit.point, bestHit.normal, localId, localTeam, bestHit.distance);
                     BlasterVFX.SpawnDamagePopup(bestHit.point, finalDmg, isHeadshot, hadShield);
                     OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
@@ -1047,7 +1121,8 @@ public class BlasterWeapon : MonoBehaviour
 
         // Determine base stance position & rotation (ADS centers weapon reflex sight directly on screen center)
         Vector3 desiredBasePos = isScoped ? aimPosition : hipPosition;
-        Quaternion desiredBaseRot = Quaternion.Euler(0f, 0f, bobRoll - mouseX * 1.4f * swayScale);
+        Quaternion hipBaseAngle = isScoped ? Quaternion.identity : Quaternion.Euler(-1.2f, -3.2f, 0f);
+        Quaternion desiredBaseRot = hipBaseAngle * Quaternion.Euler(0f, 0f, bobRoll - mouseX * 1.4f * swayScale);
 
         bool isSprinting = (horizSpeed > 7.8f && !isScoped && (Time.time - (_nextFireTime - fireRate)) > 0.25f && !_isBeamActive && !_isReloading);
         if (isSprinting)
@@ -1131,8 +1206,6 @@ public class BlasterWeapon : MonoBehaviour
         Vector3[] norms = aligned.normals;
         bool hasNorms = norms != null && norms.Length == verts.Length;
 
-        // First check if Trigger_Right is in the bone array (Trigger_Right is the exact axis-aligned rifle bone:
-        // localZ = World Right (+X), -localX = World Up (+Y), -localY = World Forward (+Z)).
         Matrix4x4 toTriggerSpace = Matrix4x4.identity;
         bool foundTriggerBindpose = false;
         if (smr != null && smr.bones != null && srcMesh.bindposes != null && smr.bones.Length == srcMesh.bindposes.Length)
@@ -1147,32 +1220,37 @@ public class BlasterWeapon : MonoBehaviour
                 }
             }
         }
+        if (!foundTriggerBindpose && srcMesh.bindposes != null && srcMesh.bindposes.Length >= 56)
+        {
+            toTriggerSpace = srcMesh.bindposes[55];
+            foundTriggerBindpose = true;
+        }
+
+        const float fpScale = 0.0068f;
 
         if (foundTriggerBindpose)
         {
             for (int i = 0; i < verts.Length; i++)
             {
                 Vector3 p = toTriggerSpace.MultiplyPoint3x4(verts[i]);
-                // In Trigger_Right space: +Z is Right (+X), -X is Up (+Y), -Y is Barrel Forward (+Z)
-                verts[i] = new Vector3(p.z, -p.x, -p.y) * 0.01f;
+                // In Trigger_Right space: +p.z is Right (+X), +p.y is Top Sight Rail Up (+Y), -p.x is Muzzle Barrel Forward (+Z)
+                verts[i] = new Vector3(p.z, p.y, -p.x) * fpScale;
                 if (hasNorms)
                 {
                     Vector3 n = toTriggerSpace.MultiplyVector(norms[i]);
-                    norms[i] = new Vector3(n.z, -n.x, -n.y).normalized;
+                    norms[i] = new Vector3(n.z, n.y, -n.x).normalized;
                 }
             }
         }
         else
         {
-            // In PBR_HP_Mesh.fbx, AssaultRifle's raw vertices are already axis-aligned in centimeter units:
-            // X = [-129.7, -111.4] (18.3cm width, +X is Right)
-            // Z = [34.3, 98.5] (64.3cm height, +Z is Top Sight Rail Up)
-            // Y = [49.9, 226.1] (176.2cm length, -Y is Front Barrel Forward)
+            // Fallback directly from raw FBX mesh vertices:
+            // X is width, +Z is Top Sight Rail Up (+Y), -Y is Muzzle Barrel Forward (+Z)
             Vector3 c = srcMesh.bounds.center;
             for (int i = 0; i < verts.Length; i++)
             {
                 Vector3 p = verts[i] - c;
-                verts[i] = new Vector3(p.x, p.z, -p.y) * 0.01f;
+                verts[i] = new Vector3(p.x, p.z, -p.y) * fpScale;
                 if (hasNorms)
                 {
                     Vector3 n = norms[i];
@@ -1186,10 +1264,10 @@ public class BlasterWeapon : MonoBehaviour
         aligned.RecalculateBounds();
 
         // Center the mesh cleanly so X=0 is the bore axis, Y=0 is the upper receiver, and the front barrel
-        // assembly extends prominently forward into the camera's view (+0.28m forward offset)
+        // assembly extends prominently forward toward the crosshair (+0.14m forward offset)
         Vector3 bCenter = aligned.bounds.center;
         float topY = aligned.bounds.max.y;
-        Vector3 shift = new Vector3(-bCenter.x, -(topY - 0.095f), -bCenter.z + 0.28f);
+        Vector3 shift = new Vector3(-bCenter.x, -(topY - 0.12f), -bCenter.z + 0.14f);
         for (int i = 0; i < verts.Length; i++)
         {
             verts[i] += shift;

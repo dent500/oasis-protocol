@@ -26,7 +26,7 @@ public class OasisCombatAI : MonoBehaviour
     public float currentShield = 50f;
     public float attackRange = 38f;
     public float fireRate = 0.22f;
-    public float damagePerShot = 12f;
+    public float damagePerShot = 17f;
     public float moveSpeed = 4.3f;
 
     [Header("Match Performance")]
@@ -58,6 +58,7 @@ public class OasisCombatAI : MonoBehaviour
     private float _retargetTimer = 0f;
     private float _nextFireTime = 0f;
     private float _burstTimer = 0f;
+    private float _losLostTimer = 0f;
     private int _burstShotsRemaining = 0;
     private float _strafeDir = 1f;
     private float _verticalVelocity = 0f;
@@ -72,6 +73,7 @@ public class OasisCombatAI : MonoBehaviour
     public float downedTimer = 10.0f;
     public float reviveProgress = 0.0f;
     private float _downedGraceTimer = 0.0f;
+    private float _reviveGraceShieldTimer = 0.0f;
     private int _lastAttackerId = 0;
     private int _lastAttackerTeamId = -1;
     private float _lastHitDistance = 0f;
@@ -80,6 +82,11 @@ public class OasisCombatAI : MonoBehaviour
     private OasisCombatAI _downedAllyBot = null;
     private bool _targetIsDownedPlayer = false;
     private Transform _lastReviveLoggedTarget = null;
+    private float _lastReviveLogTime = 0f;
+    private Transform _ignoredReviveTarget = null;
+    private float _ignoredReviveTimer = 0f;
+    private float _reviveApproachTimer = 0f;
+    private float _medicAuraTimer = 0f;
 
     [Header("Weapon Magazine & Tactical Reload")]
     public int maxAmmo = 16;
@@ -93,6 +100,7 @@ public class OasisCombatAI : MonoBehaviour
     public bool enableObstacleJump = true;
     public float obstacleJumpForce = 6.2f;
     private float _jumpCooldownTimer = 0f;
+    private int _consecutiveStuckCount = 0;
     private Vector3 _lastSampledPos;
     private float _stuckTimer = 0f;
     private Vector3 _evasiveJitter = Vector3.zero;
@@ -156,17 +164,17 @@ public class OasisCombatAI : MonoBehaviour
         {
             case "heavy_warrior":
                 maxHealth = 100f;
-                maxShield = 70f;
-                moveSpeed = 4.15f;
-                damagePerShot = 13f;
+                maxShield = 75f;
+                moveSpeed = 4.10f;
+                damagePerShot = 19f;
                 attackRange = 36f;
                 break;
 
             case "combat_medic":
                 maxHealth = 100f;
-                maxShield = 55f;
-                moveSpeed = 4.65f;
-                damagePerShot = 12f;
+                maxShield = 60f;
+                moveSpeed = 4.70f;
+                damagePerShot = 17f;
                 attackRange = 36f;
                 break;
 
@@ -174,19 +182,26 @@ public class OasisCombatAI : MonoBehaviour
             case "cyber_outlaw":
                 maxHealth = 100f;
                 maxShield = 50f;
-                moveSpeed = 4.80f;
-                damagePerShot = 12f;
+                moveSpeed = 4.95f;
+                damagePerShot = 17f;
                 attackRange = 38f;
+                break;
+
+            case "unit07_android":
+                maxHealth = 100f;
+                maxShield = 65f;
+                moveSpeed = 4.40f;
+                damagePerShot = 17f;
+                attackRange = 42f;
                 break;
 
             case "wasteland_nomad":
             case "desert_commando":
-            case "unit07_android":
             default:
                 maxHealth = 100f;
                 maxShield = 55f;
-                moveSpeed = 4.45f;
-                damagePerShot = 12f;
+                moveSpeed = 4.50f;
+                damagePerShot = 17f;
                 attackRange = 40f;
                 break;
         }
@@ -663,6 +678,37 @@ public class OasisCombatAI : MonoBehaviour
         _overheadHealthSlider.fillRect = fRT;
     }
 
+    private void PulseMedicHealingAura()
+    {
+        float auraRadius = 7.5f;
+        foreach (var b in ActiveBots)
+        {
+            if (b == null || b == this || b._isDead || b.teamId != this.teamId) continue;
+            if (Vector3.Distance(transform.position, b.transform.position) <= auraRadius)
+            {
+                if (b.currentShield < b.maxShield)
+                {
+                    b.currentShield = Mathf.Min(b.maxShield, b.currentShield + 15f);
+                    if (b._overheadShieldSlider != null) b._overheadShieldSlider.value = b.currentShield;
+                }
+                else if (b.currentHealth < b.maxHealth)
+                {
+                    b.currentHealth = Mathf.Min(b.maxHealth, b.currentHealth + 12f);
+                    if (b._overheadHealthSlider != null) b._overheadHealthSlider.value = b.currentHealth;
+                }
+            }
+        }
+        if (IsFriendlyToLocalPlayer() && OasisShooterManager.Instance != null)
+        {
+            Transform p = OasisPlayerHelper.FindPlayerTransform();
+            if (p != null && Vector3.Distance(transform.position, p.position) <= auraRadius)
+            {
+                OasisShooterManager.Instance.currentHealth = Mathf.Min(OasisShooterManager.Instance.maxHealth, OasisShooterManager.Instance.currentHealth + 12f);
+                OasisShooterManager.Instance.UpdateHealthUI();
+            }
+        }
+    }
+
     public void HaltCombat()
     {
         _currentTarget = null;
@@ -718,113 +764,23 @@ public class OasisCombatAI : MonoBehaviour
         }
 
         // 1. If Downed: prone crawl animation along the ground, manage bleedout timer, update overhead canvas, and check expiry
+        if (_reviveGraceShieldTimer > 0f) _reviveGraceShieldTimer -= Time.deltaTime;
+
         if (isDowned)
         {
-            if (_downedGraceTimer > 0f)
-            {
-                _downedGraceTimer -= Time.deltaTime;
-            }
-
-            // Pause bleedout timer while a squadmate is actively channeling revive on us
-            if (reviveProgress <= 0.02f)
-            {
-                downedTimer -= Time.deltaTime;
-            }
-
-            if (_overheadCanvasObj != null && Camera.main != null)
-            {
-                _overheadCanvasObj.transform.rotation = Camera.main.transform.rotation;
-            }
-            if (_overheadNameText != null)
-            {
-                if (reviveProgress > 0f)
-                {
-                    _overheadNameText.text = $"[REVIVING {Mathf.RoundToInt(reviveProgress * 100)}%] {botName}";
-                    _overheadNameText.color = new Color(0.2f, 0.95f, 1f);
-                }
-                else
-                {
-                    _overheadNameText.text = $"[DOWNED ({Mathf.CeilToInt(downedTimer)}s)] {botName}";
-                    _overheadNameText.color = new Color(1f, 0.75f, 0.15f);
-                }
-            }
-            if (_overheadHealthSlider != null)
-            {
-                _overheadHealthSlider.value = (downedTimer / 8f) * maxHealth;
-            }
-            if (_overheadShieldSlider != null)
-            {
-                _overheadShieldSlider.value = reviveProgress * maxShield;
-            }
-
-            // Downed collapse / prone posture handling
-            if (_animator != null && _animator.runtimeAnimatorController != null)
-            {
-                if (_animator.HasState(0, Animator.StringToHash("Die")))
-                {
-                    var st = _animator.GetCurrentAnimatorStateInfo(0);
-                    if (st.IsName("Die"))
-                    {
-                        if (st.normalizedTime >= 0.95f)
-                        {
-                            _animator.speed = 0f; // Freeze fallen flat on ground
-                        }
-                    }
-                    else
-                    {
-                        _animator.Play("Die");
-                    }
-                    if (_visualRoot != null)
-                    {
-                        _visualRoot.localPosition = Vector3.zero;
-                        _visualRoot.localRotation = Quaternion.identity;
-                    }
-                }
-                else
-                {
-                    _animator.speed = (reviveProgress <= 0.01f) ? 0.35f : 0f;
-                    if (_visualRoot != null)
-                    {
-                        float crawlSway = (reviveProgress <= 0.01f) ? Mathf.Sin(Time.time * 4.8f) * 5.5f : 0f;
-                        _visualRoot.localPosition = Vector3.Lerp(_visualRoot.localPosition, new Vector3(0f, 0.22f, -0.40f), Time.deltaTime * 10f);
-                        _visualRoot.localRotation = Quaternion.Slerp(_visualRoot.localRotation, Quaternion.Euler(82f, 0f, crawlSway), Time.deltaTime * 10f);
-                    }
-                }
-            }
-
-            // Slowly crawl toward nearest standing squadmate when not actively being revived
-            if (_characterController != null && _characterController.enabled && reviveProgress <= 0.01f)
-            {
-                Vector3 crawlDir = -transform.forward;
-                float bestAllyDist = float.MaxValue;
-                foreach (var b in ActiveBots)
-                {
-                    if (b == null || b == this || b._isDead || b.isDowned || b.teamId != this.teamId) continue;
-                    float d = Vector3.Distance(transform.position, b.transform.position);
-                    if (d < bestAllyDist)
-                    {
-                        bestAllyDist = d;
-                        crawlDir = (b.transform.position - transform.position);
-                    }
-                }
-                crawlDir.y = 0f;
-                if (crawlDir.sqrMagnitude > 0.05f)
-                {
-                    crawlDir.Normalize();
-                    Quaternion crawlRot = Quaternion.LookRotation(crawlDir);
-                    transform.rotation = Quaternion.Slerp(transform.rotation, crawlRot, Time.deltaTime * 3.5f);
-                }
-
-                Vector3 crawlVel = crawlDir * (moveSpeed * 0.25f);
-                crawlVel.y = _characterController.isGrounded ? -2f : -9.81f;
-                _characterController.Move(crawlVel * Time.deltaTime);
-            }
-
-            if (downedTimer <= 0f)
-            {
-                Die(_lastAttackerId);
-            }
+            Die(_lastAttackerId);
             return;
+        }
+
+        // Combat Medic: Passive Nano-Mender aura for living teammates
+        if (operativeClassId == "combat_medic" && !_isDead)
+        {
+            _medicAuraTimer += Time.deltaTime;
+            if (_medicAuraTimer >= 1.25f)
+            {
+                _medicAuraTimer = 0f;
+                PulseMedicHealingAura();
+            }
         }
 
         // 2. Out-of-Combat Shield Regeneration (recharges after 4.2s without taking damage)
@@ -863,73 +819,9 @@ public class OasisCombatAI : MonoBehaviour
             }
         }
 
-        // 5. Scan for downed friendly allies (Player or friendly bots) to prioritize resurrecting them
         _downedAllyTarget = null;
         _downedAllyBot = null;
         _targetIsDownedPlayer = false;
-
-        // Medics brave closer threats (3.0m) than standard classes (4.2m) to rescue fallen teammates
-        float dangerThreshold = (operativeClassId == "combat_medic") ? 3.0f : 4.2f;
-        bool inImmediateDanger = (_currentTarget != null && Vector3.Distance(transform.position, _currentTarget.position) < dangerThreshold);
-
-        if (!inImmediateDanger)
-        {
-            int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-
-            // Priority A: Check if human player is on our team and downed (ignore player during simulation mode)
-            if (localPlayerTeam == this.teamId && OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isSimulationMode && OasisShooterManager.Instance.isPlayerDowned)
-            {
-                Transform player = OasisPlayerHelper.FindPlayerTransform();
-                if (player != null)
-                {
-                    _downedAllyTarget = player;
-                    _targetIsDownedPlayer = true;
-                }
-            }
-
-            // Priority B: If player is not downed, check if any friendly AI bot is downed
-            if (_downedAllyTarget == null)
-            {
-                float closestDownedDist = float.MaxValue;
-                foreach (var b in ActiveBots)
-                {
-                    if (b == null || b == this || b._isDead || !b.isDowned) continue;
-                    if (b.teamId == this.teamId)
-                    {
-                        float d = Vector3.Distance(transform.position, b.transform.position);
-                        if (d < closestDownedDist)
-                        {
-                            closestDownedDist = d;
-                            _downedAllyTarget = b.transform;
-                            _downedAllyBot = b;
-                            _targetIsDownedPlayer = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Log REVIVE_START telemetry once when acquiring a new downed ally target
-        if (_downedAllyTarget != null)
-        {
-            if (_lastReviveLoggedTarget != _downedAllyTarget)
-            {
-                _lastReviveLoggedTarget = _downedAllyTarget;
-                float revDist = Vector3.Distance(transform.position, _downedAllyTarget.position);
-                if (_targetIsDownedPlayer)
-                {
-                    OasisAITelemetryLogger.Instance?.RecordReviveStartOnPlayer(this, revDist);
-                }
-                else if (_downedAllyBot != null)
-                {
-                    OasisAITelemetryLogger.Instance?.RecordReviveStart(this, _downedAllyBot, revDist);
-                }
-            }
-        }
-        else
-        {
-            _lastReviveLoggedTarget = null;
-        }
 
         // 6. Scan and evaluate combat targets (immediately retarget if current target is downed or dead)
         _retargetTimer -= Time.deltaTime;
@@ -939,13 +831,13 @@ public class OasisCombatAI : MonoBehaviour
             {
                 _burstShotsRemaining = 0;
             }
-            _retargetTimer = Random.Range(0.85f, 1.55f);
+            _retargetTimer = Random.Range(0.40f, 0.75f);
             Transform prev = _currentTarget;
             _currentTarget = FindBestEnemyTarget();
             if (_currentTarget != null && _currentTarget != prev)
             {
-                // Crisp reaction time before firing at newly acquired enemy
-                _nextFireTime = Time.time + Random.Range(0.22f, 0.48f);
+                // Fast, snappy reaction time before firing at newly acquired enemy
+                _nextFireTime = Time.time + Random.Range(0.10f, 0.22f);
             }
         }
 
@@ -983,7 +875,7 @@ public class OasisCombatAI : MonoBehaviour
             if (cam != null)
             {
                 float dist = Vector3.Distance(transform.position, cam.transform.position);
-                float beaconScale = Mathf.Clamp(dist * 0.065f, 1.0f, 2.8f);
+                float beaconScale = 0.22f * Mathf.Clamp(dist * 0.035f, 0.7f, 1.35f);
                 _overheadBeaconObj.transform.localScale = Vector3.one * beaconScale;
             }
         }
@@ -1171,10 +1063,13 @@ public class OasisCombatAI : MonoBehaviour
             boundaryPush = new Vector3(inward.x, 0f, inward.y) * pushFactor;
         }
 
-        // Water No-Fire Zone Steering: if bot wades into the water pond, steer it back out toward dry land
-        if (OasisWaterZone.IsInWater(transform.position))
+        bool inWater = OasisWaterZone.IsInWater(transform.position);
+
+        // Water No-Fire Zone Steering & Swimming: if bot wades into the water pond, steer it back out toward dry land
+        if (inWater)
         {
-            boundaryPush += OasisWaterZone.GetPushOutDirection(transform.position) * 6.5f;
+            boundaryPush += OasisWaterZone.GetPushOutDirection(transform.position) * 8.5f;
+            _intendedMoveSpeed = Mathf.Min(_intendedMoveSpeed, 3.2f);
         }
 
         if (deltaFromArena.magnitude > hardBoundary)
@@ -1188,8 +1083,17 @@ public class OasisCombatAI : MonoBehaviour
 
         Vector3 moveVelocity = Vector3.zero;
 
-        // Apply Earth Gravity (preserves upward velocity during jump ascent)
-        if (_characterController.isGrounded && _verticalVelocity <= 0.0f)
+        // Apply Buoyancy in water, or Earth Gravity on land
+        if (inWater)
+        {
+            float swimY = OasisWaterZone.WaterSurfaceY - 1.25f;
+            float depthDiff = swimY - transform.position.y;
+            float bob = Mathf.Sin(Time.time * 2.0f + (botName != null ? botName.GetHashCode() : 0)) * 0.08f;
+            float desiredVertVel = (depthDiff + bob) * 3.5f;
+            _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, desiredVertVel, 20f * Time.deltaTime);
+            _verticalVelocity = Mathf.Clamp(_verticalVelocity, -2.5f, 3.0f);
+        }
+        else if (_characterController.isGrounded && _verticalVelocity <= 0.0f)
         {
             _verticalVelocity = -2.0f;
         }
@@ -1227,31 +1131,76 @@ public class OasisCombatAI : MonoBehaviour
         if (_intendedMoveSpeed > 0.8f && !isDowned && !isKneelingRevive)
         {
             _stuckTimer += Time.deltaTime;
-            if (_stuckTimer >= 1.4f)
+            if (_stuckTimer >= 1.2f)
             {
-                if ((transform.position - _lastSampledPos).sqrMagnitude < 0.22f)
+                if ((transform.position - _lastSampledPos).sqrMagnitude < 0.28f)
                 {
-                    bool lowBlocked = IsRayBlockedByEnvironment(transform.position + Vector3.up * 0.38f, transform.forward, 1.5f, out _);
+                    _consecutiveStuckCount++;
 
-                    if (enableObstacleJump && (_characterController.isGrounded || _verticalVelocity <= 0f) && (lowBlocked || Random.value < 0.7f))
+                    // Severe trap: if stuck >= 3 times in same spot, execute a high-priority radial clear to open sand
+                    if (_consecutiveStuckCount >= 3)
                     {
-                        _verticalVelocity = obstacleJumpForce;
-                        _jumpCooldownTimer = 1.8f;
-                        Vector3 jumpDir = transform.forward * 4.2f + (Random.value > 0.5f ? transform.right : -transform.right) * 2.0f;
-                        _evasiveJitter = jumpDir;
-                        _strafeDir = -_strafeDir;
-                        if (_animator != null) _animator.Play("Run_guard_AR");
+                        _consecutiveStuckCount = 0;
+                        Vector3 clearNudge = Vector3.zero;
+                        float bestClearDist = 0f;
+                        Vector3 anchorCenter = (OasisSpawnSystem.Instance != null) ? OasisSpawnSystem.Instance.GetPlayableCenter() : new Vector3(0f, -2f, -150f);
+                        Vector3 toCenter = (anchorCenter - transform.position).normalized;
 
-                        OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Obstacle Jump");
+                        // Test 8 radial directions to find the most unobstructed open sand
+                        for (int a = 0; a < 8; a++)
+                        {
+                            float angle = a * 45f;
+                            Vector3 dir = Quaternion.Euler(0f, angle, 0f) * toCenter;
+                            if (!IsRayBlockedByEnvironment(transform.position + Vector3.up * 0.8f, dir, 4.0f, out _))
+                            {
+                                clearNudge = dir * 3.8f;
+                                break;
+                            }
+                        }
+                        if (clearNudge == Vector3.zero) clearNudge = toCenter * 3.8f;
+
+                        if (_characterController != null) _characterController.enabled = false;
+                        transform.position += new Vector3(clearNudge.x, 0.2f, clearNudge.z);
+                        if (_characterController != null) _characterController.enabled = true;
+                        _evasiveJitter = clearNudge.normalized * 4.5f;
+                        if (_downedAllyTarget != null)
+                        {
+                            // Downed ally is in an inaccessible terrain trap; temporarily blacklist to disengage
+                            _ignoredReviveTarget = _downedAllyTarget;
+                            _ignoredReviveTimer = 6.0f;
+                            _downedAllyTarget = null;
+                            _reviveApproachTimer = 0f;
+                        }
+                        OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Radial Sand Breakout");
                     }
                     else
                     {
-                        _strafeDir = -_strafeDir;
-                        Vector3 awayDir = (transform.right * _strafeDir) - transform.forward * 0.65f;
-                        _evasiveJitter = awayDir.normalized * 3.6f;
+                        bool lowBlocked = IsRayBlockedByEnvironment(transform.position + Vector3.up * 0.38f, transform.forward, 1.5f, out _);
 
-                        OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Tactical Detour");
+                        if (enableObstacleJump && (_characterController.isGrounded || _verticalVelocity <= 0f) && (lowBlocked || Random.value < 0.7f))
+                        {
+                            _verticalVelocity = obstacleJumpForce;
+                            _jumpCooldownTimer = 1.4f;
+                            Vector3 jumpDir = transform.forward * 4.2f + (Random.value > 0.5f ? transform.right : -transform.right) * 2.5f;
+                            _evasiveJitter = jumpDir;
+                            _strafeDir = -_strafeDir;
+                            if (_animator != null) _animator.Play("Run_guard_AR");
+
+                            OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Obstacle Jump");
+                        }
+                        else
+                        {
+                            _strafeDir = -_strafeDir;
+                            Vector3 awayDir = (transform.right * _strafeDir) - transform.forward * 0.85f;
+                            _evasiveJitter = awayDir.normalized * 4.2f;
+
+                            OasisAITelemetryLogger.Instance?.RecordStuckIncident(this, transform.position, "Tactical Detour");
+                        }
                     }
+                }
+                else
+                {
+                    _consecutiveStuckCount = 0;
                 }
                 _lastSampledPos = transform.position;
                 _stuckTimer = 0f;
@@ -1273,29 +1222,50 @@ public class OasisCombatAI : MonoBehaviour
 
             if (dist > 2.4f)
             {
-                // Sprint toward fallen ally using 3-ray whisker obstacle avoidance, while still facing enemy threat if one is nearby
-                Vector3 moveDir = ApplyWhiskerAvoidanceAndSeparation(toAlly.normalized);
-                if (_currentTarget != null)
+                _reviveApproachTimer += Time.deltaTime;
+                // If approaching for > 3.8s and stuck or making no progress, ally is trapped behind collision
+                if (_reviveApproachTimer > 3.8f && _consecutiveStuckCount >= 1)
                 {
-                    Vector3 toEnemy = _currentTarget.position - transform.position;
-                    toEnemy.y = 0f;
-                    if (toEnemy.sqrMagnitude > 0.1f)
+                    _ignoredReviveTarget = _downedAllyTarget;
+                    _ignoredReviveTimer = 6.0f;
+                    _downedAllyTarget = null;
+                    _reviveApproachTimer = 0f;
+                }
+                else
+                {
+                    // Sprint toward fallen ally using obstacle tangent avoidance
+                    Vector3 toAllyDir = toAlly.normalized;
+                    if (IsRayBlockedByEnvironment(transform.position + Vector3.up * 0.8f, toAllyDir, Mathf.Min(dist, 4.5f), out RaycastHit hit))
                     {
-                        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toEnemy.normalized), Time.deltaTime * 9f);
+                        Vector3 tangent = Vector3.Cross(hit.normal, Vector3.up).normalized;
+                        if (Vector3.Dot(tangent, transform.forward) < 0f) tangent = -tangent;
+                        toAllyDir = (toAllyDir * 0.35f + tangent * 0.65f).normalized;
                     }
-                }
-                else if (moveDir.sqrMagnitude > 0.05f)
-                {
-                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(moveDir), Time.deltaTime * 10f);
-                }
 
-                float sprintMultiplier = (operativeClassId == "combat_medic") ? 1.55f : 1.42f;
-                moveVelocity = moveDir * (moveSpeed * sprintMultiplier);
-                _intendedMoveSpeed = moveVelocity.magnitude;
-                if (_animator != null) _animator.Play("Run_guard_AR");
+                    Vector3 moveDir = ApplyWhiskerAvoidanceAndSeparation(toAllyDir);
+                    if (_currentTarget != null)
+                    {
+                        Vector3 toEnemy = _currentTarget.position - transform.position;
+                        toEnemy.y = 0f;
+                        if (toEnemy.sqrMagnitude > 0.1f)
+                        {
+                            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toEnemy.normalized), Time.deltaTime * 9f);
+                        }
+                    }
+                    else if (moveDir.sqrMagnitude > 0.05f)
+                    {
+                        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(moveDir), Time.deltaTime * 10f);
+                    }
+
+                    float sprintMultiplier = (operativeClassId == "combat_medic") ? 1.55f : 1.42f;
+                    moveVelocity = moveDir * (moveSpeed * sprintMultiplier);
+                    _intendedMoveSpeed = moveVelocity.magnitude;
+                    if (_animator != null) _animator.Play("Run_guard_AR");
+                }
             }
             else
             {
+                _reviveApproachTimer = 0f;
                 // In range! Face ally, kneel, and channel resurrection (Combat Medic revives in 2.0s, standard in 3.0s)
                 moveVelocity = Vector3.zero;
                 _intendedMoveSpeed = 0f;
@@ -1539,44 +1509,48 @@ public class OasisCombatAI : MonoBehaviour
             return;
         }
 
-        // Water Sanctuary No-Fire Zone: Neither shooter in water nor firing at target in water
-        if (OasisWaterZone.IsInWater(transform.position) || OasisWaterZone.IsInWater(_currentTarget.position))
-        {
-            _burstShotsRemaining = 0;
-            return;
-        }
-
         Vector3 toTarget = _currentTarget.position - transform.position;
         float dist = toTarget.magnitude;
 
         if (dist > attackRange + 6f) return;
 
-        // Line of Sight Verification: do not shoot if obstructed by terrain, rocks, or tent walls
+        // Line of Sight Verification with 0.35s grace memory so brief environmental clips don't stall firing
         if (!HasClearLineOfSight(_currentTarget))
         {
-            _burstShotsRemaining = 0;
-            return;
+            _losLostTimer += Time.deltaTime;
+            if (_losLostTimer > 0.35f)
+            {
+                _burstShotsRemaining = 0;
+                return;
+            }
+        }
+        else
+        {
+            _losLostTimer = 0f;
         }
 
-        // Handle active burst fire sequence
+        // Handle active burst fire sequence with responsive cycle time (0.12s per bolt)
         if (_burstShotsRemaining > 0)
         {
             _burstTimer -= Time.deltaTime;
             if (_burstTimer <= 0f)
             {
-                _burstTimer = 0.21f;
+                _burstTimer = 0.12f;
                 _burstShotsRemaining--;
                 ExecuteSingleBlasterShot();
             }
             return;
         }
 
-        // Trigger next burst fire
+        // Trigger next burst fire (short tactical pauses 0.45s - 0.85s instead of sluggish 2+ seconds)
         if (Time.time >= _nextFireTime)
         {
-            _nextFireTime = Time.time + Random.Range(1.15f, 2.25f);
-            _burstShotsRemaining = Random.Range(2, 5);
-            _burstTimer = 0.04f;
+            float burstDelay = (operativeClassId == "cyborg_specops" || operativeClassId == "cyber_outlaw")
+                ? Random.Range(0.35f, 0.60f)
+                : Random.Range(0.45f, 0.85f);
+            _nextFireTime = Time.time + burstDelay;
+            _burstShotsRemaining = (operativeClassId == "heavy_warrior") ? Random.Range(4, 7) : Random.Range(3, 6);
+            _burstTimer = 0.03f;
         }
     }
 
@@ -1734,14 +1708,27 @@ public class OasisCombatAI : MonoBehaviour
             break;
         }
 
+        // Firing weapon drops spawn protection immediately so bots cannot abuse invulnerability while shooting
+        _reviveGraceShieldTimer = 0f;
+
         // Colored laser beam using tactical color (blue for ally, red for enemy)
         BlasterVFX.SpawnLaserBeam(muzzle, laserEnd, GetTacticalColor());
+    }
+
+    /// <summary>
+    /// Grants temporary spawn shield protection against spawn campers upon respawn.
+    /// </summary>
+    public void GrantSpawnProtection(float duration)
+    {
+        _reviveGraceShieldTimer = duration;
     }
 
     public void TakeDamage(float amount, Vector3 hitPoint, Vector3 hitNormal, int attackerId = 0, int attackerTeamId = -1, float hitDistance = 0f)
     {
         if (_isDead) return;
         if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isTeamBattleActive) return;
+
+        if (_reviveGraceShieldTimer > 0f && !isDowned) return;
 
         if (attackerTeamId >= 0)
         {
@@ -1755,6 +1742,8 @@ public class OasisCombatAI : MonoBehaviour
         {
             _lastHitDistance = Vector3.Distance(transform.position, hitPoint);
         }
+
+        if (_reviveGraceShieldTimer > 0f) _reviveGraceShieldTimer -= Time.deltaTime;
 
         if (isDowned)
         {
@@ -1777,6 +1766,23 @@ public class OasisCombatAI : MonoBehaviour
         _shieldRegenDelayTimer = 4.2f;
         _lastAttackerId = attackerId;
         _hitFlinchTimer = 0.16f;
+
+        // Immediate retaliation on taking damage: break tunnel vision and acquire flanking attacker
+        if (attackerId != 0 && attackerId != GetHashCode() && (attackerTeamId < 0 || attackerTeamId != this.teamId))
+        {
+            if (_currentTarget == null || Random.value < 0.60f)
+            {
+                foreach (var b in ActiveBots)
+                {
+                    if (b != null && b.GetHashCode() == attackerId && !b.isDead && !b.isDowned)
+                    {
+                        _currentTarget = b.transform;
+                        _nextFireTime = Mathf.Min(_nextFireTime, Time.time + 0.12f);
+                        break;
+                    }
+                }
+            }
+        }
 
         // Slight revive setback when taking fire while reviving (0.08f instead of 0.25f so medics can power through)
         if (_downedAllyBot != null && _downedAllyBot.reviveProgress > 0f)
@@ -1822,125 +1828,13 @@ public class OasisCombatAI : MonoBehaviour
         if (currentHealth <= 0f)
         {
             currentHealth = 0f;
-            EnterDownedState(attackerId);
+            Die(attackerId, attackerTeamId);
         }
     }
 
     public void EnterDownedState(int attackerId)
     {
-        if (isDowned || _isDead) return;
-
-        isDowned = true;
-        downedTimer = 8.0f;
-        _downedGraceTimer = 0.85f;
-        reviveProgress = 0f;
-        _burstShotsRemaining = 0;
-        _lastAttackerId = attackerId;
-
-        // Transition visual root and play Die collapse animation (or prone posture)
-        if (_animator != null && _animator.runtimeAnimatorController != null)
-        {
-            if (_animator.HasState(0, Animator.StringToHash("Die")))
-            {
-                _animator.speed = 1.0f;
-                _animator.Play("Die");
-                if (_visualRoot != null)
-                {
-                    _visualRoot.localPosition = Vector3.zero;
-                    _visualRoot.localRotation = Quaternion.identity;
-                }
-            }
-            else
-            {
-                _animator.speed = 0.35f;
-                if (_animator.HasState(0, Animator.StringToHash("Idle_Ducking_AR")))
-                {
-                    _animator.Play("Idle_Ducking_AR");
-                }
-                else
-                {
-                    _animator.Play("WalkFront_Shoot_AR");
-                }
-                if (_visualRoot != null)
-                {
-                    _visualRoot.localPosition = new Vector3(0f, 0.22f, -0.40f);
-                    _visualRoot.localRotation = Quaternion.Euler(82f, 0f, 0f);
-                }
-            }
-        }
-
-        if (_overheadNameText != null)
-        {
-            _overheadNameText.text = $"[DOWNED (8s)] {botName}";
-            _overheadNameText.color = new Color(1f, 0.75f, 0.15f);
-        }
-        if (_overheadBeaconMat != null)
-        {
-            _overheadBeaconMat.color = new Color(1f, 0.45f, 0.15f);
-        }
-        if (_overheadBeaconObj != null)
-        {
-            _overheadBeaconObj.transform.localPosition = new Vector3(0f, 1.30f, -0.35f);
-        }
-        if (_overheadCanvasObj != null)
-        {
-            _overheadCanvasObj.transform.localPosition = new Vector3(0f, 1.85f, -0.35f);
-        }
-        if (_overheadShieldSlider != null)
-        {
-            _overheadShieldSlider.value = 0f;
-        }
-
-        int myPlayerId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
-        bool isPlayerDownedThis = (attackerId == 0 || (myPlayerId != 0 && attackerId == myPlayerId));
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
-        {
-            isPlayerDownedThis = false;
-        }
-
-        // If knocked down by another CPU bot, credit that bot's kills and score!
-        if (!isPlayerDownedThis)
-        {
-            OasisCombatAI attackerBot = null;
-            foreach (var b in ActiveBots)
-            {
-                if (b != null && b != this && b.GetHashCode() == attackerId)
-                {
-                    attackerBot = b;
-                    break;
-                }
-            }
-            if (attackerBot == null && _lastAttackerTeamId >= 0)
-            {
-                foreach (var b in ActiveBots)
-                {
-                    if (b != null && b != this && b.teamId == _lastAttackerTeamId && !b.isDead)
-                    {
-                        attackerBot = b;
-                        break;
-                    }
-                }
-            }
-            if (attackerBot != null)
-            {
-                attackerBot.kills++;
-                attackerBot.score += 100;
-                if (_lastHitDistance <= 0.01f)
-                {
-                    _lastHitDistance = Vector3.Distance(attackerBot.transform.position, transform.position);
-                }
-            }
-        }
-
-        // Immediately award knockdown score, update team kills, and refresh HUD
-        OasisShooterManager.Instance?.OnCombatAIDowned(this, isPlayerDownedThis, _lastAttackerTeamId);
-        OasisAITelemetryLogger.Instance?.RecordKnockdown(this, attackerId, _lastHitDistance);
-
-        int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-        if (!isPlayerDownedThis && this.teamId == localPlayerTeam)
-        {
-            OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#FF5544>SQUADMATE DOWNED: {botName}! HOLD E TO RESURRECT</color>", 3.0f);
-        }
+        Die(attackerId, _lastAttackerTeamId);
     }
 
     public void Revive()
@@ -1954,8 +1848,10 @@ public class OasisCombatAI : MonoBehaviour
         currentAmmo = maxAmmo;
         isReloading = false;
         currentHealth = maxHealth * 0.65f;
-        currentShield = maxShield * 0.65f;
-        _shieldRegenDelayTimer = 1.5f;
+        currentShield = maxShield * 0.85f;
+        _shieldRegenDelayTimer = 2.0f;
+        _reviveGraceShieldTimer = 1.5f;
+        BlasterVFX.SpawnWarpIn(transform.position);
 
         if (_visualRoot != null)
         {
@@ -2005,6 +1901,115 @@ public class OasisCombatAI : MonoBehaviour
     }
 
     private void Die(int killerId)
+    {
+        Die(killerId, _lastAttackerTeamId);
+    }
+
+    public void Die(int killerId, int killerTeamId)
+    {
+        if (_isDead) return;
+        _isDead = true;
+        isDowned = false;
+
+        OasisAITelemetryLogger.Instance?.RecordElimination(this, killerId, _lastHitDistance);
+
+        // Disable physics collider and overhead UI immediately upon death
+        if (_characterController != null) _characterController.enabled = false;
+        if (_overheadCanvasObj != null) _overheadCanvasObj.SetActive(false);
+        if (_overheadBeaconObj != null) _overheadBeaconObj.SetActive(false);
+
+        // Play dramatic elimination physics tumble/collapse animation & sparks VFX
+        StartCoroutine(EliminationDeathSequence());
+
+        int myPlayerId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
+        bool isPlayerKill = (killerId == 0 || (myPlayerId != 0 && killerId == myPlayerId));
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
+        {
+            isPlayerKill = false;
+        }
+
+        if (!isPlayerKill)
+        {
+            foreach (var b in ActiveBots)
+            {
+                if (b != null && b != this && b.GetHashCode() == killerId)
+                {
+                    b.kills++;
+                    b.score += 100;
+                    break;
+                }
+            }
+        }
+
+        // Notify shooter manager to score team kill and update match stats
+        if (OasisShooterManager.Instance != null)
+        {
+            int scoringTeam = (killerTeamId >= 0 && killerTeamId != this.teamId)
+                ? killerTeamId
+                : ((this.teamId + 1) % Mathf.Max(2, OasisShooterManager.Instance.activeNumTeams));
+
+            OasisShooterManager.Instance.AddTeamKill(scoringTeam);
+
+            if (isPlayerKill)
+            {
+                OasisShooterManager.Instance.score += 100;
+                OasisShooterManager.Instance.kills++;
+                OasisNetworkManager.Instance?.BroadcastScore(OasisShooterManager.Instance.score, OasisShooterManager.Instance.kills);
+                OasisShooterManager.Instance.TriggerKillConfirmedBanner(botName);
+                BlasterVFX.SpawnDamagePopup(transform.position + Vector3.up * 1.8f, 100f, true, false);
+            }
+
+            OasisShooterManager.Instance.UpdateTeamBattleHUD();
+            OasisShooterManager.Instance.CheckWinCondition();
+        }
+
+        // Fast base respawn: 3.0 seconds
+        StartCoroutine(RespawnRoutine(3.0f));
+    }
+
+    private IEnumerator EliminationDeathSequence()
+    {
+        // 1. Initial chassis explosion & spark burst
+        BlasterVFX.SpawnExplosion(transform.position + Vector3.up * 0.85f);
+        BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.5f, Vector3.up, false);
+
+        if (_visualRoot != null)
+        {
+            _visualRoot.gameObject.SetActive(true);
+
+            // Animate tumbling/collapsing backwards onto the sand over 0.38 seconds
+            Quaternion startRot = _visualRoot.localRotation;
+            Quaternion collapseRot = Quaternion.Euler(75f, startRot.eulerAngles.y, 15f);
+            Vector3 startPos = _visualRoot.localPosition;
+            Vector3 collapsePos = startPos + new Vector3(0f, -0.45f, -0.3f);
+
+            float collapseElapsed = 0f;
+            float collapseDuration = 0.38f;
+            while (collapseElapsed < collapseDuration && _visualRoot != null)
+            {
+                collapseElapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(collapseElapsed / collapseDuration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+                _visualRoot.localRotation = Quaternion.Slerp(startRot, collapseRot, smoothT);
+                _visualRoot.localPosition = Vector3.Lerp(startPos, collapsePos, smoothT);
+                yield return null;
+            }
+
+            // Lingering fallen chassis on ground for 1.8 seconds so players see the fallen opponent
+            yield return new WaitForSeconds(1.8f);
+
+            // Warp-out digital disintegration burst before disappearing
+            BlasterVFX.SpawnWarpIn(transform.position + Vector3.up * 0.3f);
+            yield return new WaitForSeconds(0.2f);
+
+            if (_visualRoot != null)
+            {
+                _visualRoot.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private void LegacyDieUnused(int killerId)
     {
         if (_isDead) return;
         _isDead = true;
@@ -2158,10 +2163,10 @@ public class OasisCombatAI : MonoBehaviour
                     threatScore -= 14.0f;
                 }
 
-                // Retaliation priority for the enemy actively shooting us
+                // Retaliation priority for the enemy actively shooting us (prevents tunnel-visioning bystanders)
                 if (bot.GetHashCode() == _lastAttackerId)
                 {
-                    threatScore -= 9.0f;
+                    threatScore -= 22.0f;
                 }
 
                 // Focus-fire elimination priority for vulnerable opponents (< 45 HP)

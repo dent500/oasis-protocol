@@ -252,6 +252,47 @@ public static class ProceduralAudio
         }
     }
 
+    private static AudioClip _killConfirmedClip;
+    /// <summary>
+    /// Crisp tactical two-tone elimination chime to confirm hostile neutralisation.
+    /// </summary>
+    public static AudioClip GetKillConfirmedClip()
+    {
+        if (_killConfirmedClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.22f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = t < 0.35f ? 1150f : 1720f;
+                float envelope = t < 0.35f ? Mathf.Exp(-12f * t) : Mathf.Exp(-14f * (t - 0.35f));
+                float wave = Mathf.Sin(2f * Mathf.PI * freq * (float)i / sampleRate);
+                samples[i] = wave * envelope * 0.45f;
+            }
+
+            _killConfirmedClip = AudioClip.Create("KillConfirmedChime", sampleCount, 1, sampleRate, false);
+            _killConfirmedClip.SetData(samples, 0);
+        }
+        return _killConfirmedClip;
+    }
+
+    private static AudioClip _playerDeathClip;
+    /// <summary>
+    /// Deep chassis shutdown thud when the player operative's armor integrity reaches zero.
+    /// </summary>
+    public static AudioClip GetPlayerDeathClip()
+    {
+        if (_playerDeathClip == null)
+        {
+            _playerDeathClip = CreateSoftThud("PlayerChassisDestroyed", 0.65f, 160f, 32f, 0.65f);
+        }
+        return _playerDeathClip;
+    }
+
     // ==========================================
     // WARM & TACTILE LOW-PROFILE SOUND GENERATION
     // ==========================================
@@ -491,5 +532,43 @@ public static class ProceduralAudio
         clip.SetData(samples, 0);
         return clip;
     }
-}
 
+    private static AudioClip _waterSplashClip;
+    private static AudioClip _waterWadeClip;
+
+    public static AudioClip GetWaterSplashClip()
+    {
+        if (_waterSplashClip == null)
+            _waterSplashClip = CreateWaterSplash("WaterSplash", 0.42f, 0.48f);
+        return _waterSplashClip;
+    }
+
+    public static AudioClip GetWaterWadeClip()
+    {
+        if (_waterWadeClip == null)
+            _waterWadeClip = CreateWaterSplash("WaterWade", 0.26f, 0.32f);
+        return _waterWadeClip;
+    }
+
+    private static AudioClip CreateWaterSplash(string name, float duration, float volume)
+    {
+        int sampleRate = 44100;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        float lastVal = 0f;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t = (float)i / sampleCount;
+            float rawNoise = UnityEngine.Random.Range(-1f, 1f);
+            lastVal = Mathf.Lerp(lastVal, rawNoise, 0.16f);
+            float env = Mathf.Sin(t * Mathf.PI) * Mathf.Exp(-3.8f * t);
+            float thump = Mathf.Sin(2f * Mathf.PI * 65f * (float)i / sampleRate) * Mathf.Exp(-11f * t);
+            samples[i] = (lastVal * 0.72f + thump * 0.28f) * env * volume;
+        }
+
+        AudioClip clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+}

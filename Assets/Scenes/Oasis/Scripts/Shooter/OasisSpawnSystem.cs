@@ -127,8 +127,8 @@ public class OasisSpawnSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Configures canonical base sectors (Alpha -> South, Bravo -> North, Charlie -> West, Delta -> East)
-    /// to ensure 100% deterministic spawn and respawn synchronization between Host, Clients, and AI.
+    /// Randomly assigns distinct tactical sectors to all active teams at match start.
+    /// Eliminates static, predictable base camping across multiple matches.
     /// </summary>
     public void PickRandomMatchup()
     {
@@ -137,17 +137,34 @@ public class OasisSpawnSystem : MonoBehaviour
             teamSectors = new SpawnSector[4];
         }
 
-        teamSectors[0] = SpawnSector.SouthCanyonPass; // Team 0: Alpha (Blue) - South Base
-        teamSectors[1] = SpawnSector.NorthDunes;       // Team 1: Bravo (Red) - North Base
-        teamSectors[2] = SpawnSector.WestOutpost;      // Team 2: Charlie (Green) - West Base
-        teamSectors[3] = SpawnSector.EastGorge;        // Team 3: Delta (Amber) - East Base
+        List<SpawnSector> pool = new List<SpawnSector>
+        {
+            SpawnSector.SouthCanyonPass,
+            SpawnSector.NorthDunes,
+            SpawnSector.WestOutpost,
+            SpawnSector.EastGorge
+        };
+
+        // Fisher-Yates shuffle to randomly assign base sectors
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int rnd = Random.Range(0, i + 1);
+            SpawnSector tmp = pool[i];
+            pool[i] = pool[rnd];
+            pool[rnd] = tmp;
+        }
+
+        for (int t = 0; t < 4; t++)
+        {
+            teamSectors[t] = pool[t];
+        }
 
         alphaSector = teamSectors[0];
         bravoSector = teamSectors[1];
         charlieSector = teamSectors[2];
         deltaSector = teamSectors[3];
 
-        Debug.Log($"<color=#26D9FF>[OasisSpawnSystem]</color> Tactical Sectors Configured: Alpha [{GetSectorDisplayName(alphaSector)}], Bravo [{GetSectorDisplayName(bravoSector)}], Charlie [{GetSectorDisplayName(charlieSector)}], Delta [{GetSectorDisplayName(deltaSector)}]");
+        Debug.Log($"<color=#26D9FF>[OasisSpawnSystem]</color> Randomized Matchup Bases: Alpha [{GetSectorDisplayName(alphaSector)}], Bravo [{GetSectorDisplayName(bravoSector)}], Charlie [{GetSectorDisplayName(charlieSector)}], Delta [{GetSectorDisplayName(deltaSector)}]");
     }
 
     public static string GetSectorDisplayName(SpawnSector sector)
@@ -176,6 +193,20 @@ public class OasisSpawnSystem : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Neutral and perimeter flank rally nodes used for anti-spawn-camping fallbacks
+    /// when an entire team base is being swarmed by enemy campers.
+    /// </summary>
+    public static readonly Vector3[] TacticalFlankSpawns = new Vector3[]
+    {
+        new Vector3(-26f, 0f, -136f), // South-West Flank Terrace
+        new Vector3( 26f, 0f, -136f), // South-East Flank Terrace
+        new Vector3(-26f, 0f, -164f), // North-West Dune Crest
+        new Vector3( 26f, 0f, -164f), // North-East Dune Crest
+        new Vector3(-34f, 0f, -148f), // Mid-West Canyon Defilade
+        new Vector3( 34f, 0f, -148f)  // Mid-East Canyon Defilade
+    };
+
     public Vector3[] GetSectorSpawnOffsets(SpawnSector sector)
     {
         switch (sector)
@@ -184,17 +215,25 @@ public class OasisSpawnSystem : MonoBehaviour
                 return new Vector3[]
                 {
                     new Vector3(-16f, 0f, -121f),
-                    new Vector3(-5f, 0f, -125f),
-                    new Vector3( 5f, 0f, -125f),
-                    new Vector3( 16f, 0f, -121f)
+                    new Vector3( -5f, 0f, -125f),
+                    new Vector3(  5f, 0f, -125f),
+                    new Vector3( 16f, 0f, -121f),
+                    new Vector3( -9f, 0f, -115f),
+                    new Vector3(  9f, 0f, -115f),
+                    new Vector3(-22f, 0f, -126f),
+                    new Vector3( 22f, 0f, -126f)
                 };
             case SpawnSector.NorthDunes:
                 return new Vector3[]
                 {
-                    new Vector3(-16f, 0f, -183f),
-                    new Vector3(-5f, 0f, -180f),
-                    new Vector3( 5f, 0f, -180f),
-                    new Vector3( 16f, 0f, -183f)
+                    new Vector3(-14f, 0f, -177f),
+                    new Vector3( -5f, 0f, -175f),
+                    new Vector3(  5f, 0f, -175f),
+                    new Vector3( 14f, 0f, -177f),
+                    new Vector3( -9f, 0f, -183f),
+                    new Vector3(  9f, 0f, -183f),
+                    new Vector3(-20f, 0f, -172f),
+                    new Vector3( 20f, 0f, -172f)
                 };
             case SpawnSector.WestOutpost:
                 return new Vector3[]
@@ -202,7 +241,11 @@ public class OasisSpawnSystem : MonoBehaviour
                     new Vector3(-44f, 0f, -142f),
                     new Vector3(-48f, 0f, -150f),
                     new Vector3(-45f, 0f, -158f),
-                    new Vector3(-41f, 0f, -150f)
+                    new Vector3(-41f, 0f, -150f),
+                    new Vector3(-46f, 0f, -137f),
+                    new Vector3(-46f, 0f, -163f),
+                    new Vector3(-36f, 0f, -144f),
+                    new Vector3(-36f, 0f, -156f)
                 };
             case SpawnSector.EastGorge:
                 return new Vector3[]
@@ -210,26 +253,120 @@ public class OasisSpawnSystem : MonoBehaviour
                     new Vector3( 44f, 0f, -142f),
                     new Vector3( 48f, 0f, -150f),
                     new Vector3( 45f, 0f, -158f),
-                    new Vector3( 41f, 0f, -150f)
+                    new Vector3( 41f, 0f, -150f),
+                    new Vector3( 46f, 0f, -137f),
+                    new Vector3( 46f, 0f, -163f),
+                    new Vector3( 36f, 0f, -144f),
+                    new Vector3( 36f, 0f, -156f)
                 };
             case SpawnSector.OasisCore:
             default:
                 return new Vector3[]
                 {
-                    new Vector3(-6f, 0f, -147f),
-                    new Vector3( 6f, 0f, -147f),
-                    new Vector3(-6f, 0f, -153f),
-                    new Vector3( 6f, 0f, -153f)
+                    new Vector3(-12f, 0f, -145f),
+                    new Vector3( 12f, 0f, -145f),
+                    new Vector3(-12f, 0f, -155f),
+                    new Vector3( 12f, 0f, -155f),
+                    new Vector3(-24f, 0f, -150f),
+                    new Vector3( 24f, 0f, -150f),
+                    new Vector3(  0f, 0f, -138f),
+                    new Vector3(  0f, 0f, -162f)
                 };
         }
     }
 
     /// <summary>
+    /// Intelligently finds a randomized, tactically safe spawn location for a combatant.
+    /// Evaluates distance to active enemies: eliminates or penalizes any spawn point where enemies
+    /// are closer than 18m (spawn-camping distance). If the base sector is completely overrun,
+    /// automatically selects an alternate tactical flank position.
+    /// </summary>
+    public Vector3 GetTacticalSafeSpawnPosition(int teamId, Transform combatant = null)
+    {
+        SpawnSector baseSector = GetTeamSector(teamId);
+        Vector3[] baseSpawns = GetSectorSpawnOffsets(baseSector);
+
+        // Collect all active enemy positions (bots + player)
+        List<Vector3> enemyPositions = new List<Vector3>();
+        foreach (var bot in OasisCombatAI.ActiveBots)
+        {
+            if (bot != null && bot.teamId != teamId && !bot.isDead && bot.gameObject.activeInHierarchy)
+            {
+                enemyPositions.Add(bot.transform.position);
+            }
+        }
+
+        if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isSimulationMode)
+        {
+            int pTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+            if (pTeam != teamId && OasisShooterManager.Instance.currentHealth > 0f)
+            {
+                var pt = OasisShooterManager.Instance.GetPlayerTransform();
+                if (pt != null) enemyPositions.Add(pt.position);
+            }
+        }
+
+        // Build list of candidate positions: base spawns first, flank spawns second
+        List<Vector3> candidates = new List<Vector3>(baseSpawns);
+        candidates.AddRange(TacticalFlankSpawns);
+
+        // If no enemies in play yet (e.g. initial launch), pick randomly from base spawns with slight lateral jitter
+        if (enemyPositions.Count == 0)
+        {
+            Vector3 raw = baseSpawns[Random.Range(0, baseSpawns.Length)];
+            float jx = Random.Range(-2.0f, 2.0f);
+            float jz = Random.Range(-2.0f, 2.0f);
+            float gy = SampleGroundY(raw.x + jx, raw.z + jz, GetPlayableCenter().y);
+            return new Vector3(raw.x + jx, gy + 0.08f, raw.z + jz);
+        }
+
+        Vector3 bestPos = baseSpawns[Random.Range(0, baseSpawns.Length)];
+        float bestScore = -99999f;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            Vector3 c = candidates[i];
+            float minEnemyDist = float.MaxValue;
+            for (int e = 0; e < enemyPositions.Count; e++)
+            {
+                float d = Vector3.Distance(new Vector3(c.x, 0f, c.z), new Vector3(enemyPositions[e].x, 0f, enemyPositions[e].z));
+                if (d < minEnemyDist) minEnemyDist = d;
+            }
+
+            // Anti-camp scoring: heavily penalize points where enemies are within 16m
+            float score = minEnemyDist;
+            if (minEnemyDist < 16f)
+            {
+                score -= 1000f; // Strongly avoid camped points
+            }
+            else if (i < baseSpawns.Length)
+            {
+                // Mild preference for home base nodes when safe
+                score += 8f;
+            }
+
+            // Add small random noise to prevent deterministic identical picks
+            score += Random.Range(0f, 6f);
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestPos = c;
+            }
+        }
+
+        // Apply randomized lateral dispersion (+/- 2.0m)
+        float jitterX = Random.Range(-2.0f, 2.0f);
+        float jitterZ = Random.Range(-2.0f, 2.0f);
+        float spawnX = bestPos.x + jitterX;
+        float spawnZ = bestPos.z + jitterZ;
+        float groundY = SampleGroundY(spawnX, spawnZ, GetPlayableCenter().y);
+
+        return new Vector3(spawnX, groundY + 0.08f, spawnZ);
+    }
+
+    /// <summary>
     /// Gets a grounded spawn position tailored strictly for the designated team ID's base sector.
-    /// Alpha (Team 0) -> South Canyon Pass
-    /// Bravo (Team 1) -> North Dunes
-    /// Charlie (Team 2) -> West Outpost
-    /// Delta (Team 3) -> East Gorge
     /// </summary>
     public Vector3 GetTeamSpawnPosition(int teamId, int squadSlot)
     {
@@ -247,7 +384,7 @@ public class OasisSpawnSystem : MonoBehaviour
     /// </summary>
     public Vector3 GetRandomSpawnPosition(int teamId, bool isTeammateOfPlayer = false)
     {
-        return GetTeamSpawnPosition(teamId, isTeammateOfPlayer ? Random.Range(1, 4) : Random.Range(0, 4));
+        return GetTacticalSafeSpawnPosition(teamId);
     }
 
     /// <summary>
@@ -255,44 +392,20 @@ public class OasisSpawnSystem : MonoBehaviour
     /// </summary>
     public Vector3 GetRandomSpawnPosition(int teamId)
     {
-        return GetTeamSpawnPosition(teamId, Random.Range(0, 4));
+        return GetTacticalSafeSpawnPosition(teamId);
     }
 
     /// <summary>
-    /// Safely teleports a player or AI to their team's designated sector base,
+    /// Safely teleports a player or AI to their team's designated sector base or tactical safe flank,
     /// facing inward toward the battlefield center (0, 0, -150).
-    /// All members of the same team spawn at the same base in squad formation.
+    /// Prevents spawn camping by dynamically picking clear locations and granting 2.5s spawn shield.
     /// </summary>
     public void RespawnCombatant(Transform combatant, int teamId, int squadSlot = -1)
     {
         if (combatant == null) return;
 
-        if (squadSlot < 0)
-        {
-            var ai = combatant.GetComponent<OasisCombatAI>();
-            if (ai != null)
-            {
-                squadSlot = ai.squadSlot >= 0 ? ai.squadSlot : Random.Range(0, 4);
-            }
-            else if (combatant.GetComponent<StarterAssets.FirstPersonController>() != null)
-            {
-                squadSlot = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.myPlayerId : 0;
-            }
-            else if (combatant.name.StartsWith("CoOp_Operative_"))
-            {
-                string[] parts = combatant.name.Split('_');
-                if (parts.Length > 2 && int.TryParse(parts[2], out int opId))
-                {
-                    squadSlot = opId;
-                }
-            }
-            else
-            {
-                squadSlot = 0;
-            }
-        }
-
-        Vector3 spawnPos = GetTeamSpawnPosition(teamId, squadSlot);
+        // Use smart tactical safe spawn to eliminate spawn camping
+        Vector3 spawnPos = GetTacticalSafeSpawnPosition(teamId, combatant);
 
         var cc = combatant.GetComponent<CharacterController>();
         if (cc != null) cc.enabled = false;
@@ -307,6 +420,20 @@ public class OasisSpawnSystem : MonoBehaviour
         {
             combatant.rotation = Quaternion.LookRotation(toCenter.normalized);
         }
+
+        // Apply Spawn Shield Protection Grace Period (2.5 seconds)
+        var botAI = combatant.GetComponent<OasisCombatAI>();
+        if (botAI != null)
+        {
+            botAI.GrantSpawnProtection(2.5f);
+        }
+        else if (OasisShooterManager.Instance != null)
+        {
+            OasisShooterManager.Instance.GrantPlayerSpawnProtection(2.5f);
+        }
+
+        // Visual warp effect
+        BlasterVFX.SpawnWarpIn(spawnPos);
 
         // If player has StarterAssets FirstPersonController, level the camera pitch to horizon
         var fpc = combatant.GetComponent<StarterAssets.FirstPersonController>();

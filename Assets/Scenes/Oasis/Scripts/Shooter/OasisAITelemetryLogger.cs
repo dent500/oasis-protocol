@@ -103,7 +103,7 @@ public class OasisAITelemetryLogger : MonoBehaviour
     private const float HEATMAP_INTERVAL = 2.5f;
 
     // Live HUD GUI Settings
-    public bool showLiveTelemetryHUD = true;
+    public bool showLiveTelemetryHUD = false;
     private Vector2 _journalScrollPos;
     private string _exportStatusMessage = "";
     private float _exportStatusTimer = 0f;
@@ -369,6 +369,51 @@ public class OasisAITelemetryLogger : MonoBehaviour
         LogEvent("HIT", attName, vicName, distance, $"Landed {damage:F0} DMG at {distance:F1}m (HP: {postHp:F0})");
     }
 
+    public void RecordElimination(OasisCombatAI victim, int attackerId, float distance)
+    {
+        if (victim == null) return;
+        var vStats = GetOrCreateBotMetrics(victim.botName, victim.teamId, victim.operativeClassId);
+        vStats.fullDeaths++;
+
+        int myPlayerId = OasisNetworkManager.Instance != null ? OasisNetworkManager.Instance.myPlayerId : 0;
+        bool isPlayer = (attackerId == 0 || (myPlayerId != 0 && attackerId == myPlayerId));
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode)
+        {
+            isPlayer = false;
+        }
+
+        string attackerName = "OPPONENT";
+        if (isPlayer)
+        {
+            attackerName = GetLocalPlayerName();
+            var pStats = GetOrCreateBotMetrics(attackerName, GetLocalPlayerTeam(), GetLocalPlayerClass());
+            pStats.eliminationsCompleted++;
+        }
+        else
+        {
+            foreach (var b in OasisCombatAI.ActiveBots)
+            {
+                if (b != null && b.GetHashCode() == attackerId)
+                {
+                    attackerName = b.botName;
+                    var aStats = GetOrCreateBotMetrics(b.botName, b.teamId, b.operativeClassId);
+                    aStats.eliminationsCompleted++;
+                    break;
+                }
+            }
+        }
+
+        LogEvent("ELIMINATION", attackerName, victim.botName, distance, $"Eliminated {victim.botName} at {distance:F1}m! [Respawning at base in 3s]");
+    }
+
+    public void RecordPlayerEliminated(string attackerName)
+    {
+        string pName = GetLocalPlayerName();
+        var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
+        pStats.fullDeaths++;
+        LogEvent("ELIMINATION", attackerName, pName, 0f, "Player eliminated. Respawning at base in 3s.");
+    }
+
     public void RecordKnockdown(OasisCombatAI victim, int attackerId, float distance)
     {
         if (victim == null) return;
@@ -477,7 +522,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerSpawn(Vector3 pos)
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var stats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         stats.lastRecordedPosition = pos;
@@ -487,7 +531,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerShotFired()
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var stats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         stats.shotsFired++;
@@ -495,7 +538,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerHitLanded(OasisCombatAI victim, float damage, float distance)
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.shotsHit++;
@@ -516,7 +558,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerDamageTaken(float damage, string attackerName)
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.totalDamageTaken += damage;
@@ -524,7 +565,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerKnockedDown(string attackerName)
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.timesDowned++;
@@ -533,7 +573,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerBleedout()
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.fullDeaths++;
@@ -542,7 +581,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerReviveSuccess(string allyName)
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.revivesInitiated++;
@@ -552,7 +590,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
 
     public void RecordPlayerReload()
     {
-        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isSimulationMode) return;
         string pName = GetLocalPlayerName();
         var pStats = GetOrCreateBotMetrics(pName, GetLocalPlayerTeam(), GetLocalPlayerClass());
         pStats.reloadsPerformed++;
@@ -625,14 +662,14 @@ public class OasisAITelemetryLogger : MonoBehaviour
         sb.AppendLine();
 
         sb.AppendLine("## 1. Operative Performance Roster");
-        sb.AppendLine("| Operative Name | Team | Class | KD (Knock/Die) | Revives (Done/Att) | Accuracy | Dmg Dealt | Dmg Taken | Avg Range | Stuck Hits |");
+        sb.AppendLine("| Operative Name | Team | Class | KD (Kills/Deaths) | Accuracy | Dmg Dealt | Dmg Taken | Avg Range | Stuck Hits |");
         sb.AppendLine("| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |");
 
         foreach (var kvp in _botMetricsMap)
         {
             var b = kvp.Value;
             string teamStr = OasisShooterManager.GetTeamShortName(b.teamId);
-            sb.AppendLine($"| **{b.botName}** | {teamStr} | {b.operativeClass} | {b.knockdownsInflicted} / {b.fullDeaths} | {b.revivesCompleted} / {b.revivesInitiated} | {b.Accuracy:F1}% ({b.shotsHit}/{b.shotsFired}) | {b.totalDamageDealt:F0} | {b.totalDamageTaken:F0} | {b.AverageEngagementRange:F1}m | {b.stuckIncidents} |");
+            sb.AppendLine($"| **{b.botName}** | {teamStr} | {b.operativeClass} | {b.eliminationsCompleted} / {b.fullDeaths} | {b.Accuracy:F1}% ({b.shotsHit}/{b.shotsFired}) | {b.totalDamageDealt:F0} | {b.totalDamageTaken:F0} | {b.AverageEngagementRange:F1}m | {b.stuckIncidents} |");
         }
         sb.AppendLine();
 

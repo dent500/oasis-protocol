@@ -83,13 +83,256 @@ public class InGamePauseManager : MonoBehaviour
         }
     }
 
+    private int _lastToggleFrame = -1;
+    private float _lastToggleRealtime = -1f;
+    private bool _showSettingsInGUI = false;
+
+    private Texture2D _backdropTex;
+    private Texture2D _cardTex;
+    private Texture2D _accentTex;
+    private GUIStyle _titleStyle;
+    private GUIStyle _subTitleStyle;
+    private GUIStyle _primaryBtnStyle;
+    private GUIStyle _secondaryBtnStyle;
+    private GUIStyle _dangerBtnStyle;
+    private GUIStyle _labelStyle;
+
+    private Texture2D MakeSolidTexture(int width, int height, Color col)
+    {
+        Texture2D tex = new Texture2D(width, height);
+        Color[] pixels = new Color[width * height];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = col;
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    private void EnsureGUIStyles()
+    {
+        if (_backdropTex == null) _backdropTex = MakeSolidTexture(2, 2, new Color(0.02f, 0.04f, 0.08f, 0.88f));
+        if (_cardTex == null) _cardTex = MakeSolidTexture(2, 2, new Color(0.04f, 0.07f, 0.12f, 0.97f));
+        if (_accentTex == null) _accentTex = MakeSolidTexture(2, 2, new Color(0.20f, 0.85f, 1.0f, 1.0f));
+
+        if (_titleStyle == null)
+        {
+            _titleStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 20,
+                fontStyle = FontStyle.Bold
+            };
+            _titleStyle.normal.textColor = Color.white;
+        }
+
+        if (_subTitleStyle == null)
+        {
+            _subTitleStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 12,
+                fontStyle = FontStyle.Bold
+            };
+            _subTitleStyle.normal.textColor = new Color(0.25f, 0.88f, 1.0f);
+        }
+
+        if (_labelStyle == null)
+        {
+            _labelStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleLeft,
+                fontSize = 13,
+                fontStyle = FontStyle.Bold
+            };
+            _labelStyle.normal.textColor = Color.white;
+        }
+
+        if (_primaryBtnStyle == null)
+        {
+            _primaryBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 15,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _primaryBtnStyle.normal.textColor = Color.white;
+        }
+
+        if (_secondaryBtnStyle == null)
+        {
+            _secondaryBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _secondaryBtnStyle.normal.textColor = new Color(0.9f, 0.95f, 1.0f);
+        }
+
+        if (_dangerBtnStyle == null)
+        {
+            _dangerBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _dangerBtnStyle.normal.textColor = new Color(1.0f, 0.45f, 0.45f);
+        }
+    }
+
+    private void OnGUI()
+    {
+        if (!_isPaused) return;
+
+        // Force cursor visible and free while paused so player can interact with the menu
+        if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+        if (!Cursor.visible) Cursor.visible = true;
+
+        EnsureGUIStyles();
+
+        // 1. Fullscreen dark backdrop
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _backdropTex, ScaleMode.StretchToFill);
+
+        float cardW = Mathf.Clamp(Screen.width * 0.38f, 440f, 560f);
+        float cardH = _showSettingsInGUI ? 530f : 490f;
+        float cardX = (Screen.width - cardW) * 0.5f;
+        float cardY = (Screen.height - cardH) * 0.5f;
+
+        // Glowing border & card background
+        GUI.color = new Color(0.20f, 0.85f, 1.0f, 0.85f);
+        GUI.Box(new Rect(cardX - 2, cardY - 2, cardW + 4, cardH + 4), GUIContent.none);
+        GUI.color = Color.white;
+        GUI.DrawTexture(new Rect(cardX, cardY, cardW, cardH), _cardTex, ScaleMode.StretchToFill);
+
+        // Top accent line
+        GUI.DrawTexture(new Rect(cardX, cardY, cardW, 4), _accentTex, ScaleMode.StretchToFill);
+
+        GUILayout.BeginArea(new Rect(cardX + 24, cardY + 16, cardW - 48, cardH - 32));
+
+        if (!_showSettingsInGUI)
+        {
+            // MAIN PAUSE MENU
+            GUILayout.Label("OASIS PROTOCOL // TACTICAL PAUSE", _titleStyle);
+            GUILayout.Space(2);
+            GUILayout.Label("PRESS [ESC] TO RESUME COMBAT", _subTitleStyle);
+            GUILayout.Space(14);
+
+            GUI.backgroundColor = new Color(0.12f, 0.65f, 0.38f, 1f);
+            if (GUILayout.Button("▶   RESUME COMBAT  [ESC]", _primaryBtnStyle, GUILayout.Height(46)))
+            {
+                ResumeGame();
+            }
+            GUILayout.Space(10);
+
+            GUI.backgroundColor = new Color(0.12f, 0.45f, 0.72f, 1f);
+            if (GUILayout.Button("⚙   SETTINGS  (SENSITIVITY, AUDIO & KEYS)", _secondaryBtnStyle, GUILayout.Height(42)))
+            {
+                OpenSettingsSubPanel();
+            }
+            GUILayout.Space(10);
+
+            GUI.backgroundColor = new Color(0.18f, 0.30f, 0.48f, 1f);
+            if (GUILayout.Button("🔄   RESTART MATCH", _secondaryBtnStyle, GUILayout.Height(38)))
+            {
+                RestartCurrentScene();
+            }
+            GUILayout.Space(10);
+
+            GUI.backgroundColor = new Color(0.18f, 0.30f, 0.48f, 1f);
+            if (GUILayout.Button("📋   CHANGE OPERATIVE", _secondaryBtnStyle, GUILayout.Height(38)))
+            {
+                ReturnToOperativeSelection();
+            }
+            GUILayout.Space(10);
+
+            GUI.backgroundColor = new Color(0.25f, 0.30f, 0.40f, 1f);
+            if (GUILayout.Button("🏠   MAIN MENU", _secondaryBtnStyle, GUILayout.Height(38)))
+            {
+                ReturnToMainMenu();
+            }
+            GUILayout.Space(10);
+
+            GUI.backgroundColor = new Color(0.65f, 0.15f, 0.18f, 1f);
+            if (GUILayout.Button("✖   QUIT GAME", _dangerBtnStyle, GUILayout.Height(38)))
+            {
+                QuitApplication();
+            }
+            GUI.backgroundColor = Color.white;
+        }
+        else
+        {
+            // SETTINGS SUB-PANEL
+            GUILayout.Label("TACTICAL SETTINGS", _titleStyle);
+            GUILayout.Space(2);
+            GUILayout.Label("AUDIO, SENSITIVITY & DISPLAY", _subTitleStyle);
+            GUILayout.Space(14);
+
+            // Audio Volume
+            float currentVol = AudioListener.volume;
+            GUILayout.Label($"Master Volume: {Mathf.RoundToInt(currentVol * 100f)}%", _labelStyle);
+            float newVol = GUILayout.HorizontalSlider(currentVol, 0f, 1f, GUILayout.Height(20));
+            if (Mathf.Abs(newVol - currentVol) > 0.005f)
+            {
+                OnVolumeChanged(newVol);
+            }
+            GUILayout.Space(10);
+
+            // Mouse Sensitivity
+            float currentSens = PlayerPrefs.GetFloat("OasisMouseSensitivity", 1.0f);
+            GUILayout.Label($"Mouse Sensitivity: {currentSens:F2}x", _labelStyle);
+            float newSens = GUILayout.HorizontalSlider(currentSens, 0.2f, 3.0f, GUILayout.Height(20));
+            if (Mathf.Abs(newSens - currentSens) > 0.01f)
+            {
+                OnSensitivityChanged(newSens);
+            }
+            GUILayout.Space(10);
+
+            // Quality Presets
+            GUILayout.Label("Graphics Quality Tier:", _labelStyle);
+            GUILayout.BeginHorizontal();
+            GUI.backgroundColor = (_selectedQualityTier == 0) ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("LOW", GUILayout.Height(30))) SetQualityTier(0);
+            GUI.backgroundColor = (_selectedQualityTier == 1) ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("BALANCED", GUILayout.Height(30))) SetQualityTier(1);
+            GUI.backgroundColor = (_selectedQualityTier == 2) ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("ULTRA", GUILayout.Height(30))) SetQualityTier(2);
+            GUI.backgroundColor = Color.white;
+            GUILayout.EndHorizontal();
+            GUILayout.Space(10);
+
+            // Fullscreen & Camera Perspective
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(Screen.fullScreen ? "FULLSCREEN: ON" : "WINDOWED MODE", GUILayout.Height(30)))
+            {
+                ToggleFullscreenMode();
+            }
+            bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
+            if (GUILayout.Button(is3rd ? "VIEW: 3RD PERSON" : "VIEW: 1ST PERSON", GUILayout.Height(30)))
+            {
+                ToggleCameraPerspective();
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.Space(16);
+
+            GUI.backgroundColor = new Color(0.12f, 0.45f, 0.72f, 1f);
+            if (GUILayout.Button("◀   BACK TO PAUSE MENU", _primaryBtnStyle, GUILayout.Height(40)))
+            {
+                CloseSettingsSubPanel();
+            }
+            GUI.backgroundColor = Color.white;
+        }
+
+        GUILayout.EndArea();
+    }
+
     private void EnsureEventSystem()
     {
         if (EventSystem.current != null) return;
         GameObject esObj = new GameObject("Oasis_EventSystem");
         esObj.AddComponent<EventSystem>();
 #if ENABLE_INPUT_SYSTEM
-        esObj.AddComponent<InputSystemUIInputModule>();
+        var uiModule = esObj.AddComponent<InputSystemUIInputModule>();
+        uiModule.AssignDefaultActions();
 #else
         esObj.AddComponent<StandaloneInputModule>();
 #endif
@@ -156,9 +399,11 @@ public class InGamePauseManager : MonoBehaviour
         {
             escPressed = Keyboard.current.escapeKey.wasPressedThisFrame;
         }
-#else
-        escPressed = Input.GetKeyDown(KeyCode.Escape);
 #endif
+        if (!escPressed)
+        {
+            escPressed = Input.GetKeyDown(KeyCode.Escape);
+        }
 
         if (escPressed)
         {
@@ -169,7 +414,7 @@ public class InGamePauseManager : MonoBehaviour
                 return;
             }
 
-            if (_isPaused && _settingsPanel != null && _settingsPanel.activeSelf)
+            if (_isPaused && (_showSettingsInGUI || (_settingsPanel != null && _settingsPanel.activeSelf)))
             {
                 CloseSettingsSubPanel();
                 return;
@@ -188,6 +433,10 @@ public class InGamePauseManager : MonoBehaviour
 
     public void TogglePause()
     {
+        if (Time.frameCount == _lastToggleFrame || (Time.unscaledTime - _lastToggleRealtime < 0.22f)) return;
+        _lastToggleFrame = Time.frameCount;
+        _lastToggleRealtime = Time.unscaledTime;
+
         if (_isPaused)
         {
             ResumeGame();
@@ -202,6 +451,7 @@ public class InGamePauseManager : MonoBehaviour
     {
         EnsureEventSystem();
         _isPaused = true;
+        _showSettingsInGUI = false;
         _awaitingRebindAction = null;
 
         // Only freeze Time.timeScale in offline/singleplayer so live network/relay sessions stay synchronized
@@ -232,6 +482,7 @@ public class InGamePauseManager : MonoBehaviour
     public void ResumeGame()
     {
         _isPaused = false;
+        _showSettingsInGUI = false;
         _awaitingRebindAction = null;
         Time.timeScale = 1f;
 
@@ -262,11 +513,17 @@ public class InGamePauseManager : MonoBehaviour
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
+            else
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
         }
     }
 
     public void OpenSettingsSubPanel()
     {
+        _showSettingsInGUI = true;
         _awaitingRebindAction = null;
         if (_mainPausePanel != null) _mainPausePanel.SetActive(false);
         if (_settingsPanel != null)
@@ -278,6 +535,7 @@ public class InGamePauseManager : MonoBehaviour
 
     public void CloseSettingsSubPanel()
     {
+        _showSettingsInGUI = false;
         _awaitingRebindAction = null;
         PlayerPrefs.Save();
         if (_settingsPanel != null) _settingsPanel.SetActive(false);

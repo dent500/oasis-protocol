@@ -37,6 +37,11 @@ namespace StarterAssets
         public float ThrusterCooldown = 3.5f;
         public float thrusterCooldownRemaining { get; private set; } = 0f;
 
+        [Header("Water & Swimming")]
+        public bool isSwimming { get; private set; } = false;
+        private float _lastSwimSplashTime = -10f;
+        private bool _wasInWaterLastFrame = false;
+
         [Header("Player Grounded")]
         [Tooltip("If the character is grounded or not. Not part of the CharacterController built in grounded check")]
         public bool Grounded = true;
@@ -169,6 +174,31 @@ namespace StarterAssets
                 return;
             }
             if (thrusterCooldownRemaining > 0f) thrusterCooldownRemaining -= Time.deltaTime;
+
+            bool inWater = OasisWaterZone.IsInWater(transform.position);
+            isSwimming = inWater;
+
+            if (inWater && !_wasInWaterLastFrame)
+            {
+                var aSrc = GetComponent<AudioSource>();
+                if (aSrc != null) aSrc.PlayOneShot(ProceduralAudio.GetWaterSplashClip(), 0.75f);
+                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#26D9FF>OASIS POND // WADING / SWIMMING</color>", 1.8f);
+            }
+            _wasInWaterLastFrame = inWater;
+
+            bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+            if (isDowned)
+            {
+                // In downed state: lock to slow ground crawl, disable jump & thruster boost
+                MoveSpeed = 1.15f;
+                SprintSpeed = 1.15f;
+            }
+            else if (inWater)
+            {
+                MoveSpeed = 3.2f;
+                SprintSpeed = 4.2f;
+            }
+
             GroundedCheck();
             JumpAndGravity();
             Move();
@@ -353,14 +383,16 @@ namespace StarterAssets
                 }
             }
 
-            bool sprintInput = OasisKeybindManager.IsPressed(OasisAction.Sprint) ||
+            bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+
+            bool sprintInput = !isDowned && (OasisKeybindManager.IsPressed(OasisAction.Sprint) ||
 #if ENABLE_INPUT_SYSTEM
                 (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed) ||
 #endif
-                (_input != null && _input.sprint && OasisKeybindManager.GetKey(OasisAction.Sprint) == KeyCode.LeftShift);
+                (_input != null && _input.sprint && OasisKeybindManager.GetKey(OasisAction.Sprint) == KeyCode.LeftShift));
 
             // set target speed based on move speed, sprint speed and if sprint is pressed
-            float targetSpeed = sprintInput ? SprintSpeed : MoveSpeed;
+            float targetSpeed = isDowned ? 1.15f : (sprintInput ? SprintSpeed : MoveSpeed);
 
             // a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
 
@@ -381,8 +413,8 @@ namespace StarterAssets
                 // note T in Lerp is clamped, so we don't need to clamp our speed
                 _speed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude, Time.deltaTime * SpeedChangeRate);
 
-                // If starting from a stop, guarantee immediate snappy breakout so player never feels stuck
-                if (moveInput != Vector2.zero && _speed < 2.0f && targetSpeed > 0f)
+                // If starting from a stop, guarantee immediate snappy breakout so player never feels stuck (disabled while downed)
+                if (!isDowned && moveInput != Vector2.zero && _speed < 2.0f && targetSpeed > 0f)
                 {
                     _speed = Mathf.Max(_speed, 2.0f);
                 }
@@ -409,6 +441,13 @@ namespace StarterAssets
             // move the player
             if (_controller.enabled)
             {
+                if (isSwimming && inputDirection.sqrMagnitude > 0.1f && Time.time - _lastSwimSplashTime > 0.65f)
+                {
+                    _lastSwimSplashTime = Time.time;
+                    var aSrc = GetComponent<AudioSource>();
+                    if (aSrc != null) aSrc.PlayOneShot(ProceduralAudio.GetWaterWadeClip(), 0.38f);
+                }
+
                 CollisionFlags flags = _controller.Move(inputDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
                 // If player hits a ceiling while jumping upward, cancel upward velocity immediately
                 if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f)
@@ -426,6 +465,46 @@ namespace StarterAssets
                 Gravity = -18.0f;
             }
 
+            if (isSwimming)
+            {
+                _fallTimeoutDelta = FallTimeout;
+                float targetWaterY = OasisWaterZone.WaterSurfaceY - 1.35f;
+                float depthDiff = targetWaterY - transform.position.y;
+
+                bool treadUp = OasisKeybindManager.IsPressed(OasisAction.Jump) ||
+#if ENABLE_INPUT_SYSTEM
+                    (Keyboard.current != null && Keyboard.current.spaceKey.isPressed) ||
+#endif
+                    (_input != null && _input.jump);
+
+                bool diveDown = OasisKeybindManager.IsPressed(OasisAction.Crouch) ||
+#if ENABLE_INPUT_SYSTEM
+                    (Keyboard.current != null && (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.cKey.isPressed));
+#else
+                    Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
+#endif
+
+                if (treadUp)
+                {
+                    _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, 2.5f, 15f * Time.deltaTime);
+                }
+                else if (diveDown)
+                {
+                    _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, -2.5f, 15f * Time.deltaTime);
+                }
+                else
+                {
+                    float bob = Mathf.Sin(Time.time * 2.2f) * 0.12f;
+                    float desiredVertVel = (depthDiff + bob) * 3.5f;
+                    _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, desiredVertVel, 18f * Time.deltaTime);
+                }
+
+                _verticalVelocity = Mathf.Clamp(_verticalVelocity, -3.0f, 3.5f);
+                Grounded = false;
+                _jumpTimeoutDelta = JumpTimeout;
+                return;
+            }
+
             if (Grounded)
             {
                 // reset the fall timeout timer
@@ -438,11 +517,12 @@ namespace StarterAssets
                 }
 
                 // Jump: check custom keybind or _input.jump trigger
-                bool jumpPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
+                bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+                bool jumpPressed = !isDowned && (OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
 #if ENABLE_INPUT_SYSTEM
                     (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
 #endif
-                    (_input != null && _input.jump && OasisKeybindManager.GetKey(OasisAction.Jump) == KeyCode.Space);
+                    (_input != null && _input.jump && OasisKeybindManager.GetKey(OasisAction.Jump) == KeyCode.Space));
 
                 if (jumpPressed && _jumpTimeoutDelta <= 0.0f)
                 {
@@ -463,11 +543,12 @@ namespace StarterAssets
             else
             {
                 // reset the jump timeout timer
-                bool thrusterJumpPressed = OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
+                bool isDownedAir = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+                bool thrusterJumpPressed = !isDownedAir && (OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
 #if ENABLE_INPUT_SYSTEM
                     (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
 #endif
-                    (_input != null && _input.jump);
+                    (_input != null && _input.jump));
 
                 if (thrusterJumpPressed && thrusterCooldownRemaining <= 0f && _verticalVelocity < 6.0f)
                 {

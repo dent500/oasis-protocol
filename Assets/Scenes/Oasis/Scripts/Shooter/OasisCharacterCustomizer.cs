@@ -104,7 +104,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
             "Rogue gunslinger in modified cyberwear with overclocked neural fire-rate boosters and critical reflex wiring.", 
             "Characters/Textures/criminalMaleA", new Color(0.92f, 0.35f, 0.95f),
             0.70f, 0.90f, 0.95f, 0.70f,
-            "High-Caliber Dual Pistols & AR", "Deadshot Overclock", "Weakspot critical hits deal 50% extra kinetic damage.")
+            "Heavy Plasma Hand Cannon", "Deadshot Overclock", "Weakspot critical hits deal 50% extra kinetic damage.")
     };
 
     public int selectedOperativeIndex = 0;
@@ -137,6 +137,9 @@ public class OasisCharacterCustomizer : MonoBehaviour
     private Button _confirmButton;
     private Image _roleHeaderBtnBg;
     private Text _roleHeaderBtnText;
+    private GameObject _askRecordModalObj;
+    private Image _autoRecordBtnBg;
+    private Text _autoRecordBtnText;
 
     [Header("Match Settings")]
     public int selectedTeam = 0; // 0 = Alpha, 1 = Bravo, 2 = Charlie, 3 = Delta
@@ -1111,6 +1114,224 @@ public class OasisCharacterCustomizer : MonoBehaviour
     // 10-SECOND TACTICAL DEPLOYMENT COUNTDOWN
     // ==========================================
 
+    public void PromptOrStartDeployment(bool isSimulation)
+    {
+        if (!CanLocalPlayerStartGame()) return;
+
+        if (!OasisOutplayedOverlay.DontAskRecordPrompt)
+        {
+            ShowAskRecordModal(isSimulation);
+        }
+        else
+        {
+            StartDeploymentCountdown(isSimulation);
+        }
+    }
+
+    private void RefreshAutoRecordButtonUI()
+    {
+        if (_autoRecordBtnBg == null || _autoRecordBtnText == null) return;
+        bool enabled = OasisOutplayedOverlay.AutoRecordEnabled;
+        if (enabled)
+        {
+            _autoRecordBtnBg.color = new Color(0.75f, 0.16f, 0.16f, 1.0f);
+            _autoRecordBtnText.text = "<color=#FFFFFF><b>● OUTPLAYED: ON</b></color>\n<size=10><color=#FFC0C0>[AUTO-RECORD MATCH]</color></size>";
+        }
+        else
+        {
+            _autoRecordBtnBg.color = new Color(0.12f, 0.18f, 0.28f, 1.0f);
+            _autoRecordBtnText.text = "<color=#A0B4C8>○ OUTPLAYED: OFF</color>\n<size=10><color=#7088A0>[CLICK TO ARM]</color></size>";
+        }
+    }
+
+    private void ToggleAutoRecordFromButton()
+    {
+        OasisOutplayedOverlay.AutoRecordEnabled = !OasisOutplayedOverlay.AutoRecordEnabled;
+        RefreshAutoRecordButtonUI();
+        PlayCountdownSound(false);
+    }
+
+    private void ShowAskRecordModal(bool isSimulation)
+    {
+        if (_selectionCanvas == null) return;
+        if (_askRecordModalObj != null) Destroy(_askRecordModalObj);
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        // Dim full-screen blocker
+        _askRecordModalObj = new GameObject("Ask_Record_Modal_Overlay");
+        _askRecordModalObj.transform.SetParent(_selectionCanvas.transform, false);
+        var ovRT = _askRecordModalObj.AddComponent<RectTransform>();
+        ovRT.anchorMin = Vector2.zero;
+        ovRT.anchorMax = Vector2.one;
+        ovRT.offsetMin = Vector2.zero;
+        ovRT.offsetMax = Vector2.zero;
+        var ovImg = _askRecordModalObj.AddComponent<Image>();
+        ovImg.color = new Color(0f, 0f, 0f, 0.82f);
+        ovImg.raycastTarget = true;
+
+        // Centered Card Border
+        GameObject cardBorder = new GameObject("Card_Border");
+        cardBorder.transform.SetParent(_askRecordModalObj.transform, false);
+        var cbRT = cardBorder.AddComponent<RectTransform>();
+        cbRT.anchorMin = new Vector2(0.5f, 0.5f);
+        cbRT.anchorMax = new Vector2(0.5f, 0.5f);
+        cbRT.sizeDelta = new Vector2(580f, 320f);
+        var cbImg = cardBorder.AddComponent<Image>();
+        cbImg.color = new Color(0.18f, 0.78f, 0.98f, 0.95f);
+
+        // Card Inner
+        GameObject cardInner = new GameObject("Card_Inner");
+        cardInner.transform.SetParent(cardBorder.transform, false);
+        var ciRT = cardInner.AddComponent<RectTransform>();
+        ciRT.anchorMin = Vector2.zero;
+        ciRT.anchorMax = Vector2.one;
+        ciRT.offsetMin = new Vector2(2, 2);
+        ciRT.offsetMax = new Vector2(-2, -2);
+        var ciImg = cardInner.AddComponent<Image>();
+        ciImg.color = new Color(0.04f, 0.07f, 0.13f, 0.98f);
+
+        // Top Accent Strip
+        GameObject topStrip = new GameObject("Top_Stripe");
+        topStrip.transform.SetParent(cardInner.transform, false);
+        var tsRT = topStrip.AddComponent<RectTransform>();
+        tsRT.anchorMin = new Vector2(0f, 0.965f);
+        tsRT.anchorMax = new Vector2(1f, 1f);
+        tsRT.offsetMin = Vector2.zero;
+        tsRT.offsetMax = Vector2.zero;
+        var tsImg = topStrip.AddComponent<Image>();
+        tsImg.color = new Color(0.20f, 0.85f, 1.0f);
+
+        // Header Title
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(cardInner.transform, false);
+        var tRT = titleObj.AddComponent<RectTransform>();
+        tRT.anchorMin = new Vector2(0.05f, 0.78f);
+        tRT.anchorMax = new Vector2(0.95f, 0.94f);
+        tRT.offsetMin = Vector2.zero;
+        tRT.offsetMax = Vector2.zero;
+        var tTxt = titleObj.AddComponent<Text>();
+        tTxt.font = font;
+        tTxt.fontSize = 20;
+        tTxt.fontStyle = FontStyle.Bold;
+        tTxt.color = Color.white;
+        tTxt.alignment = TextAnchor.MiddleCenter;
+        tTxt.text = "<color=#FF3B30>●</color> <color=#26D9FF>OUTPLAYED MATCH RECORDER</color>";
+
+        // Explanatory Message
+        GameObject msgObj = new GameObject("Message");
+        msgObj.transform.SetParent(cardInner.transform, false);
+        var mRT = msgObj.AddComponent<RectTransform>();
+        mRT.anchorMin = new Vector2(0.06f, 0.44f);
+        mRT.anchorMax = new Vector2(0.94f, 0.76f);
+        mRT.offsetMin = Vector2.zero;
+        mRT.offsetMax = Vector2.zero;
+        var mTxt = msgObj.AddComponent<Text>();
+        mTxt.font = font;
+        mTxt.fontSize = 14;
+        mTxt.lineSpacing = 1.25f;
+        mTxt.color = new Color(0.85f, 0.92f, 1.0f);
+        mTxt.alignment = TextAnchor.MiddleCenter;
+        mTxt.text = "Would you like to automatically record this tactical match with Overwolf Outplayed?\n\n<color=#38EF7D>✔</color> Capture starts automatically upon deployment\n<color=#38EF7D>✔</color> Automatically saves and stops when the match finishes";
+
+        // Remember Choice Checkbox / Toggle state
+        bool rememberChoice = false;
+
+        GameObject remObj = new GameObject("Remember_Toggle");
+        remObj.transform.SetParent(cardInner.transform, false);
+        var remRT = remObj.AddComponent<RectTransform>();
+        remRT.anchorMin = new Vector2(0.08f, 0.31f);
+        remRT.anchorMax = new Vector2(0.92f, 0.42f);
+        remRT.offsetMin = Vector2.zero;
+        remRT.offsetMax = Vector2.zero;
+        var remBtn = remObj.AddComponent<Button>();
+        var remTxt = remObj.AddComponent<Text>();
+        remTxt.font = font;
+        remTxt.fontSize = 13;
+        remTxt.fontStyle = FontStyle.Bold;
+        remTxt.color = new Color(0.65f, 0.80f, 0.95f);
+        remTxt.alignment = TextAnchor.MiddleCenter;
+        remTxt.text = "[   ]  Remember my choice (Can toggle anytime before deploy)";
+        remBtn.onClick.AddListener(() =>
+        {
+            rememberChoice = !rememberChoice;
+            remTxt.text = rememberChoice 
+                ? "[ X ]  <color=#38EF7D>Remember my choice</color> (Can toggle anytime before deploy)"
+                : "[   ]  Remember my choice (Can toggle anytime before deploy)";
+        });
+
+        // 1. Record Button (YES)
+        GameObject yesBtnObj = new GameObject("Btn_Yes_Record");
+        yesBtnObj.transform.SetParent(cardInner.transform, false);
+        var yRT = yesBtnObj.AddComponent<RectTransform>();
+        yRT.anchorMin = new Vector2(0.08f, 0.08f);
+        yRT.anchorMax = new Vector2(0.50f, 0.28f);
+        yRT.offsetMin = Vector2.zero;
+        yRT.offsetMax = Vector2.zero;
+        var yImg = yesBtnObj.AddComponent<Image>();
+        yImg.color = new Color(0.08f, 0.65f, 0.38f);
+        var yBtn = yesBtnObj.AddComponent<Button>();
+        yBtn.targetGraphic = yImg;
+        GameObject yTxtObj = new GameObject("Text");
+        yTxtObj.transform.SetParent(yesBtnObj.transform, false);
+        var ytRT = yTxtObj.AddComponent<RectTransform>();
+        ytRT.anchorMin = Vector2.zero;
+        ytRT.anchorMax = Vector2.one;
+        ytRT.offsetMin = Vector2.zero;
+        ytRT.offsetMax = Vector2.zero;
+        var ytTxt = yTxtObj.AddComponent<Text>();
+        ytTxt.font = font;
+        ytTxt.fontSize = 14;
+        ytTxt.fontStyle = FontStyle.Bold;
+        ytTxt.color = Color.white;
+        ytTxt.alignment = TextAnchor.MiddleCenter;
+        ytTxt.text = "● YES, RECORD MATCH\n<size=11><color=#CCFFDD>[AUTO-STOP AT END]</color></size>";
+        yBtn.onClick.AddListener(() =>
+        {
+            OasisOutplayedOverlay.AutoRecordEnabled = true;
+            if (rememberChoice) OasisOutplayedOverlay.DontAskRecordPrompt = true;
+            RefreshAutoRecordButtonUI();
+            if (_askRecordModalObj != null) Destroy(_askRecordModalObj);
+            StartDeploymentCountdown(isSimulation);
+        });
+
+        // 2. Play Without Recording Button (NO)
+        GameObject noBtnObj = new GameObject("Btn_No_Record");
+        noBtnObj.transform.SetParent(cardInner.transform, false);
+        var nRT = noBtnObj.AddComponent<RectTransform>();
+        nRT.anchorMin = new Vector2(0.53f, 0.08f);
+        nRT.anchorMax = new Vector2(0.92f, 0.28f);
+        nRT.offsetMin = Vector2.zero;
+        nRT.offsetMax = Vector2.zero;
+        var nImg = noBtnObj.AddComponent<Image>();
+        nImg.color = new Color(0.20f, 0.25f, 0.35f);
+        var nBtn = noBtnObj.AddComponent<Button>();
+        nBtn.targetGraphic = nImg;
+        GameObject nTxtObj = new GameObject("Text");
+        nTxtObj.transform.SetParent(noBtnObj.transform, false);
+        var ntRT = nTxtObj.AddComponent<RectTransform>();
+        ntRT.anchorMin = Vector2.zero;
+        ntRT.anchorMax = Vector2.one;
+        ntRT.offsetMin = Vector2.zero;
+        ntRT.offsetMax = Vector2.zero;
+        var ntTxt = nTxtObj.AddComponent<Text>();
+        ntTxt.font = font;
+        ntTxt.fontSize = 14;
+        ntTxt.fontStyle = FontStyle.Bold;
+        ntTxt.color = Color.white;
+        ntTxt.alignment = TextAnchor.MiddleCenter;
+        ntTxt.text = "NO, JUST PLAY\n<size=11><color=#AABBDD>[NO RECORDING]</color></size>";
+        nBtn.onClick.AddListener(() =>
+        {
+            OasisOutplayedOverlay.AutoRecordEnabled = false;
+            if (rememberChoice) OasisOutplayedOverlay.DontAskRecordPrompt = true;
+            RefreshAutoRecordButtonUI();
+            if (_askRecordModalObj != null) Destroy(_askRecordModalObj);
+            StartDeploymentCountdown(isSimulation);
+        });
+    }
+
     public void StartDeploymentCountdown(bool isSimulation)
     {
         // ONLY the Host can start the game!
@@ -1564,7 +1785,12 @@ public class OasisCharacterCustomizer : MonoBehaviour
             OasisCombatMovement.Instance.SetThirdPersonMode(false);
             var pWeapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
             if (pWeapon == null) pWeapon = FindAnyObjectByType<BlasterWeapon>();
-            if (pWeapon != null) pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
+            if (pWeapon != null)
+            {
+                pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
+                pWeapon.SyncWeaponMaterial(OasisCombatMovement.Instance.currentCharacterMaterial);
+                pWeapon.SetWeaponVisualActive(true);
+            }
         }
 
         // 2. Teleport player to a random grounded spawn point for their selected team
@@ -1628,6 +1854,11 @@ public class OasisCharacterCustomizer : MonoBehaviour
         }
 
         Debug.Log($"<color=cyan>[OasisCharacterCustomizer]</color> Operative deployed: {chosen.name} ({chosen.role}) on Team {selectedTeam} ({selectedMatchFormat})");
+
+        if (OasisOutplayedOverlay.AutoRecordEnabled)
+        {
+            OasisOutplayedOverlay.RequestStartRecording();
+        }
     }
 
     public void Launch2v2Simulation()
@@ -1653,6 +1884,11 @@ public class OasisCharacterCustomizer : MonoBehaviour
         if (OasisShooterManager.Instance != null)
         {
             OasisShooterManager.Instance.StartSimulationMode();
+        }
+
+        if (OasisOutplayedOverlay.AutoRecordEnabled)
+        {
+            OasisOutplayedOverlay.RequestStartRecording();
         }
     }
 
@@ -2532,11 +2768,44 @@ public class OasisCharacterCustomizer : MonoBehaviour
 
         RefreshMatchSettingsUI();
 
-        // --- 4D. BOTTOM: Unified Full-Width "LAUNCH GAME MODE" Button ---
+        // --- 4D. BOTTOM CONTROLS: Outplayed Auto-Record Toggle + Launch Button ---
+        // Left: Auto-Record Match Toggle Button
+        GameObject autoRecBtnObj = new GameObject("Outplayed_AutoRecord_Button");
+        autoRecBtnObj.transform.SetParent(rightPanel.transform, false);
+        RectTransform arRT = autoRecBtnObj.AddComponent<RectTransform>();
+        arRT.anchorMin = new Vector2(0f, 0f);
+        arRT.anchorMax = new Vector2(0.315f, 0.092f);
+        arRT.offsetMin = Vector2.zero;
+        arRT.offsetMax = Vector2.zero;
+
+        _autoRecordBtnBg = autoRecBtnObj.AddComponent<Image>();
+        _autoRecordBtnBg.color = new Color(0.12f, 0.18f, 0.28f, 1.0f);
+
+        Button autoRecBtn = autoRecBtnObj.AddComponent<Button>();
+        autoRecBtn.targetGraphic = _autoRecordBtnBg;
+        autoRecBtn.onClick.AddListener(ToggleAutoRecordFromButton);
+
+        GameObject arTextObj = new GameObject("Text");
+        arTextObj.transform.SetParent(autoRecBtnObj.transform, false);
+        RectTransform artRT = arTextObj.AddComponent<RectTransform>();
+        artRT.anchorMin = Vector2.zero;
+        artRT.anchorMax = Vector2.one;
+        artRT.offsetMin = Vector2.zero;
+        artRT.offsetMax = Vector2.zero;
+        _autoRecordBtnText = arTextObj.AddComponent<Text>();
+        _autoRecordBtnText.font = font;
+        _autoRecordBtnText.fontSize = 12;
+        _autoRecordBtnText.fontStyle = FontStyle.Bold;
+        _autoRecordBtnText.alignment = TextAnchor.MiddleCenter;
+        _autoRecordBtnText.supportRichText = true;
+
+        RefreshAutoRecordButtonUI();
+
+        // Right: Unified Launch Game Mode Button
         GameObject deployBtnObj = new GameObject("Launch_GameMode_Button");
         deployBtnObj.transform.SetParent(rightPanel.transform, false);
         RectTransform depRT = deployBtnObj.AddComponent<RectTransform>();
-        depRT.anchorMin = new Vector2(0f, 0f);
+        depRT.anchorMin = new Vector2(0.33f, 0f);
         depRT.anchorMax = new Vector2(1.0f, 0.092f);
         depRT.offsetMin = Vector2.zero;
         depRT.offsetMax = Vector2.zero;
@@ -2547,7 +2816,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         Button deployBtn = deployBtnObj.AddComponent<Button>();
         deployBtn.targetGraphic = _confirmButtonBg;
         deployBtn.interactable = CanLocalPlayerStartGame();
-        deployBtn.onClick.AddListener(() => StartDeploymentCountdown(isSpectatorMode));
+        deployBtn.onClick.AddListener(() => PromptOrStartDeployment(isSpectatorMode));
         _confirmButton = deployBtn;
 
         GameObject depTextObj = new GameObject("Text");
@@ -2559,7 +2828,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         deptRT.offsetMax = Vector2.zero;
         _confirmButtonText = depTextObj.AddComponent<Text>();
         _confirmButtonText.font = font;
-        _confirmButtonText.fontSize = 19;
+        _confirmButtonText.fontSize = 18;
         _confirmButtonText.fontStyle = FontStyle.Bold;
         _confirmButtonText.color = Color.white;
         _confirmButtonText.text = "LAUNCH GAME MODE";

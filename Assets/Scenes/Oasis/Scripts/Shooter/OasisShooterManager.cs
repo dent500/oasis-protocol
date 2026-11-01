@@ -63,6 +63,8 @@ public class OasisShooterManager : MonoBehaviour
     public int activePlayersPerTeam = 2;
     public int targetKills = 15;
     public bool isTeamBattleActive = false;
+    public float playerSpawnShieldTimer = 0f;
+    public bool isPlayerDead = false;
     public int localPlayerTeam => PlayerPrefs.GetInt("OasisPlayerTeam", 0);
     private readonly List<OasisCombatAI> _spawnedAIBots = new List<OasisCombatAI>();
 
@@ -171,10 +173,89 @@ public class OasisShooterManager : MonoBehaviour
     public float playerDownedTimer = 10.0f;
     public float playerReviveProgress = 0.0f;
 
+    [Header("Player Death & Elimination Visuals")]
+    public string lastEliminatedBy = "";
+    public float playerDeathTimestamp = 0f;
+    public float playerRespawnTotalDelay = 3.0f;
+    private float _killConfirmedTimer = 0f;
+    private string _lastKilledBotName = "";
+
     public void AddPlayerScore(int amount)
     {
         score += amount;
         OasisNetworkManager.Instance?.BroadcastScore(score, kills);
+        UpdateTeamBattleHUD();
+    }
+
+    public void TriggerKillConfirmedBanner(string botName)
+    {
+        _lastKilledBotName = botName;
+        _killConfirmedTimer = 1.6f;
+        ShowNotificationBanner($"<color=#FFCC00><b>☠ HOSTILE ELIMINATED: {botName.ToUpper()}</b></color>\n<color=#26D9FF><b>+100 PTS</b></color>", 2.0f);
+
+        if (_audioSource == null) _audioSource = GetComponent<AudioSource>();
+        if (_audioSource != null)
+        {
+            _audioSource.PlayOneShot(ProceduralAudio.GetKillConfirmedClip(), 0.85f);
+        }
+    }
+
+    private System.Collections.IEnumerator PlayerDeathCameraRoutine(float duration)
+    {
+        Camera cam = Camera.main;
+        if (cam == null) yield break;
+
+        Vector3 originalLocalPos = cam.transform.localPosition;
+        Quaternion originalLocalRot = cam.transform.localRotation;
+
+        float elapsed = 0f;
+        float dropTime = 0.35f;
+        Vector3 targetPos = originalLocalPos + new Vector3(0f, -0.65f, 0f);
+        Quaternion targetRot = originalLocalRot * Quaternion.Euler(14f, 0f, 18f);
+
+        while (elapsed < dropTime && isPlayerDead)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / dropTime);
+            cam.transform.localPosition = Vector3.Lerp(originalLocalPos, targetPos, t);
+            cam.transform.localRotation = Quaternion.Slerp(originalLocalRot, targetRot, t);
+            yield return null;
+        }
+
+        while (isPlayerDead)
+        {
+            yield return null;
+        }
+
+        cam.transform.localPosition = originalLocalPos;
+        cam.transform.localRotation = originalLocalRot;
+    }
+
+    private System.Collections.IEnumerator PlayerRespawnRoutine(float delay)
+    {
+        yield return new UnityEngine.WaitForSeconds(delay);
+        isPlayerDead = false;
+
+        int myTeam = UnityEngine.PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+        currentHealth = maxHealth;
+        isPlayerDowned = false;
+        playerDownedTimer = 10f;
+        UpdateHealthUI();
+
+        if (_weapon != null) _weapon.enabled = true;
+
+        if (_playerTransform != null)
+        {
+            if (OasisSpawnSystem.Instance != null)
+            {
+                OasisSpawnSystem.Instance.RespawnCombatant(_playerTransform, myTeam, 0);
+            }
+            var move = _playerTransform.GetComponent<OasisCombatMovement>();
+            if (move != null) move.ResetMovementState();
+            BlasterVFX.SpawnWarpIn(_playerTransform.position);
+        }
+
+        ShowNotificationBanner("<color=#26D9FF><b>✔ TACTICAL RESPAWN // WEAPONS HOT</b></color>", 2.0f);
         UpdateTeamBattleHUD();
     }
 
@@ -268,6 +349,11 @@ public class OasisShooterManager : MonoBehaviour
         InitializeWorldExpanderAndMap();
         BuildShooterHUD();
 
+        if (GetComponent<OasisOutplayedOverlay>() == null)
+        {
+            gameObject.AddComponent<OasisOutplayedOverlay>();
+        }
+
         // If character selection screen is currently present, hide HUD and wait for player deployment
         var customizer = FindAnyObjectByType<OasisCharacterCustomizer>();
         if (customizer != null && customizer.isSelectionActive)
@@ -345,6 +431,9 @@ public class OasisShooterManager : MonoBehaviour
     public bool isSimulationMode = false;
     public int spectatedBotIndex = 0;
     public bool isFreeFlySpectator = false;
+    private float _spectatorFollowYaw = 0f;
+    private float _spectatorYawVelocity = 0f;
+    private Vector3 _spectatorCamVelocity = Vector3.zero;
 
     [Header("Match Concluded State")]
     public bool isMatchFinished = false;
@@ -358,6 +447,16 @@ public class OasisShooterManager : MonoBehaviour
 
     private void Update()
     {
+        if (_killConfirmedTimer > 0f)
+        {
+            _killConfirmedTimer -= Time.deltaTime;
+        }
+
+        if (playerSpawnShieldTimer > 0f)
+        {
+            playerSpawnShieldTimer -= Time.deltaTime;
+        }
+
         if (isMatchFinished)
         {
             Cursor.lockState = CursorLockMode.None;
@@ -968,11 +1067,25 @@ public class OasisShooterManager : MonoBehaviour
         return Vector2.Distance(posXZ, shelterXZ) < Instance.SafeShelterRadius;
     }
 
+    public void GrantPlayerSpawnProtection(float duration)
+    {
+        playerSpawnShieldTimer = duration;
+        ShowBanner("<color=#26D9FF><b>RESPAWNED</b> • TACTICAL SPAWN SHIELD ACTIVE (2.5s)</color>", 2.5f);
+    }
+
     public void TakeDamage(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null) => DamagePlayer(amount, attackerTeamId, attackerBot);
 
     public void DamagePlayer(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null)
     {
+        if (isPlayerDead) return;
         if (isTeamBattleActive && isPlayerDowned) return;
+
+        // Spawn shield protection grace period against spawn camping
+        if (isTeamBattleActive && playerSpawnShieldTimer > 0f)
+        {
+            if (_playerTransform != null) BlasterVFX.SpawnImpact(_playerTransform.position + Vector3.up * 1.0f, Vector3.up, false);
+            return;
+        }
 
         // Safe spawn shelter invulnerability only applies to survival wave drone defense mode, NOT competitive team deathmatch!
         if (!isTeamBattleActive && amount > 0f && _playerTransform != null && IsPositionInSafeShelter(_playerTransform.position))
@@ -1018,38 +1131,42 @@ public class OasisShooterManager : MonoBehaviour
 
         if (currentHealth <= 0)
         {
+            if (isPlayerDead) return;
+            isPlayerDead = true;
             currentHealth = 0f;
+            lastEliminatedBy = string.IsNullOrEmpty(attackerBotName) ? "HOSTILE COMBATANT" : attackerBotName;
+            playerDeathTimestamp = Time.time;
+            playerRespawnTotalDelay = 3.0f;
+
+            if (_audioSource == null) _audioSource = GetComponent<AudioSource>();
+            if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetPlayerDeathClip(), 0.95f);
+
+            if (_weapon != null) _weapon.enabled = false;
+            StartCoroutine(PlayerDeathCameraRoutine(3.0f));
+
             if (isTeamBattleActive)
             {
-                if (!isPlayerDowned)
+                isPlayerDowned = false;
+                OasisAITelemetryLogger.Instance?.RecordPlayerEliminated(attackerBotName);
+
+                if (attackerBot != null)
                 {
-                    isPlayerDowned = true;
-                    playerDownedTimer = 8.0f;
-                    playerReviveProgress = 0f;
-                    OasisAITelemetryLogger.Instance?.RecordPlayerKnockedDown(attackerBotName);
-
-                    // Credit attacking CPU bot with kill and knockdown score
-                    if (attackerBot != null)
-                    {
-                        attackerBot.kills++;
-                        attackerBot.score += 100;
-                    }
-
-                    // Opposing team scores on knockdown
-                    int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-                    int scoringTeam = (attackerTeamId >= 0 && attackerTeamId != myTeam) 
-                        ? attackerTeamId 
-                        : ((myTeam + 1) % Mathf.Max(2, activeNumTeams));
-                    AddTeamKill(scoringTeam);
-
-                    // Broadcast downed state to network peers immediately
-                    OasisNetworkManager.Instance?.BroadcastPlayerDowned(attackerBot != null ? attackerBot.teamId : -1, scoringTeam);
-
-                    UpdateTeamBattleHUD();
-                    CheckWinCondition();
-
-                    ShowBanner("<color=#FF4444>CHASSIS DOWNED // AWAITING SQUADMATE REVIVE (8s)</color>", 3.0f);
+                    attackerBot.kills++;
+                    attackerBot.score += 100;
                 }
+
+                int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+                int scoringTeam = (attackerTeamId >= 0 && attackerTeamId != myTeam) 
+                    ? attackerTeamId 
+                    : ((myTeam + 1) % Mathf.Max(2, activeNumTeams));
+                AddTeamKill(scoringTeam);
+
+                OasisNetworkManager.Instance?.BroadcastPlayerEliminated(attackerBot != null ? attackerBot.teamId : -1, scoringTeam);
+
+                UpdateTeamBattleHUD();
+                CheckWinCondition();
+
+                StartCoroutine(PlayerRespawnRoutine(3.0f));
             }
             else
             {
@@ -1058,7 +1175,7 @@ public class OasisShooterManager : MonoBehaviour
         }
     }
 
-    private void UpdateHealthUI()
+    public void UpdateHealthUI()
     {
         if (_healthBar != null)
         {
@@ -1083,6 +1200,7 @@ public class OasisShooterManager : MonoBehaviour
 
     public void TriggerCameraShake(float duration = 0.2f, float magnitude = 0.2f)
     {
+        if (isSimulationMode) return;
         StartCoroutine(CameraHitShake(duration, magnitude));
     }
 
@@ -1091,19 +1209,21 @@ public class OasisShooterManager : MonoBehaviour
         Camera cam = Camera.main;
         if (cam == null) yield break;
 
-        Vector3 originalPos = cam.transform.localPosition;
         float elapsed = 0f;
+        float clampedMag = Mathf.Min(magnitude, 0.04f);
 
         while (elapsed < duration)
         {
-            float x = Random.Range(-1f, 1f) * magnitude;
-            float y = Random.Range(-1f, 1f) * magnitude;
-            cam.transform.localPosition = originalPos + new Vector3(x, y, 0f);
+            if (cam != null)
+            {
+                float decay = 1f - Mathf.Clamp01(elapsed / Mathf.Max(0.01f, duration));
+                float x = Random.Range(-1f, 1f) * clampedMag * decay;
+                float y = Random.Range(-1f, 1f) * clampedMag * decay;
+                cam.transform.position += cam.transform.right * x + cam.transform.up * y;
+            }
             elapsed += Time.deltaTime;
             yield return null;
         }
-
-        cam.transform.localPosition = originalPos;
     }
 
     private IEnumerator FlashDamageScreen()
@@ -1124,6 +1244,7 @@ public class OasisShooterManager : MonoBehaviour
     public void RestartShooter()
     {
         Time.timeScale = 1f;
+        OasisOutplayedOverlay.RequestStopRecording();
         if (OasisNetworkManager.Instance != null && OasisNetworkManager.Instance.currentRole == OasisNetworkManager.NetworkRole.Host)
         {
             OasisNetworkManager.Instance.BroadcastRestart();
@@ -1134,6 +1255,7 @@ public class OasisShooterManager : MonoBehaviour
     public void ReturnToMenu()
     {
         Time.timeScale = 1f;
+        OasisOutplayedOverlay.RequestStopRecording();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         SceneManager.LoadScene(0);
@@ -1175,7 +1297,7 @@ public class OasisShooterManager : MonoBehaviour
         int localPlayerTeam = Mathf.Clamp(PlayerPrefs.GetInt("OasisPlayerTeam", 0), 0, activeNumTeams - 1);
 
         int teamCapacity = activePlayersPerTeam;
-        targetKills = Mathf.Max(20, teamCapacity * 10); // Scaled for 3:00 (180s) timed match duration
+        targetKills = 999999; // Pure 3-minute timed match — no early kill cap, winner decided when timer reaches 00:00
 
         // Calculate human count on each team based on actual selected team of local player & connected remote operatives
         int[] humansPerTeam = new int[4];
@@ -1205,13 +1327,13 @@ public class OasisShooterManager : MonoBehaviour
             targetKills = 9999; // Simulation mode runs for full 3-minute timed duration
         }
 
-        // Always initialize AI Telemetry Logger so post-match analytics & Copy Telemetry work in both Character and Simulation modes
+        // Always initialize AI Telemetry Logger in the background (hidden by default)
         if (OasisAITelemetryLogger.Instance == null)
         {
             gameObject.AddComponent<OasisAITelemetryLogger>();
         }
         OasisAITelemetryLogger.Instance.StartNewSession();
-        OasisAITelemetryLogger.Instance.showLiveTelemetryHUD = isSimulationMode;
+        OasisAITelemetryLogger.Instance.showLiveTelemetryHUD = false;
 
         // Randomly load teams at distinct tactical sectors (North, East, South, West, or Core)
         if (OasisSpawnSystem.Instance != null)
@@ -1495,10 +1617,22 @@ public class OasisShooterManager : MonoBehaviour
         var bot = _spawnedAIBots[spectatedBotIndex];
         if (bot != null)
         {
-            Vector3 idealPos = bot.transform.position - bot.transform.forward * 3.8f + Vector3.up * 2.2f;
-            Vector3 lookTarget = bot.transform.position + Vector3.up * 1.3f;
-            cam.transform.position = idealPos;
-            cam.transform.LookAt(lookTarget);
+            _spectatorFollowYaw = bot.transform.eulerAngles.y;
+            _spectatorYawVelocity = 0f;
+            _spectatorCamVelocity = Vector3.zero;
+
+            Vector3 targetHead = bot.transform.position + Vector3.up * 1.4f;
+            Quaternion yawRot = Quaternion.Euler(0f, _spectatorFollowYaw, 0f);
+            Vector3 desiredPos = targetHead + (yawRot * new Vector3(0f, 0.6f, -3.8f));
+
+            float minCamY = OasisWaterZone.WaterSurfaceY + 0.45f;
+            if (desiredPos.y < minCamY && OasisWaterZone.IsInWaterHorizontal(desiredPos))
+            {
+                desiredPos.y = minCamY;
+            }
+
+            cam.transform.position = desiredPos;
+            cam.transform.LookAt(targetHead);
         }
     }
 
@@ -1513,7 +1647,6 @@ public class OasisShooterManager : MonoBehaviour
 
         bool nextPressed = false;
         bool freeFlyPressed = false;
-        bool escPressed = false;
         int directSelect = -1;
 
 #if ENABLE_INPUT_SYSTEM
@@ -1522,7 +1655,6 @@ public class OasisShooterManager : MonoBehaviour
             var kb = UnityEngine.InputSystem.Keyboard.current;
             nextPressed = kb.vKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame;
             freeFlyPressed = kb.fKey.wasPressedThisFrame;
-            escPressed = kb.escapeKey.wasPressedThisFrame;
             if (kb.digit1Key.wasPressedThisFrame || kb.numpad1Key.wasPressedThisFrame) directSelect = 0;
             if (kb.digit2Key.wasPressedThisFrame || kb.numpad2Key.wasPressedThisFrame) directSelect = 1;
             if (kb.digit3Key.wasPressedThisFrame || kb.numpad3Key.wasPressedThisFrame) directSelect = 2;
@@ -1531,25 +1663,11 @@ public class OasisShooterManager : MonoBehaviour
 #else
         if (Input.GetKeyDown(KeyCode.V) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.Space)) nextPressed = true;
         if (Input.GetKeyDown(KeyCode.F)) freeFlyPressed = true;
-        if (Input.GetKeyDown(KeyCode.Escape)) escPressed = true;
         if (Input.GetKeyDown(KeyCode.Alpha1)) directSelect = 0;
         else if (Input.GetKeyDown(KeyCode.Alpha2)) directSelect = 1;
         else if (Input.GetKeyDown(KeyCode.Alpha3)) directSelect = 2;
         else if (Input.GetKeyDown(KeyCode.Alpha4)) directSelect = 3;
 #endif
-
-        if (escPressed)
-        {
-            if (InGamePauseManager.Instance != null)
-            {
-                InGamePauseManager.Instance.TogglePause();
-            }
-            else
-            {
-                ReturnToMenu();
-            }
-            return;
-        }
 
         if (directSelect >= 0 && directSelect < _spawnedAIBots.Count)
         {
@@ -1647,25 +1765,65 @@ public class OasisShooterManager : MonoBehaviour
         }
         else
         {
-            // Follow the spectated bot
+            // Follow the spectated bot with smoothed yaw and collision avoidance
             if (_spawnedAIBots.Count > 0 && spectatedBotIndex >= 0 && spectatedBotIndex < _spawnedAIBots.Count)
             {
                 var bot = _spawnedAIBots[spectatedBotIndex];
                 if (bot != null)
                 {
-                    Vector3 idealPos = bot.transform.position - bot.transform.forward * 3.8f + Vector3.up * 2.2f;
-                    Vector3 lookTarget = bot.transform.position + Vector3.up * 1.3f;
-
-                    // If distant (switch bot or bot respawned), snap immediately
-                    if (Vector3.Distance(cam.transform.position, idealPos) > 14f)
+                    // Target yaw: follow actual movement heading when running, or facing direction when stationary
+                    float targetYaw = bot.transform.eulerAngles.y;
+                    var cc = bot.GetComponent<CharacterController>();
+                    if (cc != null && cc.velocity.sqrMagnitude > 0.6f)
                     {
-                        cam.transform.position = idealPos;
+                        targetYaw = Mathf.Atan2(cc.velocity.x, cc.velocity.z) * Mathf.Rad2Deg;
+                    }
+                    _spectatorFollowYaw = Mathf.SmoothDampAngle(_spectatorFollowYaw, targetYaw, ref _spectatorYawVelocity, 0.22f);
+
+                    Vector3 targetHead = bot.transform.position + Vector3.up * 1.4f;
+                    Quaternion yawRot = Quaternion.Euler(0f, _spectatorFollowYaw, 0f);
+                    Vector3 desiredOffset = yawRot * new Vector3(0f, 0.6f, -3.8f);
+                    Vector3 desiredPos = targetHead + desiredOffset;
+
+                    // Obstacle / foliage sphere-cast avoidance: prevent camera clipping inside trees/rocks
+                    Vector3 castDir = desiredPos - targetHead;
+                    float castDist = castDir.magnitude;
+                    if (castDist > 0.2f)
+                    {
+                        int obstacleMask = Physics.AllLayers & ~(1 << LayerMask.NameToLayer("Ignore Raycast"));
+                        int playerLayer = LayerMask.NameToLayer("Player");
+                        if (playerLayer >= 0) obstacleMask &= ~(1 << playerLayer);
+
+                        if (Physics.SphereCast(targetHead, 0.25f, castDir.normalized, out RaycastHit hit, castDist, obstacleMask, QueryTriggerInteraction.Ignore))
+                        {
+                            desiredPos = hit.point + hit.normal * 0.25f;
+                        }
+                    }
+
+                    // Water surface height clamp: prevent camera from dipping underwater
+                    float minCamY = OasisWaterZone.WaterSurfaceY + 0.45f;
+                    if (desiredPos.y < minCamY && OasisWaterZone.IsInWaterHorizontal(desiredPos))
+                    {
+                        desiredPos.y = minCamY;
+                    }
+
+                    // If distant (bot respawned or switched), snap immediately
+                    if (Vector3.Distance(cam.transform.position, desiredPos) > 14f)
+                    {
+                        cam.transform.position = desiredPos;
+                        _spectatorCamVelocity = Vector3.zero;
                     }
                     else
                     {
-                        cam.transform.position = Vector3.Lerp(cam.transform.position, idealPos, Time.deltaTime * 12f);
+                        cam.transform.position = Vector3.SmoothDamp(cam.transform.position, desiredPos, ref _spectatorCamVelocity, 0.12f);
                     }
-                    cam.transform.LookAt(lookTarget);
+
+                    Vector3 lookDir = targetHead - cam.transform.position;
+                    if (lookDir.sqrMagnitude > 0.01f)
+                    {
+                        Quaternion targetRot = Quaternion.LookRotation(lookDir);
+                        cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, targetRot, Time.deltaTime * 12f);
+                    }
                 }
             }
         }
@@ -1705,8 +1863,8 @@ public class OasisShooterManager : MonoBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
-            float cardW = 720f;
-            float cardH = 540f;
+            float cardW = 1000f;
+            float cardH = 550f;
             float cardX = (Screen.width - cardW) * 0.5f;
             float cardY = (Screen.height - cardH) * 0.5f;
 
@@ -1755,88 +1913,163 @@ public class OasisShooterManager : MonoBehaviour
                 richText = true
             };
             string scoreFormatted = FormatAllTeamScoresRich(false);
-            GUI.Label(new Rect(cardX + 20, cardY + 66, cardW - 40, 34), scoreFormatted, scoreStyle);
+            GUI.Label(new Rect(cardX + 20, cardY + 66, cardW - 40, 32), scoreFormatted, scoreStyle);
 
             // Reason / Details
             GUIStyle descStyle = new GUIStyle(GUI.skin.label)
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
+                fontSize = 11,
                 wordWrap = true,
                 richText = true,
                 normal = { textColor = new Color(0.8f, 0.88f, 0.95f) }
             };
-            GUI.Label(new Rect(cardX + 30, cardY + 102, cardW - 60, 24), matchEndDetails, descStyle);
+            GUI.Label(new Rect(cardX + 30, cardY + 98, cardW - 60, 20), matchEndDetails, descStyle);
 
-            // ------------------ FINAL OPERATIVE SCORES TABLE ------------------
-            float tableY = cardY + 130f;
-            float tableW = cardW - 50f;
-            float tableX = cardX + 25f;
+            // ------------------ SQUAD TEAM COLUMNS (MATCHES HOLDING TAB) ------------------
+            float tableY = cardY + 122f;
+            float totalWidth = cardW - 40f;
+            float colGap = 10f;
+            int numTeams = Mathf.Clamp(activeNumTeams, 2, 4);
+            float colWidth = (totalWidth - (colGap * (numTeams - 1))) / numTeams;
+            float startX = cardX + 20f;
 
-            // Table Header Bar
-            GUI.color = new Color(0.12f, 0.18f, 0.28f, 0.95f);
-            GUI.DrawTexture(new Rect(tableX, tableY, tableW, 26f), Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            var allEntries = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetScoreboardData() : null;
 
-            GUIStyle colHdrStyle = new GUIStyle(GUI.skin.label)
+            for (int t = 0; t < numTeams; t++)
             {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 11,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = Color.white }
-            };
-            GUI.Label(new Rect(tableX, tableY + 3, 60, 20), "RANK", colHdrStyle);
-            colHdrStyle.alignment = TextAnchor.MiddleLeft;
-            GUI.Label(new Rect(tableX + 70, tableY + 3, 330, 20), "OPERATIVE / SQUAD", colHdrStyle);
-            colHdrStyle.alignment = TextAnchor.MiddleCenter;
-            colHdrStyle.normal.textColor = new Color(1f, 0.4f, 0.3f);
-            GUI.Label(new Rect(tableX + 410, tableY + 3, 100, 20), "KILLS", colHdrStyle);
-            colHdrStyle.normal.textColor = new Color(1f, 0.85f, 0.25f);
-            GUI.Label(new Rect(tableX + 520, tableY + 3, 140, 20), "FINAL SCORE", colHdrStyle);
+                float curX = startX + t * (colWidth + colGap);
+                float colH = 312f;
 
-            var entries = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetScoreboardData() : null;
-            int maxRows = Mathf.Min(6, entries != null ? entries.Count : 0);
+                // Column background
+                GUI.color = new Color(0.04f, 0.06f, 0.10f, 0.88f);
+                GUI.DrawTexture(new Rect(curX, tableY, colWidth, colH), Texture2D.whiteTexture);
 
-            for (int r = 0; r < maxRows; r++)
-            {
-                var entry = entries[r];
-                float rowY = tableY + 28f + (r * 28f);
-
-                // Alternating row background
-                GUI.color = entry.isLocal 
-                    ? new Color(0.12f, 0.28f, 0.48f, 0.65f) 
-                    : (r % 2 == 0 ? new Color(0.08f, 0.11f, 0.16f, 0.5f) : new Color(0.05f, 0.07f, 0.11f, 0.3f));
-                GUI.DrawTexture(new Rect(tableX, rowY, tableW, 26f), Texture2D.whiteTexture);
+                // Team Header Bar
+                Color teamColor = GetTeamColor(t);
+                GUI.color = new Color(teamColor.r * 0.45f, teamColor.g * 0.45f, teamColor.b * 0.45f, 0.95f);
+                GUI.DrawTexture(new Rect(curX, tableY, colWidth, 30f), Texture2D.whiteTexture);
                 GUI.color = Color.white;
 
-                GUIStyle cellStyle = new GUIStyle(GUI.skin.label)
+                int tKills = (t < teamKills.Length) ? teamKills[t] : 0;
+                string sShort = GetTeamShortName(t);
+
+                GUIStyle thStyleLeft = new GUIStyle(GUI.skin.label)
                 {
-                    alignment = TextAnchor.MiddleCenter,
+                    alignment = TextAnchor.MiddleLeft,
+                    fontSize = 13,
+                    fontStyle = FontStyle.Bold,
+                    normal = { textColor = Color.white }
+                };
+                GUI.Label(new Rect(curX + 8, tableY + 5, colWidth * 0.5f, 20), $"[{sShort}]", thStyleLeft);
+
+                GUIStyle thStyleRight = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleRight,
                     fontSize = 12,
                     fontStyle = FontStyle.Bold,
-                    normal = { textColor = (r == 0) ? new Color(1f, 0.85f, 0.25f) : Color.white }
+                    normal = { textColor = new Color(1f, 0.85f, 0.3f) }
                 };
-                GUI.Label(new Rect(tableX, rowY + 3, 60, 20), $"#{r + 1}", cellStyle);
+                GUI.Label(new Rect(curX + colWidth * 0.45f, tableY + 5, colWidth * 0.5f - 8, 20), $"{tKills} KILLS", thStyleRight);
 
-                cellStyle.alignment = TextAnchor.MiddleLeft;
-                cellStyle.normal.textColor = entry.playerColor;
-                string opDisplayName = entry.isLocal ? $"{entry.playerName} (YOU)" : entry.playerName;
-                GUI.Label(new Rect(tableX + 70, rowY + 3, 330, 20), opDisplayName, cellStyle);
+                // Subheader: OPERATIVE | K | PTS
+                float subHdrY = tableY + 32f;
+                GUI.color = new Color(0.08f, 0.11f, 0.16f, 0.95f);
+                GUI.DrawTexture(new Rect(curX, subHdrY, colWidth, 20f), Texture2D.whiteTexture);
+                GUI.color = Color.white;
 
-                cellStyle.alignment = TextAnchor.MiddleCenter;
-                cellStyle.normal.textColor = new Color(1f, 0.5f, 0.4f);
-                GUI.Label(new Rect(tableX + 410, rowY + 3, 100, 20), $"{entry.kills}", cellStyle);
+                GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    fontSize = 10,
+                    fontStyle = FontStyle.Bold,
+                    normal = { textColor = new Color(0.7f, 0.8f, 0.9f) }
+                };
+                GUI.Label(new Rect(curX + 8, subHdrY + 2, colWidth * 0.54f, 18), "OPERATIVE", subStyle);
 
-                cellStyle.normal.textColor = new Color(1f, 0.85f, 0.3f);
-                GUI.Label(new Rect(tableX + 520, rowY + 3, 140, 20), $"{entry.score} pts", cellStyle);
+                subStyle.alignment = TextAnchor.MiddleCenter;
+                subStyle.normal.textColor = new Color(1f, 0.4f, 0.3f);
+                GUI.Label(new Rect(curX + colWidth * 0.54f, subHdrY + 2, colWidth * 0.20f, 18), "K", subStyle);
+
+                subStyle.normal.textColor = new Color(1f, 0.85f, 0.25f);
+                GUI.Label(new Rect(curX + colWidth * 0.74f, subHdrY + 2, colWidth * 0.26f, 18), "PTS", subStyle);
+
+                // Populate team players
+                var teamPlayers = (allEntries != null) ? allEntries.FindAll(e => e.teamId == t) : new List<OasisNetworkManager.ScoreboardEntry>();
+                teamPlayers.Sort((a, b) => b.score.CompareTo(a.score));
+
+                float rowStartY = subHdrY + 22f;
+                float rowH = 50f;
+                for (int r = 0; r < teamPlayers.Count; r++)
+                {
+                    var entry = teamPlayers[r];
+                    float rowY = rowStartY + (r * (rowH + 3f));
+
+                    // Row background
+                    if (entry.isLocal)
+                    {
+                        GUI.color = new Color(0.12f, 0.38f, 0.72f, 0.92f);
+                    }
+                    else
+                    {
+                        GUI.color = (r % 2 == 0) ? new Color(0.08f, 0.11f, 0.16f, 0.65f) : new Color(0.05f, 0.07f, 0.10f, 0.45f);
+                    }
+                    GUI.DrawTexture(new Rect(curX + 3, rowY, colWidth - 6, rowH), Texture2D.whiteTexture);
+                    GUI.color = Color.white;
+
+                    // Operative Name
+                    string cleanName = entry.playerName.Replace($"[{sShort}] ", "");
+                    string displayName = entry.isLocal ? "YOU (OPERATIVE)" : cleanName;
+
+                    GUIStyle rowStyleLeft = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleLeft,
+                        fontSize = entry.isLocal ? 11 : 11,
+                        fontStyle = FontStyle.Bold,
+                        wordWrap = false,
+                        normal = { textColor = entry.isLocal ? new Color(0.40f, 0.96f, 1f) : Color.white }
+                    };
+                    GUI.Label(new Rect(curX + 7, rowY + 5, colWidth * 0.54f, 18), displayName, rowStyleLeft);
+
+                    // Operative Class badge subtitle
+                    GUIStyle classBadgeStyle = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleLeft,
+                        fontSize = 9,
+                        wordWrap = false,
+                        normal = { textColor = entry.isLocal ? new Color(0.75f, 0.90f, 1f) : new Color(0.65f, 0.75f, 0.85f) }
+                    };
+                    string cls = string.IsNullOrEmpty(entry.className) ? "Nomad" : entry.className;
+                    GUI.Label(new Rect(curX + 7, rowY + 25, colWidth * 0.54f, 16), cls, classBadgeStyle);
+
+                    // Kills
+                    GUIStyle rowStyleMid = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontSize = 13,
+                        fontStyle = FontStyle.Bold,
+                        normal = { textColor = new Color(1f, 0.45f, 0.35f) }
+                    };
+                    GUI.Label(new Rect(curX + colWidth * 0.54f, rowY + 14, colWidth * 0.20f, 22), $"{entry.kills}", rowStyleMid);
+
+                    // Score
+                    GUIStyle rowStyleRight = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontSize = 12,
+                        fontStyle = FontStyle.Bold,
+                        normal = { textColor = new Color(1f, 0.85f, 0.25f) }
+                    };
+                    GUI.Label(new Rect(curX + colWidth * 0.74f, rowY + 14, colWidth * 0.26f, 22), $"{entry.score}", rowStyleRight);
+                }
             }
 
             // Action Buttons Row 1: Core match navigation
-            float bY = cardY + 440f;
-            float bW = 190f;
+            float bY = cardY + 452f;
+            float bW = 210f;
             float bH = 36f;
-            float gap = 16f;
-            float bStartX = cardX + (cardW - (3 * bW + 2 * gap)) * 0.5f;
+            float btnGap = 18f;
+            float bStartX = cardX + (cardW - (3 * bW + 2 * btnGap)) * 0.5f;
 
             GUI.color = new Color(0.2f, 0.9f, 0.4f);
             if (GUI.Button(new Rect(bStartX, bY, bW, bH), "PLAY REMATCH"))
@@ -1852,7 +2085,7 @@ public class OasisShooterManager : MonoBehaviour
             }
 
             GUI.color = new Color(0.3f, 0.8f, 1f);
-            if (GUI.Button(new Rect(bStartX + bW + gap, bY, bW, bH), "COPY TELEMETRY"))
+            if (GUI.Button(new Rect(bStartX + bW + btnGap, bY, bW, bH), "COPY TELEMETRY"))
             {
                 if (OasisAITelemetryLogger.Instance != null)
                 {
@@ -1861,16 +2094,16 @@ public class OasisShooterManager : MonoBehaviour
             }
 
             GUI.color = new Color(1f, 0.35f, 0.3f);
-            if (GUI.Button(new Rect(bStartX + 2 * (bW + gap), bY, bW, bH), "RETURN TO MENU"))
+            if (GUI.Button(new Rect(bStartX + 2 * (bW + btnGap), bY, bW, bH), "RETURN TO MENU"))
             {
                 ReturnToMenu();
             }
 
             // Action Buttons Row 2: Secondary options
-            float bY2 = cardY + 486f;
-            float bW2 = 200f;
-            float bH2 = 28f;
-            float bStartX2 = cardX + (cardW - (2 * bW2 + gap)) * 0.5f;
+            float bY2 = cardY + 498f;
+            float bW2 = 220f;
+            float bH2 = 30f;
+            float bStartX2 = cardX + (cardW - (2 * bW2 + btnGap)) * 0.5f;
 
             GUI.color = isSimulationMode ? new Color(0.7f, 0.85f, 1f) : new Color(0.2f, 0.75f, 1f);
             string modeToggleLabel = isSimulationMode ? "PLAY AS OPERATIVE" : "SPECTATE AI SIM";
@@ -1887,7 +2120,7 @@ public class OasisShooterManager : MonoBehaviour
             }
 
             GUI.color = (OasisAITelemetryLogger.Instance != null && OasisAITelemetryLogger.Instance.showLiveTelemetryHUD) ? new Color(0.3f, 1f, 0.6f) : Color.white;
-            if (GUI.Button(new Rect(bStartX2 + bW2 + gap, bY2, bW2, bH2), "ANALYTICS HUD [F8]"))
+            if (GUI.Button(new Rect(bStartX2 + bW2 + btnGap, bY2, bW2, bH2), "ANALYTICS HUD [F8]"))
             {
                 if (OasisAITelemetryLogger.Instance != null)
                 {
@@ -1905,6 +2138,37 @@ public class OasisShooterManager : MonoBehaviour
         // Force cursor state so buttons can be clicked reliably
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        // Top Center Simulation Scoreboard & Countdown Timer Header
+        float topW = 520f;
+        float topH = 40f;
+        float topX = (Screen.width - topW) * 0.5f;
+        float topY = 16f;
+
+        GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.94f);
+        GUI.DrawTexture(new Rect(topX, topY, topW, topH), Texture2D.whiteTexture);
+        GUI.color = new Color(0.2f, 0.85f, 1f, 0.75f);
+        GUI.Box(new Rect(topX, topY, topW, topH), "");
+        GUI.color = Color.white;
+
+        int remMin = Mathf.FloorToInt(Mathf.Max(0f, matchTimeRemaining) / 60f);
+        int remSec = Mathf.FloorToInt(Mathf.Max(0f, matchTimeRemaining) % 60f);
+        string timeCol = (matchTimeRemaining <= 30f) ? "#FF4444" : "#26D9FF";
+        string timeStr = isMatchFinished ? "<color=#FF4444>00:00 [MATCH ENDED]</color>" : $"<color={timeCol}>⏱ {remMin:00}:{remSec:00}</color>";
+
+        int nTeams = Mathf.Clamp(activeNumTeams, 2, 4);
+        string scoresLine = FormatAllTeamScoresRich(nTeams > 2);
+
+        GUIStyle topHeaderStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 14,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = Color.white }
+        };
+
+        GUI.Label(new Rect(topX + 10, topY + 2, topW - 20, topH - 4), $"{scoresLine}   │   {timeStr}", topHeaderStyle);
 
         // Bottom Spectator HUD Pill
         float pillW = 880f;
@@ -1997,6 +2261,127 @@ public class OasisShooterManager : MonoBehaviour
                 ReturnToMenu();
         }
 
+        // 3. Player Elimination / Death Visual Overlay
+        if (isPlayerDead && !isMatchFinished && !isSimulationMode)
+        {
+            DrawPlayerDeathOverlay();
+        }
+
+        // 4. Kill Confirmed Crosshair Hitmarker
+        if (_killConfirmedTimer > 0f && !isMatchFinished && !isSimulationMode)
+        {
+            DrawKillConfirmedHitmarker();
+        }
+
+        GUI.color = Color.white;
+    }
+
+    private void DrawKillConfirmedHitmarker()
+    {
+        float alpha = Mathf.Clamp01(_killConfirmedTimer / 0.4f);
+
+        GUIStyle skullStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 32,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = new Color(1f, 0.2f, 0.2f, alpha) }
+        };
+        GUI.Label(new Rect(Screen.width * 0.5f - 100, Screen.height * 0.5f - 62, 200, 42), "☠", skullStyle);
+
+        GUIStyle bannerStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 13,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = new Color(1f, 0.88f, 0.3f, alpha) }
+        };
+        GUI.Label(new Rect(Screen.width * 0.5f - 200, Screen.height * 0.5f - 20, 400, 24), $"HOSTILE ELIMINATED: {_lastKilledBotName.ToUpper()}  +100 PTS", bannerStyle);
+    }
+
+    private void DrawPlayerDeathOverlay()
+    {
+        // 1. Heavy Pulsing Crimson Vignette Border
+        float pulse = Mathf.PingPong(Time.time * 2.5f, 1f);
+        GUI.color = new Color(0.85f, 0.05f, 0.05f, 0.35f + pulse * 0.25f);
+        GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
+        GUI.Box(new Rect(10, 10, Screen.width - 20, Screen.height - 20), GUIContent.none);
+        GUI.color = Color.white;
+
+        // 2. Cinematic Letterbox Bars
+        float barH = Screen.height * 0.09f;
+        GUI.color = new Color(0.02f, 0.03f, 0.06f, 0.92f);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, barH), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(0, Screen.height - barH, Screen.width, barH), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+
+        // 3. Central Tactical Alert Box
+        float boxW = Mathf.Clamp(Screen.width * 0.45f, 500f, 620f);
+        float boxH = 145f;
+        float boxX = (Screen.width - boxW) * 0.5f;
+        float boxY = (Screen.height - boxH) * 0.5f;
+
+        // Box border & inner fill
+        GUI.color = new Color(0.9f, 0.15f, 0.15f, 0.85f);
+        GUI.Box(new Rect(boxX - 2, boxY - 2, boxW + 4, boxH + 4), GUIContent.none);
+        GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.96f);
+        GUI.DrawTexture(new Rect(boxX, boxY, boxW, boxH), Texture2D.whiteTexture);
+
+        // Red top accent
+        GUI.color = new Color(1f, 0.2f, 0.2f, 1f);
+        GUI.DrawTexture(new Rect(boxX, boxY, boxW, 4), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+
+        float remaining = Mathf.Max(0f, (playerDeathTimestamp + playerRespawnTotalDelay) - Time.time);
+
+        // Header Title
+        GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 18,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = new Color(1f, 0.25f, 0.25f) }
+        };
+        GUI.Label(new Rect(boxX + 15, boxY + 12, boxW - 30, 26), "⚠  OPERATIVE DOWN // CHASSIS DESTROYED", titleStyle);
+
+        // Attacker Subtitle
+        GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 13,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = Color.white }
+        };
+        string killer = string.IsNullOrEmpty(lastEliminatedBy) ? "HOSTILE COMBATANT" : lastEliminatedBy.ToUpper();
+        GUI.Label(new Rect(boxX + 15, boxY + 42, boxW - 30, 22), $"ELIMINATED BY: <color=#FFCC00><b>{killer}</b></color>", subStyle);
+
+        // Countdown Timer & Progress Bar
+        GUIStyle countStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 15,
+            fontStyle = FontStyle.Bold,
+            richText = true,
+            normal = { textColor = new Color(0.25f, 0.88f, 1.0f) }
+        };
+        GUI.Label(new Rect(boxX + 15, boxY + 70, boxW - 30, 24), $"TACTICAL RESPAWN IN  <b>{remaining:F1}s</b>...", countStyle);
+
+        // Progress bar background & fill
+        float barW = boxW - 60f;
+        float barFillH = 8f;
+        float barX = boxX + 30f;
+        float barY = boxY + 104f;
+
+        GUI.color = new Color(0.15f, 0.2f, 0.3f, 0.8f);
+        GUI.DrawTexture(new Rect(barX, barY, barW, barFillH), Texture2D.whiteTexture);
+
+        float progress = Mathf.Clamp01(1f - (remaining / playerRespawnTotalDelay));
+        GUI.color = new Color(0.2f, 0.85f, 1.0f, 1f);
+        GUI.DrawTexture(new Rect(barX, barY, barW * progress, barFillH), Texture2D.whiteTexture);
         GUI.color = Color.white;
     }
 
@@ -2223,7 +2608,7 @@ public class OasisShooterManager : MonoBehaviour
         if (OasisAITelemetryLogger.Instance != null)
         {
             OasisAITelemetryLogger.Instance.EndSession(matchEndTitle);
-            OasisAITelemetryLogger.Instance.showLiveTelemetryHUD = true;
+            OasisAITelemetryLogger.Instance.showLiveTelemetryHUD = false;
         }
 
         UpdateTeamBattleHUD();
@@ -2235,10 +2620,19 @@ public class OasisShooterManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        // Automatically stop Outplayed recording after a 6-second grace period so post-match scoreboard is visible in video
+        StartCoroutine(DelayedStopRecording(6.0f));
+
         if (_gameOverPanel != null)
         {
             _gameOverPanel.SetActive(false);
         }
+    }
+
+    private IEnumerator DelayedStopRecording(float delaySeconds)
+    {
+        yield return new WaitForSecondsRealtime(delaySeconds);
+        OasisOutplayedOverlay.RequestStopRecording();
     }
 
     public void UpdateTeamBattleHUD()
@@ -2288,7 +2682,7 @@ public class OasisShooterManager : MonoBehaviour
             }
             else
             {
-                _dronesText.text = $"SQUAD: {myTeamTag} // FIRST TO {targetKills} OR LEAD AT 00:00";
+                _dronesText.text = $"SQUAD: {myTeamTag} // 3:00 TIMED MATCH (LEAD AT 00:00)";
             }
         }
         if (_scoreText != null)

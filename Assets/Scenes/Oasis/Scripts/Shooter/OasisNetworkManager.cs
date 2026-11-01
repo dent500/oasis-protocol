@@ -288,11 +288,28 @@ public class OasisNetworkManager : MonoBehaviour
     public struct ScoreboardEntry
     {
         public int playerId;
+        public int teamId;
         public string playerName;
+        public string className;
         public int score;
         public int kills;
         public Color playerColor;
         public bool isLocal;
+        public bool isDead;
+    }
+
+    public static string FormatOperativeClassBadge(string classId)
+    {
+        switch (classId)
+        {
+            case "heavy_warrior": return "Heavy";
+            case "combat_medic": return "Medic";
+            case "cyber_outlaw": return "Outlaw";
+            case "cyborg_specops": return "Specops";
+            case "unit07_android": return "Android";
+            case "desert_commando": return "Commando";
+            default: return "Nomad";
+        }
     }
 
     public List<ScoreboardEntry> GetScoreboardData()
@@ -317,14 +334,28 @@ public class OasisNetworkManager : MonoBehaviour
                 pKills = Mathf.Max(pKills, OasisShooterManager.Instance.kills);
             }
 
+            int opIdx = PlayerPrefs.GetInt("OasisSelectedOperative", 0);
+            string myClass = "Nomad";
+            if (OasisCharacterCustomizer.Instance != null && OasisCharacterCustomizer.Instance.operatives != null && opIdx >= 0 && opIdx < OasisCharacterCustomizer.Instance.operatives.Count)
+            {
+                myClass = FormatOperativeClassBadge(OasisCharacterCustomizer.Instance.operatives[opIdx].id);
+            }
+            else
+            {
+                myClass = PlayerPrefs.GetString("OasisSelectedChassis", "Nomad");
+            }
+            bool pDead = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.currentHealth <= 0f);
             list.Add(new ScoreboardEntry
             {
                 playerId = myPlayerId,
+                teamId = myTeam,
                 playerName = localName,
+                className = myClass,
                 score = pScore,
                 kills = pKills,
                 playerColor = teamCol,
-                isLocal = true
+                isLocal = true,
+                isDead = pDead
             });
         }
 
@@ -336,6 +367,7 @@ public class OasisNetworkManager : MonoBehaviour
             list.Add(new ScoreboardEntry
             {
                 playerId = rp.id,
+                teamId = rp.teamId,
                 playerName = rPrefix + rp.name,
                 score = rp.score,
                 kills = rp.kills,
@@ -350,14 +382,18 @@ public class OasisNetworkManager : MonoBehaviour
             if (bot == null) continue;
             string tShort = OasisShooterManager.GetTeamShortName(bot.teamId);
             string cleanName = bot.botName.StartsWith("[") ? bot.botName : $"[{tShort}] {bot.botName}";
+            string cBadge = FormatOperativeClassBadge(bot.operativeClassId);
             list.Add(new ScoreboardEntry
             {
                 playerId = bot.GetHashCode(),
+                teamId = bot.teamId,
                 playerName = cleanName,
+                className = cBadge,
                 score = bot.score,
                 kills = bot.kills,
                 playerColor = bot.teamColor,
-                isLocal = false
+                isLocal = false,
+                isDead = bot.isDead
             });
         }
 
@@ -593,7 +629,7 @@ public class OasisNetworkManager : MonoBehaviour
         }
 
         bool isMatchOver = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isMatchFinished);
-        bool showScoreboard = tabHeld || _isScoreboardToggled || isMatchOver;
+        bool showScoreboard = (tabHeld || _isScoreboardToggled) && !isMatchOver;
 
         if (_scoreboardPanel != null)
         {
@@ -2349,6 +2385,11 @@ public class OasisNetworkManager : MonoBehaviour
         }
     }
 
+    public void BroadcastPlayerEliminated(int attackerTeam, int scoringTeam)
+    {
+        BroadcastPlayerDowned(attackerTeam, scoringTeam);
+    }
+
     public void BroadcastPlayerDowned(int attackerId, int attackerTeamId)
     {
         if (currentRole == NetworkRole.Offline) return;
@@ -3194,47 +3235,30 @@ public class OasisNetworkManager : MonoBehaviour
 
     private void BuildScoreboardUI()
     {
-        _scoreboardPanel = new GameObject("CoOpScoreboardPanel");
+        _scoreboardPanel = new GameObject("CoOpScoreboardPanel", typeof(RectTransform), typeof(Image));
         _scoreboardPanel.transform.SetParent(_lobbyCanvas.transform, false);
-        RectTransform rt = _scoreboardPanel.AddComponent<RectTransform>();
+        RectTransform rt = _scoreboardPanel.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(660, 380);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(1000, 520);
 
-        Image bg = _scoreboardPanel.AddComponent<Image>();
-        bg.color = new Color(0.04f, 0.06f, 0.1f, 0.96f);
+        Image bg = _scoreboardPanel.GetComponent<Image>();
+        bg.color = new Color(0.03f, 0.05f, 0.08f, 0.95f);
 
         // Header Title
-        CreateLabel(_scoreboardPanel.transform, "OPERATIVE MISSION SCOREBOARD", 20, new Vector2(0, 150), new Vector2(620, 36), FontStyle.Bold, new Color(0.2f, 0.9f, 1f));
-        _scoreboardSubtitle = CreateLabel(_scoreboardPanel.transform, "[HOLD TAB TO VIEW LIVE MATCH STATS]", 11, new Vector2(0, 125), new Vector2(620, 20), FontStyle.Normal, new Color(0.6f, 0.75f, 0.9f));
+        CreateLabel(_scoreboardPanel.transform, "TACTICAL SQUAD SCOREBOARD", 20, new Vector2(0, 225), new Vector2(900, 32), FontStyle.Bold, new Color(0.2f, 0.9f, 1f));
+        _scoreboardSubtitle = CreateLabel(_scoreboardPanel.transform, "[HOLD TAB TO VIEW] • SQUAD TACTICAL STANDINGS", 11, new Vector2(0, 200), new Vector2(900, 20), FontStyle.Normal, new Color(0.6f, 0.75f, 0.9f));
 
-        // Column Titles Bar
-        GameObject headerObj = new GameObject("HeaderRow");
-        headerObj.transform.SetParent(_scoreboardPanel.transform, false);
-        RectTransform hRt = headerObj.AddComponent<RectTransform>();
-        hRt.anchoredPosition = new Vector2(0, 90);
-        hRt.sizeDelta = new Vector2(600, 34);
-        Image hBg = headerObj.AddComponent<Image>();
-        hBg.color = new Color(0.12f, 0.18f, 0.28f, 0.95f);
-
-        // Fixed Column Anchors:
-        // Rank: X = -245
-        // Operative: X = -80 (Left-aligned)
-        // Score: X = 135
-        // Kills: X = 235
-        CreateLabel(headerObj.transform, "RANK", 13, new Vector2(-245, 0), new Vector2(70, 30), FontStyle.Bold, Color.white);
-        Text opHeader = CreateLabel(headerObj.transform, "OPERATIVE", 13, new Vector2(-80, 0), new Vector2(240, 30), FontStyle.Bold, Color.white);
-        opHeader.alignment = TextAnchor.MiddleLeft;
-
-        CreateLabel(headerObj.transform, "SCORE", 13, new Vector2(135, 0), new Vector2(110, 30), FontStyle.Bold, new Color(1f, 0.85f, 0.25f));
-        CreateLabel(headerObj.transform, "KILLS", 13, new Vector2(235, 0), new Vector2(80, 30), FontStyle.Bold, new Color(1f, 0.4f, 0.3f));
-
-        // Rows Container
-        GameObject rowsContainer = new GameObject("ScoreboardRows");
+        // Rows Container for Squad Columns
+        GameObject rowsContainer = new GameObject("ScoreboardRows", typeof(RectTransform));
         rowsContainer.transform.SetParent(_scoreboardPanel.transform, false);
-        RectTransform rRt = rowsContainer.AddComponent<RectTransform>();
-        rRt.anchoredPosition = new Vector2(0, 55);
-        rRt.sizeDelta = new Vector2(600, 240);
+        RectTransform rRt = rowsContainer.GetComponent<RectTransform>();
+        rRt.anchorMin = new Vector2(0.5f, 0.5f);
+        rRt.anchorMax = new Vector2(0.5f, 0.5f);
+        rRt.pivot = new Vector2(0.5f, 0.5f);
+        rRt.anchoredPosition = new Vector2(0, -20);
+        rRt.sizeDelta = new Vector2(960, 420);
         _scoreboardRowsContainer = rowsContainer.transform;
 
         _scoreboardPanel.SetActive(false);
@@ -3244,15 +3268,22 @@ public class OasisNetworkManager : MonoBehaviour
     {
         if (_scoreboardRowsContainer == null) return;
 
+        int numTeams = 4;
+        if (OasisShooterManager.Instance != null)
+        {
+            numTeams = Mathf.Clamp(OasisShooterManager.Instance.activeNumTeams, 2, 4);
+        }
+
         if (_scoreboardSubtitle != null)
         {
+            int pPerTeam = (OasisShooterManager.Instance != null) ? OasisShooterManager.Instance.activePlayersPerTeam : 4;
             if (!string.IsNullOrEmpty(activeRelayJoinCode))
             {
-                _scoreboardSubtitle.text = $"[HOLD TAB TO VIEW]  •  <color=#38EF7D><b>RELAY JOIN CODE: {activeRelayJoinCode}</b></color> (PRESS F10 TO COPY)";
+                _scoreboardSubtitle.text = $"[HOLD TAB TO VIEW]  •  {numTeams} TEAMS × {pPerTeam} PLAYERS  •  <color=#38EF7D><b>RELAY: {activeRelayJoinCode}</b></color> (PRESS F10 TO COPY)";
             }
             else
             {
-                _scoreboardSubtitle.text = "[HOLD TAB TO VIEW LIVE MATCH STATS]";
+                _scoreboardSubtitle.text = $"[HOLD TAB TO VIEW]  •  {numTeams} TEAMS × {pPerTeam} PLAYERS  •  3:00 TIMED MATCH";
             }
         }
 
@@ -3263,44 +3294,112 @@ public class OasisNetworkManager : MonoBehaviour
         }
         _scoreboardRowObjects.Clear();
 
-        var entries = GetScoreboardData();
+        var allEntries = GetScoreboardData();
 
-        for (int i = 0; i < entries.Count; i++)
+        // Calculate Squad Column Dimensions
+        float totalWidth = 950f;
+        float gap = 12f;
+        float colWidth = (totalWidth - (gap * (numTeams - 1))) / numTeams;
+        float startX = -(totalWidth * 0.5f) + (colWidth * 0.5f);
+
+        for (int t = 0; t < numTeams; t++)
         {
-            var e = entries[i];
+            float curX = startX + t * (colWidth + gap);
 
-            GameObject rowObj = new GameObject($"Row_{i}");
-            rowObj.transform.SetParent(_scoreboardRowsContainer, false);
-            RectTransform rowRt = rowObj.AddComponent<RectTransform>();
-            rowRt.anchoredPosition = new Vector2(0, -i * 44f);
-            rowRt.sizeDelta = new Vector2(600, 38);
+            // 1. Team Card Container
+            GameObject colObj = new GameObject($"SquadCol_{t}", typeof(RectTransform), typeof(Image));
+            colObj.transform.SetParent(_scoreboardRowsContainer, false);
+            RectTransform colRt = colObj.GetComponent<RectTransform>();
+            colRt.anchorMin = new Vector2(0.5f, 0.5f);
+            colRt.anchorMax = new Vector2(0.5f, 0.5f);
+            colRt.pivot = new Vector2(0.5f, 0.5f);
+            colRt.anchoredPosition = new Vector2(curX, 0);
+            colRt.sizeDelta = new Vector2(colWidth, 380);
 
-            Image rowBg = rowObj.AddComponent<Image>();
-            // Alternating row tints and highlight for local player
-            if (e.isLocal)
+            Image colBg = colObj.GetComponent<Image>();
+            colBg.color = new Color(0.04f, 0.06f, 0.10f, 0.88f);
+            _scoreboardRowObjects.Add(colObj);
+
+            // Team Header Bar
+            GameObject teamHdrObj = new GameObject("TeamHeader", typeof(RectTransform), typeof(Image));
+            teamHdrObj.transform.SetParent(colObj.transform, false);
+            RectTransform thRt = teamHdrObj.GetComponent<RectTransform>();
+            thRt.anchorMin = new Vector2(0.5f, 0.5f);
+            thRt.anchorMax = new Vector2(0.5f, 0.5f);
+            thRt.pivot = new Vector2(0.5f, 0.5f);
+            thRt.anchoredPosition = new Vector2(0, 165);
+            thRt.sizeDelta = new Vector2(colWidth - 8, 34);
+
+            Image thBg = teamHdrObj.GetComponent<Image>();
+            Color teamColor = OasisShooterManager.GetTeamColor(t);
+            thBg.color = new Color(teamColor.r * 0.45f, teamColor.g * 0.45f, teamColor.b * 0.45f, 0.95f);
+
+            int tKills = (OasisShooterManager.Instance != null && t < OasisShooterManager.Instance.teamKills.Length) 
+                ? OasisShooterManager.Instance.teamKills[t] : 0;
+
+            string sShort = OasisShooterManager.GetTeamShortName(t);
+            CreateLabel(teamHdrObj.transform, $"[{sShort}]", 14, new Vector2(-colWidth * 0.30f, 0), new Vector2(colWidth * 0.38f, 28), FontStyle.Bold, Color.white);
+            CreateLabel(teamHdrObj.transform, $"{tKills} KILLS", 12, new Vector2(colWidth * 0.26f, 0), new Vector2(colWidth * 0.40f, 28), FontStyle.Bold, new Color(1f, 0.85f, 0.3f));
+
+            // Subheader: Labels
+            GameObject subHdr = new GameObject("SubHeader", typeof(RectTransform));
+            subHdr.transform.SetParent(colObj.transform, false);
+            RectTransform shRt = subHdr.GetComponent<RectTransform>();
+            shRt.anchorMin = new Vector2(0.5f, 0.5f);
+            shRt.anchorMax = new Vector2(0.5f, 0.5f);
+            shRt.pivot = new Vector2(0.5f, 0.5f);
+            shRt.anchoredPosition = new Vector2(0, 136);
+            shRt.sizeDelta = new Vector2(colWidth - 8, 20);
+
+            Text opLabel = CreateLabel(subHdr.transform, "OPERATIVE", 10, new Vector2(-colWidth * 0.22f, 0), new Vector2(colWidth * 0.45f, 20), FontStyle.Bold, new Color(0.7f, 0.8f, 0.9f));
+            opLabel.alignment = TextAnchor.MiddleLeft;
+            CreateLabel(subHdr.transform, "K", 10, new Vector2(colWidth * 0.16f, 0), new Vector2(30, 20), FontStyle.Bold, new Color(1f, 0.4f, 0.3f));
+            CreateLabel(subHdr.transform, "PTS", 10, new Vector2(colWidth * 0.36f, 0), new Vector2(40, 20), FontStyle.Bold, new Color(1f, 0.85f, 0.25f));
+
+            // Populate Players for this team
+            var teamPlayers = allEntries.FindAll(e => e.teamId == t);
+            teamPlayers.Sort((a, b) => b.score.CompareTo(a.score));
+
+            for (int r = 0; r < teamPlayers.Count; r++)
             {
-                rowBg.color = new Color(0.1f, 0.25f, 0.45f, 0.55f);
+                var entry = teamPlayers[r];
+                float rowY = 105f - (r * 48f);
+
+                GameObject rowObj = new GameObject($"PlayerRow_{t}_{r}", typeof(RectTransform), typeof(Image));
+                rowObj.transform.SetParent(colObj.transform, false);
+                RectTransform rRt = rowObj.GetComponent<RectTransform>();
+                rRt.anchorMin = new Vector2(0.5f, 0.5f);
+                rRt.anchorMax = new Vector2(0.5f, 0.5f);
+                rRt.pivot = new Vector2(0.5f, 0.5f);
+                rRt.anchoredPosition = new Vector2(0, rowY);
+                rRt.sizeDelta = new Vector2(colWidth - 8, 44);
+
+                Image rBg = rowObj.GetComponent<Image>();
+                if (entry.isLocal)
+                {
+                    rBg.color = new Color(0.12f, 0.32f, 0.58f, 0.85f);
+                }
+                else
+                {
+                    rBg.color = (r % 2 == 0) ? new Color(0.08f, 0.11f, 0.16f, 0.65f) : new Color(0.05f, 0.07f, 0.10f, 0.45f);
+                }
+
+                // Operative Name & Class Badge
+                string displayName = entry.isLocal ? "YOU" : entry.playerName.Replace($"[{sShort}] ", "");
+                if (entry.isDead) displayName += " <color=#FF4444>[3s]</color>";
+
+                Text nameText = CreateLabel(rowObj.transform, displayName, 12, new Vector2(-colWidth * 0.22f, 6), new Vector2(colWidth * 0.48f, 20), FontStyle.Bold, entry.playerColor);
+                nameText.alignment = TextAnchor.MiddleLeft;
+
+                Text classText = CreateLabel(rowObj.transform, $"<color=#77AACC>{entry.className}</color>", 10, new Vector2(-colWidth * 0.22f, -10), new Vector2(colWidth * 0.48f, 16), FontStyle.Normal, Color.white);
+                classText.alignment = TextAnchor.MiddleLeft;
+
+                // Kills
+                CreateLabel(rowObj.transform, $"{entry.kills}", 13, new Vector2(colWidth * 0.16f, 0), new Vector2(30, 24), FontStyle.Bold, new Color(1f, 0.45f, 0.35f));
+
+                // Score
+                CreateLabel(rowObj.transform, $"{entry.score}", 12, new Vector2(colWidth * 0.36f, 0), new Vector2(40, 24), FontStyle.Bold, new Color(1f, 0.85f, 0.3f));
             }
-            else
-            {
-                rowBg.color = (i % 2 == 0) ? new Color(0.08f, 0.1f, 0.15f, 0.4f) : new Color(0.05f, 0.07f, 0.1f, 0.25f);
-            }
-
-            // 1. Rank Column
-            Text rankText = CreateLabel(rowObj.transform, $"#{i + 1}", 15, new Vector2(-245, 0), new Vector2(70, 34), FontStyle.Bold, Color.white);
-
-            // 2. Operative Name Column (Left Aligned)
-            string nameStr = e.isLocal ? $"{e.playerName} (You)" : e.playerName;
-            Text nameText = CreateLabel(rowObj.transform, nameStr, 15, new Vector2(-80, 0), new Vector2(240, 34), FontStyle.Bold, e.playerColor);
-            nameText.alignment = TextAnchor.MiddleLeft;
-
-            // 3. Score Column
-            CreateLabel(rowObj.transform, $"{e.score} pts", 15, new Vector2(135, 0), new Vector2(110, 34), FontStyle.Bold, new Color(1f, 0.85f, 0.25f));
-
-            // 4. Kills Column
-            CreateLabel(rowObj.transform, $"{e.kills}", 15, new Vector2(235, 0), new Vector2(80, 34), FontStyle.Bold, new Color(1f, 0.4f, 0.3f));
-
-            _scoreboardRowObjects.Add(rowObj);
         }
     }
 
@@ -3409,13 +3508,16 @@ public class OasisNetworkManager : MonoBehaviour
 
     private Text CreateLabel(Transform parent, string text, int fontSize, Vector2 pos, Vector2 size, FontStyle style, Color color)
     {
-        GameObject obj = new GameObject("Text");
+        GameObject obj = new GameObject("Text", typeof(RectTransform), typeof(Text));
         obj.transform.SetParent(parent, false);
-        RectTransform rt = obj.AddComponent<RectTransform>();
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = pos;
         rt.sizeDelta = size;
 
-        Text txt = obj.AddComponent<Text>();
+        Text txt = obj.GetComponent<Text>();
         txt.text = text;
         txt.fontSize = fontSize;
         txt.fontStyle = style;
