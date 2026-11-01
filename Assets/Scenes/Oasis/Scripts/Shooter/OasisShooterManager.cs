@@ -140,6 +140,13 @@ public class OasisShooterManager : MonoBehaviour
     {
         if (teamKills == null || teamKills.Length < 4) teamKills = new int[] { alphaKills, bravoKills, charlieKills, deltaKills };
 
+        // In multiplayer client mode, Host is authoritative for scores! 
+        // Client should NEVER overwrite host-synchronized scores with its local bot simulation.
+        if (OasisNetworkManager.Instance != null && OasisNetworkManager.Instance.currentRole == OasisNetworkManager.NetworkRole.Client)
+        {
+            return;
+        }
+
         var entries = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetScoreboardData() : null;
         if (entries != null && entries.Count > 0)
         {
@@ -153,7 +160,7 @@ public class OasisShooterManager : MonoBehaviour
             bool changed = false;
             for (int t = 0; t < 4; t++)
             {
-                int target = Mathf.Max(teamKills[t], rosterKills[t]);
+                int target = rosterKills[t];
                 if (teamKills[t] != target)
                 {
                     teamKills[t] = target;
@@ -178,7 +185,44 @@ public class OasisShooterManager : MonoBehaviour
         }
     }
 
-    public void SyncTeamScoresFromHost(int aK, int bK, int cK, int dK, float remTime)
+    public static string BuildBotsSyncString()
+    {
+        var list = new List<string>();
+        foreach (var bot in OasisCombatAI.ActiveBots)
+        {
+            if (bot != null && !string.IsNullOrEmpty(bot.botName))
+            {
+                list.Add($"{bot.botName}:{bot.kills}:{bot.score}");
+            }
+        }
+        return string.Join(";", list);
+    }
+
+    public static void ApplyBotsSyncString(string botData)
+    {
+        if (string.IsNullOrEmpty(botData)) return;
+        string[] entries = botData.Split(';');
+        for (int i = 0; i < entries.Length; i++)
+        {
+            if (string.IsNullOrEmpty(entries[i])) continue;
+            string[] sub = entries[i].Split(':');
+            if (sub.Length >= 3 && int.TryParse(sub[1], out int k) && int.TryParse(sub[2], out int s))
+            {
+                string bName = sub[0];
+                foreach (var b in OasisCombatAI.ActiveBots)
+                {
+                    if (b != null && b.botName == bName)
+                    {
+                        b.kills = k;
+                        b.score = s;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    public void SyncTeamScoresFromHost(int aK, int bK, int cK, int dK, float remTime, string botData = null)
     {
         if (isMatchFinished) return;
         if (teamKills == null || teamKills.Length < 4) teamKills = new int[4];
@@ -191,10 +235,16 @@ public class OasisShooterManager : MonoBehaviour
         teamKills[2] = cK;
         teamKills[3] = dK;
         matchTimeRemaining = remTime;
+
+        if (!string.IsNullOrEmpty(botData))
+        {
+            ApplyBotsSyncString(botData);
+        }
+
         UpdateTeamBattleHUD();
     }
 
-    public void ConcludeMatchFromHost(int winTeam, string reason, int aK, int bK, int cK, int dK)
+    public void ConcludeMatchFromHost(int winTeam, string reason, int aK, int bK, int cK, int dK, string botData = null)
     {
         if (isMatchFinished) return;
         if (teamKills == null || teamKills.Length < 4) teamKills = new int[4];
@@ -206,6 +256,12 @@ public class OasisShooterManager : MonoBehaviour
         teamKills[1] = bK;
         teamKills[2] = cK;
         teamKills[3] = dK;
+
+        if (!string.IsNullOrEmpty(botData))
+        {
+            ApplyBotsSyncString(botData);
+        }
+
         ConcludeMatch(winTeam, reason);
     }
 
@@ -1881,7 +1937,10 @@ public class OasisShooterManager : MonoBehaviour
 
     public string FormatAllTeamScoresRich(bool compact = false)
     {
-        ReconcileTeamScores();
+        if (OasisNetworkManager.Instance == null || OasisNetworkManager.Instance.currentRole != OasisNetworkManager.NetworkRole.Client)
+        {
+            ReconcileTeamScores();
+        }
         if (teamKills == null || teamKills.Length < 4) teamKills = new int[] { alphaKills, bravoKills, charlieKills, deltaKills };
         int n = Mathf.Clamp(activeNumTeams, 2, 4);
         var parts = new List<string>();
@@ -1896,7 +1955,10 @@ public class OasisShooterManager : MonoBehaviour
 
     public string FormatAllTeamScoresPlain()
     {
-        ReconcileTeamScores();
+        if (OasisNetworkManager.Instance == null || OasisNetworkManager.Instance.currentRole != OasisNetworkManager.NetworkRole.Client)
+        {
+            ReconcileTeamScores();
+        }
         if (teamKills == null || teamKills.Length < 4) teamKills = new int[] { alphaKills, bravoKills, charlieKills, deltaKills };
         int n = Mathf.Clamp(activeNumTeams, 2, 4);
         var parts = new List<string>();
@@ -1996,7 +2058,10 @@ public class OasisShooterManager : MonoBehaviour
             float colWidth = (totalWidth - (colGap * (numTeams - 1))) / numTeams;
             float startX = cardX + 20f;
 
-            ReconcileTeamScores();
+            if (OasisNetworkManager.Instance == null || OasisNetworkManager.Instance.currentRole != OasisNetworkManager.NetworkRole.Client)
+            {
+                ReconcileTeamScores();
+            }
             var allEntries = (OasisNetworkManager.Instance != null) ? OasisNetworkManager.Instance.GetScoreboardData() : null;
 
             for (int t = 0; t < numTeams; t++)
@@ -2019,7 +2084,7 @@ public class OasisShooterManager : MonoBehaviour
                 int sumKills = 0;
                 for (int p = 0; p < teamPlayers.Count; p++) sumKills += teamPlayers[p].kills;
 
-                int tKills = Mathf.Max((teamKills != null && t < teamKills.Length) ? teamKills[t] : 0, sumKills);
+                int tKills = (teamKills != null && t < teamKills.Length) ? teamKills[t] : sumKills;
                 string sShort = GetTeamShortName(t);
 
                 GUIStyle thStyleLeft = new GUIStyle(GUI.skin.label)

@@ -390,6 +390,21 @@ public class OasisNetworkManager : MonoBehaviour
         public bool isDead;
     }
 
+    public static string GetOperativeClassFromIndex(int idx)
+    {
+        switch (idx)
+        {
+            case 0: return "Heavy";
+            case 1: return "Commando";
+            case 2: return "Specops";
+            case 3: return "Android";
+            case 4: return "Nomad";
+            case 5: return "Medic";
+            case 6: return "Outlaw";
+            default: return "Nomad";
+        }
+    }
+
     public static string FormatOperativeClassBadge(string classId)
     {
         switch (classId)
@@ -415,7 +430,7 @@ public class OasisNetworkManager : MonoBehaviour
         {
             int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
             string teamPrefix = $"[{OasisShooterManager.GetTeamShortName(myTeam)}] ";
-            string localName = teamPrefix + "YOU (OPERATIVE)";
+            string localName = teamPrefix + (!string.IsNullOrEmpty(myPlayerName) ? $"{myPlayerName} (YOU)" : "YOU (OPERATIVE)");
             Color teamCol = OasisShooterManager.GetTeamColor(myTeam);
 
             int pScore = localScore;
@@ -456,11 +471,13 @@ public class OasisNetworkManager : MonoBehaviour
             var rp = kvp.Value;
             if (rp == null || rp.isLocalPlaceholder) continue; // Local placeholders are spawned as active OasisCombatAI bots in-game
             string rPrefix = $"[{OasisShooterManager.GetTeamShortName(rp.teamId)}] ";
+            string cBadge = GetOperativeClassFromIndex(rp.operativeIndex);
             list.Add(new ScoreboardEntry
             {
                 playerId = rp.id,
                 teamId = rp.teamId,
                 playerName = rPrefix + rp.name,
+                className = cBadge,
                 score = rp.score,
                 kills = rp.kills,
                 playerColor = OasisShooterManager.GetTeamColor(rp.teamId),
@@ -1688,6 +1705,8 @@ public class OasisNetworkManager : MonoBehaviour
             int numTeams = parts.Length > 5 ? int.Parse(parts[5]) : -1;
             int perTeam = parts.Length > 6 ? int.Parse(parts[6]) : -1;
 
+            if (currentRole == NetworkRole.Host && senderId == 0) return;
+
             if (senderId != myPlayerId)
             {
                 if (!_remotePlayers.TryGetValue(senderId, out var rp) || rp == null)
@@ -2268,7 +2287,7 @@ public class OasisNetworkManager : MonoBehaviour
             }
             else if (cmd == "MATCH_SYNC")
             {
-                // Authoritative Host synchronization of team kills and match timer
+                // Authoritative Host synchronization of team kills, match timer, and AI bot stats
                 if (parts.Length >= 6)
                 {
                     int aK = int.Parse(parts[1]);
@@ -2276,7 +2295,8 @@ public class OasisNetworkManager : MonoBehaviour
                     int cK = int.Parse(parts[3]);
                     int dK = int.Parse(parts[4]);
                     float remTime = float.Parse(parts[5], CultureInfo.InvariantCulture);
-                    OasisShooterManager.Instance?.SyncTeamScoresFromHost(aK, bK, cK, dK, remTime);
+                    string botData = (parts.Length > 6) ? parts[6] : null;
+                    OasisShooterManager.Instance?.SyncTeamScoresFromHost(aK, bK, cK, dK, remTime, botData);
                 }
             }
             else if (cmd == "MATCH_CONCLUDED")
@@ -2290,7 +2310,8 @@ public class OasisNetworkManager : MonoBehaviour
                     int bK = int.Parse(parts[4]);
                     int cK = int.Parse(parts[5]);
                     int dK = int.Parse(parts[6]);
-                    OasisShooterManager.Instance?.ConcludeMatchFromHost(winTeam, reason, aK, bK, cK, dK);
+                    string botData = (parts.Length > 7) ? parts[7] : null;
+                    OasisShooterManager.Instance?.ConcludeMatchFromHost(winTeam, reason, aK, bK, cK, dK, botData);
                 }
             }
         }
@@ -2299,7 +2320,8 @@ public class OasisNetworkManager : MonoBehaviour
     public void BroadcastMatchSync(int aK, int bK, int cK, int dK, float remTime)
     {
         if (currentRole != NetworkRole.Host) return;
-        string packet = $"MATCH_SYNC|{aK}|{bK}|{cK}|{dK}|{remTime.ToString("F1", CultureInfo.InvariantCulture)}";
+        string botData = OasisShooterManager.BuildBotsSyncString();
+        string packet = $"MATCH_SYNC|{aK}|{bK}|{cK}|{dK}|{remTime.ToString("F1", CultureInfo.InvariantCulture)}|{botData}";
         BroadcastToClients(packet);
         if (isUsingRelay && _relayDriver.IsCreated)
         {
@@ -2311,7 +2333,8 @@ public class OasisNetworkManager : MonoBehaviour
     {
         if (currentRole != NetworkRole.Host) return;
         string cleanReason = reason.Replace("|", " - ").Replace("\n", " ");
-        string packet = $"MATCH_CONCLUDED|{winTeam}|{cleanReason}|{aK}|{bK}|{cK}|{dK}";
+        string botData = OasisShooterManager.BuildBotsSyncString();
+        string packet = $"MATCH_CONCLUDED|{winTeam}|{cleanReason}|{aK}|{bK}|{cK}|{dK}|{botData}";
         StartCoroutine(ReliableHostBroadcastRoutine(packet, 4));
     }
 
@@ -2319,8 +2342,9 @@ public class OasisNetworkManager : MonoBehaviour
     {
         if (currentRole == NetworkRole.Offline) return;
 
+        int senderId = (currentRole == NetworkRole.Client && myPlayerId == 0) ? 1 : myPlayerId;
         string pName = myPlayerName;
-        string packet = $"LOBBY_SELECT|{myPlayerId}|{pName}|{teamId}|{operativeIndex}|{numTeams}|{playersPerTeam}";
+        string packet = $"LOBBY_SELECT|{senderId}|{pName}|{teamId}|{operativeIndex}|{numTeams}|{playersPerTeam}";
 
         if (currentRole == NetworkRole.Host)
         {
