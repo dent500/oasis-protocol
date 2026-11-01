@@ -402,6 +402,11 @@ public class MainMenuManager : MonoBehaviour
         Cursor.visible = true;
         Time.timeScale = 1f;
 
+        if (OasisNetworkManager.Instance != null)
+        {
+            OasisNetworkManager.Instance.StopSession();
+        }
+
         // Apply saved user settings on startup
         float savedVol = PlayerPrefs.GetFloat("OasisMasterVolume", 0.85f);
         AudioListener.volume = Mathf.Clamp01(savedVol);
@@ -457,9 +462,12 @@ public class MainMenuManager : MonoBehaviour
 
     private void OnInputFieldSubmitted(string text)
     {
-        if (!string.IsNullOrEmpty(text) && text.Trim().Length >= 4)
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
-            JoinOasisSession(text);
+            if (!string.IsNullOrEmpty(text) && text.Trim().Length >= 4)
+            {
+                JoinOasisSession(text);
+            }
         }
     }
 
@@ -1504,6 +1512,7 @@ public class MainMenuManager : MonoBehaviour
     {
         if (_isLoading) return;
         var netMgr = GetOrCreateNetworkManager();
+        netMgr.StopSession();
         netMgr.StartRelayHost();
         Debug.Log("[MainMenuManager] Host allocating Relay session and launching directly into Character Selection!");
         LoadGameScene(oasisSceneName);
@@ -1543,28 +1552,23 @@ public class MainMenuManager : MonoBehaviour
     public void JoinOasisSession(string codeOrIp)
     {
         if (_isLoading) return;
-        var netMgr = GetOrCreateNetworkManager();
 
-        codeOrIp = (codeOrIp ?? "").Trim();
+        codeOrIp = (codeOrIp ?? "").Trim().ToUpperInvariant();
         if (string.IsNullOrEmpty(codeOrIp))
         {
-            if (!string.IsNullOrEmpty(netMgr.activeRelayJoinCode))
+            if (coOpStatusText != null)
             {
-                codeOrIp = netMgr.activeRelayJoinCode;
+                coOpStatusText.text = "<color=#FF6B6B>PLEASE ENTER A 6-DIGIT SQUAD JOIN CODE!</color>";
             }
-            else if (!string.IsNullOrEmpty(GUIUtility.systemCopyBuffer) && GUIUtility.systemCopyBuffer.Trim().Length == 6)
-            {
-                codeOrIp = GUIUtility.systemCopyBuffer.Trim();
-            }
-            else
-            {
-                codeOrIp = "127.0.0.1";
-            }
+            return;
         }
+
+        var netMgr = GetOrCreateNetworkManager();
+        netMgr.StopSession();
 
         if (coOpStatusText != null)
         {
-            coOpStatusText.text = $"<color=#38EF7D>CONNECTING TO SQUAD ({codeOrIp.ToUpper()}) — ENTERING CHARACTER SELECTION...</color>";
+            coOpStatusText.text = $"<color=#38EF7D>CONNECTING TO SQUAD ({codeOrIp}) — ENTERING CHARACTER SELECTION...</color>";
         }
 
         netMgr.ConnectOrJoinSquadIntoStaging(codeOrIp);

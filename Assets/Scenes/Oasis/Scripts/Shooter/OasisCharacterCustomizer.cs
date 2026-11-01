@@ -377,6 +377,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         isSelectionActive = false;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+        OasisNetworkManager.Instance?.StopSession();
         UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
     }
 

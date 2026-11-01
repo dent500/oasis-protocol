@@ -570,6 +570,12 @@ public class OasisNetworkManager : MonoBehaviour
         _localPlayerTransform = null;
         _localCombat = null;
 
+        if (scene.name.IndexOf("MainMenu", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            StopSession();
+            return;
+        }
+
         if (scene.name.IndexOf("Oasis", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             if (_lobbyCanvas == null)
@@ -1081,65 +1087,16 @@ public class OasisNetworkManager : MonoBehaviour
             return;
         }
 
-        // Check if we had a local placeholder from testing "CONNECT & JOIN SQUAD" on the same PC
-        bool hadPlaceholder = false;
-        int placeholderTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-        int placeholderOp = PlayerPrefs.GetInt("OasisSelectedOperative", 1);
-        foreach (var kvp in _remotePlayers)
-        {
-            if (kvp.Value != null && kvp.Value.isLocalPlaceholder)
-            {
-                hadPlaceholder = true;
-                placeholderTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-                placeholderOp = PlayerPrefs.GetInt("OasisSelectedOperative", 1);
-                break;
-            }
-        }
-
         StartHost();
         currentRole = NetworkRole.Host;
         myPlayerId = 0;
-
-        if (hadPlaceholder && _remotePlayers.Count == 0)
-        {
-            SpawnRemotePlayer(1, "OPERATIVE #2", placeholderTeam, placeholderOp, true);
-            UpdatePlayerListUI();
-            OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
-        }
     }
 
     public void ConnectOrJoinSquadIntoStaging(string codeOrIp)
     {
         codeOrIp = (codeOrIp ?? "").Trim();
-
-        // If this instance is already hosting (e.g., user generated a Relay code on the left panel and clicked Join on the same PC to test)
-        if (currentRole == NetworkRole.Host)
-        {
-            if (_remotePlayers.Count == 0)
-            {
-                int hostTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
-                SpawnRemotePlayer(1, "OPERATIVE #2", hostTeam, 1, true);
-                UpdatePlayerListUI();
-            }
-            return;
-        }
-
-        // Otherwise join as Client and ensure Host is immediately present in the staging roster
+        StopSession();
         StartClient(codeOrIp);
-
-        if (currentRole == NetworkRole.Offline)
-        {
-            currentRole = NetworkRole.Client;
-        }
-        if (myPlayerId == 0)
-        {
-            myPlayerId = 1;
-        }
-        if (!_remotePlayers.ContainsKey(0))
-        {
-            SpawnRemotePlayer(0, "SQUAD HOST", 0, 0, true);
-            UpdatePlayerListUI();
-        }
     }
 
     public async void StartRelayClient(string joinCode)
@@ -1162,13 +1119,6 @@ public class OasisNetworkManager : MonoBehaviour
         currentRole = NetworkRole.Client;
         myPlayerId = 1;
         _clientReceivedWelcome = false;
-
-        // Immediately register Host in staging roster while Relay handshake is in flight
-        if (!_remotePlayers.ContainsKey(0))
-        {
-            SpawnRemotePlayer(0, "SQUAD HOST", 0, 0, true);
-            UpdatePlayerListUI();
-        }
 
         UpdateStatus($"JOINING RELAY SESSION {joinCode}...");
         try
@@ -1197,6 +1147,7 @@ public class OasisNetworkManager : MonoBehaviour
             if (_relayDriver.Bind(NetworkEndpoint.AnyIpv4) != 0)
             {
                 UpdateStatus("RELAY CLIENT BIND FAILED");
+                StopSession();
                 return;
             }
 
@@ -1209,18 +1160,18 @@ public class OasisNetworkManager : MonoBehaviour
 
             UpdateStatus($"CONNECTING TO RELAY ({joinCode})...");
             _lobbyPanel?.SetActive(false);
-            OasisShooterManager.Instance?.ShowNotificationBanner($"CONNECTING TO SESSION...", 3f);
+            OasisShooterManager.Instance?.ShowNotificationBanner($"CONNECTING TO SQUAD HOST ({joinCode})...", 3f);
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"[Relay] Join fallback to local squad staging ({ex.Message})");
-            UpdateStatus($"SQUAD STAGING ACTIVE ({joinCode})");
-            currentRole = NetworkRole.Client;
-            if (!_remotePlayers.ContainsKey(0))
+            Debug.LogError($"[Relay] Failed to join Relay allocation ({joinCode}): {ex.Message}");
+            UpdateStatus($"JOIN FAILED: {ex.Message}");
+            StopSession();
+            OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#FF5555>FAILED TO JOIN SESSION {joinCode}: {ex.Message}</color>", 5f);
+            if (OasisCharacterCustomizer.Instance != null)
             {
-                SpawnRemotePlayer(0, "SQUAD HOST", 0, 0, true);
+                OasisCharacterCustomizer.Instance.UpdateRosterDisplay();
             }
-            OasisCharacterCustomizer.Instance?.UpdateRosterDisplay();
         }
         finally
         {
@@ -1286,12 +1237,6 @@ public class OasisNetworkManager : MonoBehaviour
         myPlayerId = 1;
         _clientReceivedWelcome = false;
         _joinRetryTimer = 0f;
-
-        if (!_remotePlayers.ContainsKey(0))
-        {
-            SpawnRemotePlayer(0, "SQUAD HOST", 0, 0, true);
-            UpdatePlayerListUI();
-        }
 
         try
         {
@@ -1420,6 +1365,11 @@ public class OasisNetworkManager : MonoBehaviour
         isUsingRelay = false;
         activeRelayJoinCode = "";
         currentRole = NetworkRole.Offline;
+        myPlayerId = 0;
+        _clientReceivedWelcome = false;
+        _isConnectingOrHostingInProgress = false;
+        _joinRetryTimer = 0f;
+        isMatchLaunchedByHost = false;
         UpdateStatus("OFFLINE");
     }
 

@@ -576,6 +576,8 @@ public class InGamePauseManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        OasisNetworkManager.Instance?.StopSession();
+
         if (SceneManager.sceneCountInBuildSettings > 0)
         {
             SceneManager.LoadScene(0);
