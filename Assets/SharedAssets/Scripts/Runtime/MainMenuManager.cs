@@ -345,6 +345,45 @@ public class MainMenuManager : MonoBehaviour
 {
     [Header("Scene Names")]
     public string oasisSceneName = "OasisScene";
+    public string facilitySceneName = "FacilityScene";
+
+    private Text _mapSelectorBtnText;
+    private Text _mapSelectorDescText;
+    private Image _mapSelectorBtnBg;
+
+    public string GetSelectedMapScene()
+    {
+        return PlayerPrefs.GetString("OasisSelectedMap", oasisSceneName);
+    }
+
+    public void ToggleMapSelection()
+    {
+        string cur = GetSelectedMapScene();
+        string next = cur.Equals(facilitySceneName, System.StringComparison.OrdinalIgnoreCase) ? oasisSceneName : facilitySceneName;
+        PlayerPrefs.SetString("OasisSelectedMap", next);
+        PlayerPrefs.Save();
+        UpdateMapSelectionDisplay();
+    }
+
+    private void UpdateMapSelectionDisplay()
+    {
+        if (_mapSelectorBtnText == null) return;
+        string cur = GetSelectedMapScene();
+        bool isFacility = cur.Equals(facilitySceneName, System.StringComparison.OrdinalIgnoreCase);
+
+        if (isFacility)
+        {
+            _mapSelectorBtnText.text = "🏢  MAP: SUBTERRA COMPLEX (INDOOR)";
+            if (_mapSelectorDescText != null) _mapSelectorDescText.text = "<color=#26D9FF>SECTOR:</color> Subterranean Research Bunker // Central Reactor Core, Cryo-Lab, Armory & Flanking Ring";
+            if (_mapSelectorBtnBg != null) _mapSelectorBtnBg.color = new Color(0.12f, 0.42f, 0.58f, 0.95f);
+        }
+        else
+        {
+            _mapSelectorBtnText.text = "🗺️  MAP: OASIS CANYON (OUTDOOR)";
+            if (_mapSelectorDescText != null) _mapSelectorDescText.text = "<color=#38EF7D>SECTOR:</color> Expanded Desert Canyon // Natural Rock Cliffs, Palm Groves & Undercover Hangars";
+            if (_mapSelectorBtnBg != null) _mapSelectorBtnBg.color = new Color(0.15f, 0.48f, 0.35f, 0.95f);
+        }
+    }
 
     [Header("UI Panels")]
     public GameObject mainPanel;
@@ -632,15 +671,29 @@ public class MainMenuManager : MonoBehaviour
 
         // Clean Description
         CreateAnchoredText(card.transform, font, "Desc",
-            "Host a tactical mission session and enter the Operative Staging Bay.\n\nSelect your combat chassis, configure 2–4 Teams & Squad Size (1–4 per team), or run an AI Simulation.\n\nA 6-digit Unity Relay Join Code is automatically generated and copied to your clipboard so friends can join your squad seamlessly!",
-            14, FontStyle.Normal, new Color(0.90f, 0.95f, 1.0f),
-            new Vector2(0.07f, 0.35f), new Vector2(0.93f, 0.68f), TextAnchor.MiddleCenter);
+            "Host a tactical mission session and enter the Operative Staging Bay.\nSelect your combat chassis, configure 2–4 Teams & Squad Size (1–4 per team), or run an AI Simulation.",
+            13, FontStyle.Normal, new Color(0.90f, 0.95f, 1.0f),
+            new Vector2(0.07f, 0.50f), new Vector2(0.93f, 0.70f), TextAnchor.MiddleCenter);
+
+        // Map Selection Button & Description
+        Button mapBtn = CreateAnchoredButton(card.transform, font, "Btn_MapSelect",
+            "🗺️  MAP: OASIS CANYON (OUTDOOR)",
+            14, new Color(0.15f, 0.48f, 0.35f, 0.95f), Color.white,
+            new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.47f), ToggleMapSelection);
+        _mapSelectorBtnBg = mapBtn.GetComponent<Image>();
+        _mapSelectorBtnText = mapBtn.GetComponentInChildren<Text>();
+
+        _mapSelectorDescText = CreateAnchoredText(card.transform, font, "MapDescText",
+            "<color=#38EF7D>SECTOR:</color> Expanded Desert Canyon // Natural Rock Cliffs, Palm Groves & Undercover Hangars",
+            12, FontStyle.Normal, new Color(0.85f, 0.92f, 1.0f),
+            new Vector2(0.08f, 0.23f), new Vector2(0.92f, 0.34f), TextAnchor.MiddleCenter);
+        UpdateMapSelectionDisplay();
 
         // Primary Single Host Button: Launches straight into Character Selection & begins Relay host session!
         launchMissionBtn = CreateAnchoredButton(card.transform, font, "HostMissionBtn",
             "HOST MISSION  (ENTER STAGING)",
             18, new Color(0.10f, 0.62f, 0.36f, 0.85f), Color.white,
-            new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.26f), HostMissionFromMenu);
+            new Vector2(0.08f, 0.06f), new Vector2(0.92f, 0.20f), HostMissionFromMenu);
         generateCodeBtn = launchMissionBtn;
     }
 
@@ -749,7 +802,7 @@ public class MainMenuManager : MonoBehaviour
     {
         if (_isLoading) return;
         OasisMapDesigner.OpenOnSceneLoad = true;
-        LoadGameScene(oasisSceneName);
+        LoadGameScene(GetSelectedMapScene());
     }
 
     private void UpdateFooterControlsHint()
@@ -1528,7 +1581,7 @@ public class MainMenuManager : MonoBehaviour
         netMgr.StopSession();
         netMgr.StartRelayHost();
         Debug.Log("[MainMenuManager] Host allocating Relay session and launching directly into Character Selection!");
-        LoadGameScene(oasisSceneName);
+        LoadGameScene(GetSelectedMapScene());
     }
 
     public void GenerateLobbyCode()
@@ -1547,7 +1600,7 @@ public class MainMenuManager : MonoBehaviour
         OasisNetworkManager.PendingLaunchMode = "Offline";
         OasisNetworkManager.PendingTargetCodeOrIP = "";
         Debug.Log("[MainMenuManager] Deploying to Oasis Station (Solo / Offline)...");
-        LoadGameScene(oasisSceneName);
+        LoadGameScene(GetSelectedMapScene());
     }
 
     public void HostOasisRelay()
@@ -1585,7 +1638,7 @@ public class MainMenuManager : MonoBehaviour
         }
 
         netMgr.ConnectOrJoinSquadIntoStaging(codeOrIp);
-        LoadGameScene(oasisSceneName);
+        LoadGameScene(GetSelectedMapScene());
     }
 
 

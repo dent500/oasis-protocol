@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Oasis/OasisScene.unity
     guid: 9fa2ba603a3424f9bafa4119f837f2bc
+  - enabled: 1
+    path: Assets/Scenes/Facility/FacilityScene.unity
+    guid: 4bdfa46ebe56b1f47921159a0e0d9154
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: 290a6e6411d135049940bec2237b8938, type: 2}
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}

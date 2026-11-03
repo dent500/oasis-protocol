@@ -1201,12 +1201,15 @@ public class OasisCombatAI : MonoBehaviour
         Vector3 anchor = (OasisSpawnSystem.Instance != null) 
             ? OasisSpawnSystem.Instance.GetPlayableCenter() 
             : new Vector3(0f, -2.0f, -112.0f);
-        Vector3 arenaCenter = anchor + new Vector3(0f, 0f, -34f);
-        float softBoundary = 135f;
-        float hardBoundary = 152f;
+        string activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        bool isFacility = activeScene.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        Vector3 arenaCenter = isFacility ? anchor : anchor + new Vector3(0f, 0f, -34f);
+        float softBoundary = isFacility ? 42f : 135f;
+        float hardBoundary = isFacility ? 48f : 152f;
 
-        // Void catch / ground safeguard: trigger if bot falls below bedrock safety floor (Y < -12m)
-        if (transform.position.y < (anchor.y - 12.0f) || transform.position.y < -12.0f)
+        // Void catch / ground safeguard: trigger if bot falls below bedrock safety floor
+        float floorLimit = isFacility ? -6.0f : -12.0f;
+        if (transform.position.y < (anchor.y - 6.0f) || transform.position.y < floorLimit)
         {
             _verticalVelocity = 0f;
             if (_characterController != null) _characterController.enabled = false;

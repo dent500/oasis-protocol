@@ -410,7 +410,8 @@ public class OasisShooterManager : MonoBehaviour
     {
         SceneManager.sceneLoaded += (scene, mode) =>
         {
-            if (scene.name.IndexOf("Oasis", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            if (scene.name.IndexOf("Oasis", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                scene.name.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 if (Instance == null)
                 {
@@ -421,7 +422,8 @@ public class OasisShooterManager : MonoBehaviour
         };
 
         string currentScene = SceneManager.GetActiveScene().name;
-        if (currentScene.IndexOf("Oasis", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        if (currentScene.IndexOf("Oasis", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            currentScene.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0)
         {
             if (Instance == null)
             {
@@ -489,13 +491,29 @@ public class OasisShooterManager : MonoBehaviour
             spawnSysObj.AddComponent<OasisSpawnSystem>();
         }
 
-        OasisWorldExpander expander = FindAnyObjectByType<OasisWorldExpander>();
-        if (expander == null)
+        string curScene = SceneManager.GetActiveScene().name;
+        bool isFacility = curScene.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (isFacility)
         {
-            GameObject expanderObj = new GameObject("OasisWorldExpander");
-            expander = expanderObj.AddComponent<OasisWorldExpander>();
+            IndoorFacilityBuilder facility = FindAnyObjectByType<IndoorFacilityBuilder>();
+            if (facility == null)
+            {
+                GameObject facObj = new GameObject("IndoorFacilityBuilder");
+                facility = facObj.AddComponent<IndoorFacilityBuilder>();
+            }
+            facility.EnsureFacilityBuilt();
         }
-        expander.EnsureWorldExpanded();
+        else
+        {
+            OasisWorldExpander expander = FindAnyObjectByType<OasisWorldExpander>();
+            if (expander == null)
+            {
+                GameObject expanderObj = new GameObject("OasisWorldExpander");
+                expander = expanderObj.AddComponent<OasisWorldExpander>();
+            }
+            expander.EnsureWorldExpanded();
+        }
 
         if (FindAnyObjectByType<OasisMapSystem>() == null)
         {

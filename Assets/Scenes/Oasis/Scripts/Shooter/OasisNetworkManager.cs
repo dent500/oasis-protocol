@@ -611,7 +611,8 @@ public class OasisNetworkManager : MonoBehaviour
             return;
         }
 
-        if (scene.name.IndexOf("Oasis", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (scene.name.IndexOf("Oasis", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            scene.name.IndexOf("Facility", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             if (_lobbyCanvas == null)
             {
@@ -2343,7 +2344,8 @@ public class OasisNetworkManager : MonoBehaviour
                 string activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
                 if (activeScene.IndexOf("MainMenu", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    UnityEngine.SceneManagement.SceneManager.LoadScene("OasisScene");
+                    string targetMap = (parts.Length > 1 && !string.IsNullOrEmpty(parts[1])) ? parts[1] : PlayerPrefs.GetString("OasisSelectedMap", "OasisScene");
+                    UnityEngine.SceneManagement.SceneManager.LoadScene(targetMap);
                 }
             }
             else if (cmd == "START_COUNTDOWN")
@@ -2382,7 +2384,8 @@ public class OasisNetworkManager : MonoBehaviour
                 {
                     AutoDeployOnSceneLoad = true;
                     AutoDeployIsSim = isSim;
-                    UnityEngine.SceneManagement.SceneManager.LoadScene("OasisScene");
+                    string targetMap = (parts.Length > 4 && !string.IsNullOrEmpty(parts[4])) ? parts[4] : PlayerPrefs.GetString("OasisSelectedMap", "OasisScene");
+                    UnityEngine.SceneManagement.SceneManager.LoadScene(targetMap);
                     return;
                 }
 
@@ -3863,7 +3866,8 @@ public class OasisNetworkManager : MonoBehaviour
         string activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
         if (activeScene.IndexOf("MainMenu", StringComparison.OrdinalIgnoreCase) >= 0)
         {
-            UnityEngine.SceneManagement.SceneManager.LoadScene("OasisScene");
+            string targetMap = PlayerPrefs.GetString("OasisSelectedMap", "OasisScene");
+            UnityEngine.SceneManagement.SceneManager.LoadScene(targetMap);
         }
 
         if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isWaitingForOperatives)

@@ -38,10 +38,15 @@ public class OasisSpawnSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Gets the authentic center anchor of the playable Oasis map.
+    /// Gets the authentic center anchor of the active combat map.
     /// </summary>
     public Vector3 GetPlayableCenter()
     {
+        string s = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        if (s.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return Vector3.zero;
+        }
         return new Vector3(0f, -2.0f, -150.0f);
     }
 

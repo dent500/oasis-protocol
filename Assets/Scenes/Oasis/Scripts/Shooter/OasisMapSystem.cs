@@ -286,14 +286,14 @@ public class OasisMapSystem : MonoBehaviour
 
     public static Vector2 WorldToMapPosition(Vector3 worldPos)
     {
-        // Playable canyon arena center is (0, 0, -150).
-        // UI markers: OASIS CORE=(0,0), NORTH DUNE HANGAR=(0,200), SOUTH CANYON HANGAR=(0,-200), WEST RIDGE HANGAR=(-200,0), EAST GORGE HANGAR=(200,0).
-        // Radius between center and perimeter Hangar Hideouts is ~78m in world space.
-        Vector3 mapCenter = new Vector3(0f, 0f, -150f);
-        float sectorRadius = 78f;
+        string curScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        bool isFacility = curScene.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+        Vector3 mapCenter = isFacility ? Vector3.zero : new Vector3(0f, 0f, -150f);
+        float sectorRadius = isFacility ? 40f : 78f;
         float markerRadiusPx = 200f;
         float nx = (worldPos.x - mapCenter.x) / sectorRadius;
-        float ny = -(worldPos.z - mapCenter.z) / sectorRadius;
+        float ny = isFacility ? ((worldPos.z - mapCenter.z) / sectorRadius) : (-(worldPos.z - mapCenter.z) / sectorRadius);
         return new Vector2(Mathf.Clamp(nx, -1.6f, 1.6f), Mathf.Clamp(ny, -1.6f, 1.6f)) * markerRadiusPx;
     }
 
@@ -386,13 +386,29 @@ public class OasisMapSystem : MonoBehaviour
 
     public static string GetSectorName(Vector3 pos)
     {
-        Vector3 delta = pos - new Vector3(0f, 0f, -150f);
-        if (Mathf.Abs(delta.x) < 22f && Mathf.Abs(delta.z) < 22f) return "OASIS CORE";
-        if (delta.z < -20f) return "NORTH DUNES";
-        if (delta.z > 20f) return "SOUTH CANYON PASS";
-        if (delta.x < -20f) return "WEST OUTPOST";
-        if (delta.x > 20f) return "EAST GORGE";
-        return "CANYON WASTELAND";
+        string curScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        bool isFacility = curScene.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (isFacility)
+        {
+            Vector3 delta = pos;
+            if (Mathf.Abs(delta.x) < 14f && Mathf.Abs(delta.z) < 14f) return "REACTOR CORE";
+            if (delta.z > 14f) return "COMMAND VAULT";
+            if (delta.z < -14f) return "SECURITY ARMORY";
+            if (delta.x < -14f) return "CRYO BIO-LAB";
+            if (delta.x > 14f) return "CARGO LOGISTICS";
+            return "INTERIOR CORRIDOR";
+        }
+        else
+        {
+            Vector3 delta = pos - new Vector3(0f, 0f, -150f);
+            if (Mathf.Abs(delta.x) < 22f && Mathf.Abs(delta.z) < 22f) return "OASIS CORE";
+            if (delta.z < -20f) return "NORTH DUNES";
+            if (delta.z > 20f) return "SOUTH CANYON PASS";
+            if (delta.x < -20f) return "WEST OUTPOST";
+            if (delta.x > 20f) return "EAST GORGE";
+            return "CANYON WASTELAND";
+        }
     }
 
     // Procedural Sprites for Anti-Aliased Rings, Circles, Radar Sweep, Chevron Arrow, and Diamonds
@@ -697,8 +713,11 @@ public class OasisMapSystem : MonoBehaviour
         headerRt.anchoredPosition = new Vector2(0, -25);
         headerRt.sizeDelta = new Vector2(820, 65);
 
-        CreateTextLabel(header.transform, "TACTICAL DESERT SATELLITE SURVEY", 26, new Vector2(0, 14), FontStyle.Bold, new Color(0.3f, 0.9f, 1f));
-        CreateTextLabel(header.transform, "EXPANDED OASIS CANYON BASIN // 440M SATELLITE TELEMETRY", 13, new Vector2(0, -14), FontStyle.Normal, new Color(0.7f, 0.85f, 0.95f));
+        bool isFacility = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name.IndexOf("Facility", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        string title = isFacility ? "SUBTERRA COMPLEX // INTERIOR SCHEMATIC" : "TACTICAL DESERT SATELLITE SURVEY";
+        string subtitle = isFacility ? "UNDERGROUND RESEARCH COMPLEX // 80M INDOOR FACILITY SCHEMATIC" : "EXPANDED OASIS CANYON BASIN // 440M SATELLITE TELEMETRY";
+        CreateTextLabel(header.transform, title, 26, new Vector2(0, 14), FontStyle.Bold, new Color(0.3f, 0.9f, 1f));
+        CreateTextLabel(header.transform, subtitle, 13, new Vector2(0, -14), FontStyle.Normal, new Color(0.7f, 0.85f, 0.95f));
 
         // Strategic Map Grid Display
         GameObject mapBox = new GameObject("MapGridDisplay");
@@ -724,11 +743,22 @@ public class OasisMapSystem : MonoBehaviour
         CreateCircleRing(mapBox.transform, 240f, new Color(0.25f, 0.85f, 1f, 0.18f));
 
         // Sector Landmarks & Labels
-        CreateSectorMarker(mapBox.transform, "OASIS CORE", new Vector2(0, 0), new Color(0.2f, 0.95f, 0.9f));
-        CreateSectorMarker(mapBox.transform, "NORTH DUNES", new Vector2(0, 200), new Color(0.95f, 0.85f, 0.3f));
-        CreateSectorMarker(mapBox.transform, "WEST OUTPOST", new Vector2(-200, 0), new Color(1f, 0.65f, 0.2f));
-        CreateSectorMarker(mapBox.transform, "EAST GORGE", new Vector2(200, 0), new Color(0.95f, 0.4f, 0.3f));
-        CreateSectorMarker(mapBox.transform, "SOUTH CANYON PASS", new Vector2(0, -200), new Color(0.7f, 0.6f, 0.9f));
+        if (isFacility)
+        {
+            CreateSectorMarker(mapBox.transform, "REACTOR CORE", new Vector2(0, 0), new Color(0.2f, 0.95f, 0.9f));
+            CreateSectorMarker(mapBox.transform, "COMMAND VAULT", new Vector2(0, 180), new Color(0.35f, 0.85f, 1.0f));
+            CreateSectorMarker(mapBox.transform, "SECURITY ARMORY", new Vector2(0, -180), new Color(1.0f, 0.75f, 0.25f));
+            CreateSectorMarker(mapBox.transform, "CRYO BIO-LAB", new Vector2(-180, 0), new Color(0.15f, 0.95f, 0.65f));
+            CreateSectorMarker(mapBox.transform, "CARGO AIRLOCK", new Vector2(180, 0), new Color(1.0f, 0.55f, 0.15f));
+        }
+        else
+        {
+            CreateSectorMarker(mapBox.transform, "OASIS CORE", new Vector2(0, 0), new Color(0.2f, 0.95f, 0.9f));
+            CreateSectorMarker(mapBox.transform, "NORTH DUNES", new Vector2(0, 200), new Color(0.95f, 0.85f, 0.3f));
+            CreateSectorMarker(mapBox.transform, "WEST OUTPOST", new Vector2(-200, 0), new Color(1f, 0.65f, 0.2f));
+            CreateSectorMarker(mapBox.transform, "EAST GORGE", new Vector2(200, 0), new Color(0.95f, 0.4f, 0.3f));
+            CreateSectorMarker(mapBox.transform, "SOUTH CANYON PASS", new Vector2(0, -200), new Color(0.7f, 0.6f, 0.9f));
+        }
 
         // Strategic Player Icon
         GameObject fullPlayer = new GameObject("FullPlayerIcon");
