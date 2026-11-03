@@ -41,10 +41,10 @@ public class BlasterWeapon : MonoBehaviour
     public int currentAmmo;
     public float reloadTime = 1.1f;
 
-    private const int shotgunPelletCount = 8;
-    private const float shotgunSpreadAngle = 0.055f;
+    private const int shotgunPelletCount = 3;
+    private const float shotgunSpreadAngle = 0.004f;
     private const float beamTickInterval = 0.08f;
-    private const float beamTickDamage = 11f;
+    private const float beamTickDamage = 14.0f;
 
     [Header("Weapon Positioning")]
     public Vector3 hipPosition = new Vector3(0.22f, -0.14f, 0.35f);
@@ -190,75 +190,75 @@ public class BlasterWeapon : MonoBehaviour
         switch (archetype)
         {
             case WeaponArchetype.ScatterShotgun:
-                weaponDisplayName = "Plasma Scatter Shotgun";
-                damage = 14f; // 14 x 8 pellets = 112 potential burst damage
-                fireRate = 0.62f;
-                range = 55f;
-                maxAmmo = 12;
-                reloadTime = 1.30f;
-                recoilKickback = 0.22f;
-                recoilRotation = 8.5f;
-                recoilRecovery = 10f;
+                weaponDisplayName = "3-Round Burst Battle Rifle";
+                damage = 20f; // 20 x 3-round burst = 60 burst damage (176 DPS)
+                fireRate = 0.34f;
+                range = 230f;
+                maxAmmo = 30;
+                reloadTime = 1.05f;
+                recoilKickback = 0.055f;
+                recoilRotation = 2.4f;
+                recoilRecovery = 16f;
                 break;
 
             case WeaponArchetype.ContinuousBeam:
                 weaponDisplayName = "Continuous Phase Laser";
-                damage = beamTickDamage; // 150 DPS
+                damage = beamTickDamage; // 14.0 @ 0.08s = 175 DPS
                 fireRate = beamTickInterval;
-                range = 85f;
-                maxAmmo = 90;
-                reloadTime = 1.2f;
+                range = 165f;
+                maxAmmo = 100;
+                reloadTime = 1.15f;
                 recoilKickback = 0.010f;
                 recoilRotation = 0.5f;
                 recoilRecovery = 16f;
                 break;
 
             case WeaponArchetype.BombMortar:
-                weaponDisplayName = "Heavy Plasma Mortar Cannon";
-                damage = 125f; // Heavy direct impact + devastating AoE
-                fireRate = 0.65f;
-                range = 220f;
-                maxAmmo = 10;
-                reloadTime = 1.3f;
-                recoilKickback = 0.24f;
-                recoilRotation = 7.8f;
-                recoilRecovery = 11f;
+                weaponDisplayName = "Heavy Pulse Autocannon";
+                damage = 22f; // 22 @ 0.13s = 169 DPS sustained suppressive autocannon
+                fireRate = 0.13f;
+                range = 200f;
+                maxAmmo = 40;
+                reloadTime = 1.20f;
+                recoilKickback = 0.068f;
+                recoilRotation = 2.8f;
+                recoilRecovery = 15f;
                 break;
 
             case WeaponArchetype.DefenseCarbine:
                 weaponDisplayName = "Tactical Defense Carbine";
-                damage = 24f;
-                fireRate = 0.12f; // Rapid suppressive fire
-                range = 160f;
+                damage = 19f; // 19 @ 0.115s = 165 DPS
+                fireRate = 0.115f;
+                range = 170f;
                 maxAmmo = 32;
                 reloadTime = 0.95f;
-                recoilKickback = 0.055f;
-                recoilRotation = 2.6f;
+                recoilKickback = 0.048f;
+                recoilRotation = 2.2f;
                 recoilRecovery = 16f;
                 break;
 
             case WeaponArchetype.DualPistols:
                 weaponDisplayName = "Heavy Plasma Hand Cannon";
-                damage = 48f; // Punchy high-impact semi-auto hand cannon
-                fireRate = 0.28f;
-                range = 140f;
-                maxAmmo = 10;
-                reloadTime = 1.15f;
-                recoilKickback = 0.16f;
-                recoilRotation = 5.8f;
+                damage = 44f; // 44 @ 0.25s = 176 DPS high-impact hand cannon
+                fireRate = 0.25f;
+                range = 180f;
+                maxAmmo = 12;
+                reloadTime = 1.10f;
+                recoilKickback = 0.13f;
+                recoilRotation = 4.6f;
                 recoilRecovery = 15f;
                 break;
 
             case WeaponArchetype.StandardRifle:
             default:
-                weaponDisplayName = "Long-Range Marksman Rifle";
-                damage = 38f; // Heavy precision marksman caliber
-                fireRate = 0.16f;
-                range = 350f;
-                maxAmmo = 28;
+                weaponDisplayName = "Long-Range Scout Marksman";
+                damage = 34f; // 34 @ 0.22s = 155 body DPS / 232 headshot DPS
+                fireRate = 0.22f;
+                range = 300f;
+                maxAmmo = 20;
                 reloadTime = 1.05f;
-                recoilKickback = 0.075f;
-                recoilRotation = 3.2f;
+                recoilKickback = 0.068f;
+                recoilRotation = 2.9f;
                 recoilRecovery = 15f;
                 break;
         }
@@ -279,7 +279,7 @@ public class BlasterWeapon : MonoBehaviour
         {
             string colorHex = archetype == WeaponArchetype.BombMortar ? "#FFAA00" :
                              archetype == WeaponArchetype.ContinuousBeam ? "#00E5FF" :
-                             archetype == WeaponArchetype.ScatterShotgun ? "#FF5533" : "#44DDFF";
+                             archetype == WeaponArchetype.ScatterShotgun ? "#FFCC33" : "#44DDFF";
 
             OasisShooterManager.Instance.ShowNotificationBanner(
                 $"<color={colorHex}>WEAPON EQUIPPED // {weaponDisplayName.ToUpper()}</color>", 1.5f);
@@ -323,19 +323,25 @@ public class BlasterWeapon : MonoBehaviour
     {
         switch (opIndex)
         {
-            case 0: // Titanium Heavy Warrior -> Micro-Bomb Flak Mortar
+            case 0: // Titanium Heavy Warrior -> Heavy Pulse Autocannon
                 SetWeaponArchetype(WeaponArchetype.BombMortar, false);
                 break;
-            case 1: // Desert Tactical Commando -> Plasma Scatter Shotgun
+            case 1: // Desert Tactical Commando -> 3-Round Burst Battle Rifle
                 SetWeaponArchetype(WeaponArchetype.ScatterShotgun, false);
                 break;
             case 2: // Cyborg Special Operative -> Continuous Phase Laser
                 SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
                 break;
-            case 3: // Unit-07 Combat Android -> Continuous Phase Laser
+            case 3: // Unit-07 Combat Android -> Twin-Core Phase Laser
                 SetWeaponArchetype(WeaponArchetype.ContinuousBeam, false);
+                weaponDisplayName = "Twin-Core Phase Laser";
+                damage = 13.5f;
+                range = 175f;
+                maxAmmo = 110;
+                currentAmmo = maxAmmo;
+                OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
                 break;
-            case 4: // Wasteland Nomad -> Long-Range Precision Marksman Rifle
+            case 4: // Wasteland Nomad -> Long-Range Scout Marksman
                 SetWeaponArchetype(WeaponArchetype.StandardRifle, false);
                 break;
             case 5: // Combat Medic -> Tactical Defense Carbine
@@ -452,23 +458,23 @@ public class BlasterWeapon : MonoBehaviour
                 switch (currentArchetype)
                 {
                     case WeaponArchetype.StandardRifle:
-                        targetFOV = 34f; // Crisp 2.2x Tactical Marksman Optic
+                        targetFOV = 28f; // High-clarity 2.7x Scout Marksman Optic
+                        break;
+                    case WeaponArchetype.ScatterShotgun:
+                        targetFOV = 38f; // 3-Round Burst Battle Rifle Precision ACOG
+                        break;
+                    case WeaponArchetype.BombMortar:
+                        targetFOV = 42f; // Heavy Pulse Autocannon Reflex Sight
                         break;
                     case WeaponArchetype.DefenseCarbine:
                         targetFOV = 46f;
                         break;
-                    case WeaponArchetype.BombMortar:
-                        targetFOV = 52f;
-                        break;
-                    case WeaponArchetype.ScatterShotgun:
-                        targetFOV = 56f;
-                        break;
                     case WeaponArchetype.DualPistols:
-                        targetFOV = 52f;
+                        targetFOV = 46f;
                         break;
                     case WeaponArchetype.ContinuousBeam:
                     default:
-                        targetFOV = 48f;
+                        targetFOV = 45f;
                         break;
                 }
             }
@@ -534,26 +540,36 @@ public class BlasterWeapon : MonoBehaviour
         {
             OasisShooterManager.Instance.playerSpawnShieldTimer = 0f;
         }
-        _nextFireTime = Time.time + fireRate;
-        currentAmmo--;
+
+        float effectiveFireRate = fireRate;
+        bool aegisActive = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.aegisTimeRemaining > 0f;
+        bool deadshotActive = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.deadshotTimeRemaining > 0f;
+        if (aegisActive) effectiveFireRate *= 0.80f;     // +25% fire rate during Aegis Siege Overdrive
+        if (deadshotActive) effectiveFireRate *= 0.625f; // +60% fire rate during Deadshot Overclock
+
+        _nextFireTime = Time.time + effectiveFireRate;
+
+        int roundsConsumed = (currentArchetype == WeaponArchetype.ScatterShotgun) ? Mathf.Min(3, currentAmmo) : 1;
+        currentAmmo = Mathf.Max(0, currentAmmo - roundsConsumed);
         OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
         OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
 
-        // Apply multi-axis physical gun recoil impulse (tighter & more controllable when aiming down sights)
+        // Apply multi-axis physical gun recoil impulse (tighter & more controllable when aiming down sights or in Aegis/Deadshot)
         float adsMultiplier = isScoped ? 0.35f : 1.0f;
+        if (aegisActive || deadshotActive) adsMultiplier *= 0.45f;
         _currentRecoilPos += new Vector3(Random.Range(-0.005f, 0.005f) * adsMultiplier, 0.014f * adsMultiplier, -recoilKickback * adsMultiplier);
         _currentRecoilRot += new Vector3(-recoilRotation * adsMultiplier, Random.Range(-1.1f, 1.1f) * adsMultiplier, Random.Range(-1.4f, 1.4f) * adsMultiplier);
 
         if (_fpc != null)
         {
-            float camPitchKick = (currentArchetype == WeaponArchetype.ScatterShotgun || currentArchetype == WeaponArchetype.BombMortar) ? 0.75f : 0.32f;
-            _fpc.AddWeaponRecoilPitchYaw(camPitchKick * (isScoped ? 0.55f : 1.0f), Random.Range(-0.15f, 0.15f) * adsMultiplier);
+            float camPitchKick = (currentArchetype == WeaponArchetype.DualPistols || currentArchetype == WeaponArchetype.StandardRifle) ? 0.42f : 0.24f;
+            _fpc.AddWeaponRecoilPitchYaw(camPitchKick * adsMultiplier, Random.Range(-0.12f, 0.12f) * adsMultiplier);
         }
 
-        bool isHeavyShot = (currentArchetype == WeaponArchetype.ScatterShotgun ||
+        bool isHeavyShot = (currentArchetype == WeaponArchetype.DualPistols ||
                             currentArchetype == WeaponArchetype.BombMortar ||
                             currentArchetype == WeaponArchetype.StandardRifle);
-        float tpKickScale = (currentArchetype == WeaponArchetype.ScatterShotgun || currentArchetype == WeaponArchetype.BombMortar) ? 1.55f : 1.0f;
+        float tpKickScale = (currentArchetype == WeaponArchetype.DualPistols || currentArchetype == WeaponArchetype.StandardRifle) ? 1.25f : 0.9f;
 
         if (OasisCombatMovement.Instance != null)
         {
@@ -580,11 +596,11 @@ public class BlasterWeapon : MonoBehaviour
         switch (currentArchetype)
         {
             case WeaponArchetype.ScatterShotgun:
-                FireScatterShotgun(ray, muzzlePos, playerRoot, localTeam, localId);
+                StartCoroutine(ExecuteBurstRifleShots(roundsConsumed, playerRoot, localTeam, localId));
                 break;
 
             case WeaponArchetype.BombMortar:
-                FireBombMortar(ray, muzzlePos, localTeam, localId);
+                FireBombMortar(ray, muzzlePos, playerRoot, localTeam, localId);
                 break;
 
             case WeaponArchetype.DefenseCarbine:
@@ -664,140 +680,104 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 1: Long-Range Precision Marksman Rifle
+    // ARCHETYPE 1: Long-Range Scout Marksman Rifle (Wasteland Nomad)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireStandardRifle(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.46f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetSniperShotClip(), 0.58f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
         Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
-        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.25f, 0.95f, 1f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.35f, 0.96f, 1f), 0.095f, 0.13f);
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile, 4);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 2: Plasma Scatter Shotgun (8 Pellets)
+    // ARCHETYPE 2: 3-Round Burst Battle Rifle (Desert Tactical Commando)
     // ─────────────────────────────────────────────────────────────────────────────
-    private void FireScatterShotgun(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
+    private IEnumerator ExecuteBurstRifleShots(int burstCount, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetShotgunShotClip(), 0.58f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetBurstRifleShotClip(), 0.55f);
         }
 
-        Color shotgunColor = new Color(1f, 0.45f, 0.1f);
-        bool anyHostileHit = false;
-        OasisCombatAI primaryHitAI = null;
-        float totalPelletDamageOnAI = 0f;
-        float primaryHitDist = 0f;
-
-        for (int p = 0; p < shotgunPelletCount; p++)
+        Color burstColor = new Color(1.0f, 0.72f, 0.18f);
+        for (int b = 0; b < burstCount; b++)
         {
-            Vector2 spreadCircle = Random.insideUnitCircle * shotgunSpreadAngle;
-            Vector3 pelletDir = (ray.direction + _camera.transform.right * spreadCircle.x + _camera.transform.up * spreadCircle.y).normalized;
-            Ray pelletRay = new Ray(ray.origin, pelletDir);
-
-            Vector3 hitPt = PerformRaycastShot(pelletRay, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile, true, out OasisCombatAI pelletHitAI, out float pelletHitDist);
-            if (hitHostile)
+            if (_camera == null) yield break;
+            Ray burstRay = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+            if (b > 0)
             {
-                anyHostileHit = true;
-                if (pelletHitAI != null)
-                {
-                    primaryHitAI = pelletHitAI;
-                    totalPelletDamageOnAI += damage;
-                    primaryHitDist = pelletHitDist;
-                }
+                Vector2 microSpread = Random.insideUnitCircle * (isScoped ? 0.0018f : 0.0042f);
+                Vector3 dir = (burstRay.direction + _camera.transform.right * microSpread.x + _camera.transform.up * microSpread.y).normalized;
+                burstRay = new Ray(burstRay.origin, dir);
             }
 
+            Vector3 muzzlePos = GetMuzzlePosition();
+            Vector3 hitPt = PerformRaycastShot(burstRay, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
             Vector3 trueMuzzle = GetMuzzlePosition(hitPt);
-            BlasterVFX.SpawnLaserBeam(trueMuzzle, hitPt, shotgunColor);
-        }
+            BlasterVFX.SpawnLaserBeam(trueMuzzle, hitPt, burstColor, 0.085f, 0.09f);
+            OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, hitPt, hitHostile, 1);
 
-        if (primaryHitAI != null && totalPelletDamageOnAI > 0f)
-        {
-            OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(primaryHitAI, totalPelletDamageOnAI, primaryHitDist);
-            BlasterVFX.SpawnDamagePopup(primaryHitAI.transform.position + Vector3.up * 1.4f, totalPelletDamageOnAI, totalPelletDamageOnAI >= 55f, primaryHitAI.currentShield > 0f);
+            if (b < burstCount - 1)
+            {
+                yield return new WaitForSeconds(0.052f);
+            }
         }
-
-        Vector3 fallbackMuzzle = GetMuzzlePosition(ray.GetPoint(range));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(fallbackMuzzle, ray.GetPoint(range), anyHostileHit);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 3: Heavy Plasma Mortar Cannon (Guided Ballistic Arc & Airburst)
+    // ARCHETYPE 3: Heavy Pulse Autocannon (Titanium Heavy Warrior)
     // ─────────────────────────────────────────────────────────────────────────────
-    private void FireBombMortar(Ray ray, Vector3 muzzlePos, int localTeam, int localId)
+    private void FireBombMortar(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.85f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetAutocannonShotClip(), 0.62f);
         }
 
-        // Raycast from crosshair to find exact target point
-        Ray aimRay = _camera != null ? _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)) : ray;
-        Vector3 targetPoint;
-        if (Physics.Raycast(aimRay, out RaycastHit hit, 250f, Physics.AllLayers, QueryTriggerInteraction.Ignore))
-        {
-            targetPoint = hit.point;
-        }
-        else
-        {
-            targetPoint = aimRay.GetPoint(135f);
-        }
-
+        Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
         Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
-        BlasterVFX.SpawnMuzzleFlash(trueMuzzle, (targetPoint - trueMuzzle).normalized, new Color(1f, 0.55f, 0.15f));
-
-        // Calculate smooth ballistic mortar arc towards targetPoint (speed ~55 m/s)
-        Vector3 toTarget = targetPoint - trueMuzzle;
-        float dist = toTarget.magnitude;
-        float speed = 55f;
-        float flightTime = Mathf.Max(0.25f, dist / speed);
-
-        float mortarGravity = 7.35f; // Matches bomb's custom downward gravity
-        Vector3 horizontalVel = new Vector3(toTarget.x, 0, toTarget.z) / flightTime;
-        float verticalVel = (toTarget.y + 0.5f * mortarGravity * flightTime * flightTime) / flightTime;
-        Vector3 launchVel = horizontalVel + Vector3.up * verticalVel;
-
-        OasisPlasmaBomb.SpawnBomb(trueMuzzle, launchVel, localTeam, localId);
-
-        OasisShooterManager.Instance?.TriggerCameraShake(0.28f, 0.22f);
+        Color autocannonColor = new Color(1.0f, 0.42f, 0.12f);
+        BlasterVFX.SpawnMuzzleFlash(trueMuzzle, (targetPoint - trueMuzzle).normalized, autocannonColor);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, autocannonColor, 0.13f, 0.11f);
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile, 0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 5: Tactical Defense Carbine (Rapid Fire Support)
+    // ARCHETYPE 5: Tactical Defense Carbine (Combat Medic)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireDefenseCarbine(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.34f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetCarbineShotClip(), 0.48f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
         Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
-        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.2f, 0.95f, 0.5f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.2f, 0.98f, 0.52f), 0.075f, 0.085f);
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile, 5);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ARCHETYPE 6: Heavy Plasma Hand Cannon (High Impact Gunslinger Sidearm)
+    // ARCHETYPE 6: Heavy Plasma Hand Cannon (Cyber Outlaw)
     // ─────────────────────────────────────────────────────────────────────────────
     private void FireDualPistols(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId)
     {
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.58f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetHandCannonShotClip(), 0.64f);
         }
 
         Vector3 targetPoint = PerformRaycastShot(ray, muzzlePos, playerRoot, localTeam, localId, damage, out bool hitHostile);
         Vector3 trueMuzzle = GetMuzzlePosition(targetPoint);
-        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.92f, 0.35f, 0.95f));
-        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile);
+        BlasterVFX.SpawnLaserBeam(trueMuzzle, targetPoint, new Color(0.95f, 0.32f, 0.98f), 0.115f, 0.115f);
+        OasisNetworkManager.Instance?.BroadcastLaserFire(trueMuzzle, targetPoint, hitHostile, 6);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -847,6 +827,9 @@ public class BlasterWeapon : MonoBehaviour
             OasisCombatAI aiCheck = h.collider.GetComponentInParent<OasisCombatAI>();
             if (aiCheck != null && (aiCheck.teamId == localTeam || aiCheck.isDowned || aiCheck.isDead)) continue;
 
+            OasisRemotePlayerHitbox remoteCheck = h.collider.GetComponentInParent<OasisRemotePlayerHitbox>();
+            if (remoteCheck != null && (remoteCheck.TeamId == localTeam || remoteCheck.IsDead)) continue;
+
             if (h.distance < closestDist)
             {
                 closestDist = h.distance;
@@ -858,7 +841,9 @@ public class BlasterWeapon : MonoBehaviour
         if (hasHit)
         {
             targetPoint = bestHit.point;
-            BlasterVFX.SpawnImpact(bestHit.point, bestHit.normal, bestHit.collider.GetComponentInParent<OasisCombatAI>() != null);
+            bool isHostileSurface = bestHit.collider.GetComponentInParent<OasisCombatAI>() != null ||
+                                    bestHit.collider.GetComponentInParent<OasisRemotePlayerHitbox>() != null;
+            BlasterVFX.SpawnImpact(bestHit.point, bestHit.normal, isHostileSurface);
         }
 
         bool is3rd = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.isThirdPerson;
@@ -876,18 +861,33 @@ public class BlasterWeapon : MonoBehaviour
         if (Time.time >= _nextBeamTickTime)
         {
             _nextBeamTickTime = Time.time + beamTickInterval;
-            currentAmmo--;
+
+            bool infiniteBeam = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.empOverdriveTimeRemaining > 0f;
+            if (!infiniteBeam)
+            {
+                currentAmmo--;
+            }
             OasisShooterManager.Instance?.UpdateAmmo(currentAmmo, maxAmmo, _isReloading);
             OasisAITelemetryLogger.Instance?.RecordPlayerShotFired();
             OasisCombatMovement.Instance?.TriggerWeaponShootAnim(0.35f, false);
 
+            float beamDmg = damage;
+            if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.cloakTimeRemaining > 0f)
+            {
+                beamDmg *= 1.25f; // +25% Ambush damage during Phantom Blink & Cloak
+            }
+
+            bool hitHostile = false;
             if (hasHit)
             {
                 OasisCombatAI hitAI = bestHit.collider.GetComponentInParent<OasisCombatAI>();
+                OasisRemotePlayerHitbox hitRemote = bestHit.collider.GetComponentInParent<OasisRemotePlayerHitbox>();
+
                 if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead && !hitAI.isDowned)
                 {
+                    hitHostile = true;
                     bool isHeadshot = (bestHit.point.y - hitAI.transform.position.y) >= 1.42f;
-                    float finalDmg = isHeadshot ? damage * 1.4f : damage;
+                    float finalDmg = isHeadshot ? beamDmg * 1.25f : beamDmg;
                     bool hadShield = hitAI.currentShield > 0f;
                     OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(hitAI, finalDmg, bestHit.distance);
                     hitAI.TakeDamage(finalDmg, bestHit.point, bestHit.normal, localId, localTeam, bestHit.distance);
@@ -897,16 +897,32 @@ public class BlasterWeapon : MonoBehaviour
                     OasisShooterManager.Instance?.AddPlayerScore(5);
                     if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), 0.35f);
                 }
+                else if (hitRemote != null && hitRemote.TeamId != localTeam && !hitRemote.IsDead)
+                {
+                    hitHostile = true;
+                    bool isHeadshot = (bestHit.point.y - hitRemote.transform.position.y) >= 1.42f;
+                    float finalDmg = isHeadshot ? beamDmg * 1.25f : beamDmg;
+                    OasisNetworkManager.Instance?.SendPlayerHit(hitRemote.playerId, finalDmg, localTeam);
+                    BlasterVFX.SpawnDamagePopup(bestHit.point, finalDmg, isHeadshot, true);
+                    OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
+                    OasisShooterManager.Instance?.OnTargetHit(finalDmg, false);
+                    OasisShooterManager.Instance?.AddPlayerScore(5);
+                    if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), 0.35f);
+                }
                 else
                 {
                     TargetDrone drone = bestHit.collider.GetComponentInParent<TargetDrone>();
                     if (drone != null)
                     {
-                        drone.TakeDamage(damage, bestHit.point, bestHit.normal, localId);
+                        hitHostile = true;
+                        drone.TakeDamage(beamDmg, bestHit.point, bestHit.normal, localId);
                         OasisCombatMovement.Instance?.TriggerHitmarker(false);
                     }
                 }
             }
+
+            int opClassIdx = PlayerPrefs.GetInt("OasisSelectedOperative", 2);
+            OasisNetworkManager.Instance?.BroadcastLaserFire(muzzlePos, targetPoint, hitHostile, opClassIdx);
 
             if (currentAmmo <= 0 && !_isReloading)
             {
@@ -917,7 +933,7 @@ public class BlasterWeapon : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Core Hitscan Resolver (with Headshot Crit Detection & 3D Damage Popups)
+    // Core Hitscan Resolver (with Headshot Crit Detection, Smart-Target Snap & PvP Hitbox)
     // ─────────────────────────────────────────────────────────────────────────────
     private Vector3 PerformRaycastShot(Ray ray, Vector3 muzzlePos, Transform playerRoot, int localTeam, int localId, float dmg, out bool hitHostile, bool isPellet = false)
     {
@@ -929,10 +945,75 @@ public class BlasterWeapon : MonoBehaviour
         hitHostile = false;
         outHitAI = null;
         outHitDist = 0f;
-        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.scanReconTimeRemaining > 0f)
+
+        bool deadshotActive = OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.deadshotTimeRemaining > 0f;
+        if (OasisCombatMovement.Instance != null)
         {
-            dmg *= 1.25f;
+            if (OasisCombatMovement.Instance.scanReconTimeRemaining > 0f)
+            {
+                dmg *= 1.15f; // +15% Marksman Damage during Orbital Recon
+            }
+            if (OasisCombatMovement.Instance.cloakTimeRemaining > 0f)
+            {
+                dmg *= 1.25f; // +25% Ambush Damage during Phantom Blink & Cloak
+            }
         }
+
+        // Smart-Target Cone Snap during Deadshot Overclock (6.5 degree cone around crosshair)
+        if (deadshotActive && !isPellet)
+        {
+            float bestDot = Mathf.Cos(6.5f * Mathf.Deg2Rad);
+            Vector3 snapTargetPos = Vector3.zero;
+            bool foundSnap = false;
+
+            if (OasisShooterManager.Instance != null)
+            {
+                var bots = OasisShooterManager.Instance.GetSpawnedAIBots();
+                for (int i = 0; i < bots.Count; i++)
+                {
+                    var b = bots[i];
+                    if (b == null || b.isDead || b.isDowned || b.teamId == localTeam) continue;
+                    Vector3 aimPt = b.transform.position + Vector3.up * 1.48f;
+                    Vector3 toEnemy = aimPt - ray.origin;
+                    float d = toEnemy.magnitude;
+                    if (d > range || d < 0.5f) continue;
+                    float dot = Vector3.Dot(ray.direction, toEnemy / d);
+                    if (dot > bestDot)
+                    {
+                        bestDot = dot;
+                        snapTargetPos = aimPt;
+                        foundSnap = true;
+                    }
+                }
+            }
+
+            if (OasisNetworkManager.Instance != null)
+            {
+                var remotes = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+                for (int i = 0; i < remotes.Count; i++)
+                {
+                    var rp = remotes[i];
+                    if (rp == null || rp.rootObject == null || rp.isDead || rp.teamId == localTeam) continue;
+                    Vector3 aimPt = rp.rootObject.transform.position + Vector3.up * 1.48f;
+                    Vector3 toEnemy = aimPt - ray.origin;
+                    float d = toEnemy.magnitude;
+                    if (d > range || d < 0.5f) continue;
+                    float dot = Vector3.Dot(ray.direction, toEnemy / d);
+                    if (dot > bestDot)
+                    {
+                        bestDot = dot;
+                        snapTargetPos = aimPt;
+                        foundSnap = true;
+                    }
+                }
+            }
+
+            if (foundSnap)
+            {
+                ray = new Ray(ray.origin, (snapTargetPos - ray.origin).normalized);
+            }
+        }
+
         Vector3 targetPoint;
         RaycastHit[] hits = Physics.RaycastAll(ray, range, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         RaycastHit bestHit = default;
@@ -948,6 +1029,9 @@ public class BlasterWeapon : MonoBehaviour
             OasisCombatAI aiCheck = h.collider.GetComponentInParent<OasisCombatAI>();
             if (aiCheck != null && (aiCheck.teamId == localTeam || aiCheck.isDowned || aiCheck.isDead)) continue;
 
+            OasisRemotePlayerHitbox remoteCheck = h.collider.GetComponentInParent<OasisRemotePlayerHitbox>();
+            if (remoteCheck != null && (remoteCheck.TeamId == localTeam || remoteCheck.IsDead)) continue;
+
             if (h.distance < closestDist)
             {
                 closestDist = h.distance;
@@ -958,14 +1042,22 @@ public class BlasterWeapon : MonoBehaviour
 
         if (!hasHit && !isPellet)
         {
-            // Sphere-cast grace window for single shot rifles
-            RaycastHit[] sphereHits = Physics.SphereCastAll(ray, 0.34f, range, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+            // Sphere-cast grace window for hitscan rifles against moving combatants (AI + Real Players)
+            RaycastHit[] sphereHits = Physics.SphereCastAll(ray, 0.36f, range, Physics.AllLayers, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < sphereHits.Length; i++)
             {
                 RaycastHit sh = sphereHits[i];
                 if (sh.collider == null || sh.collider.isTrigger) continue;
                 OasisCombatAI candidateAI = sh.collider.GetComponentInParent<OasisCombatAI>();
                 if (candidateAI != null && !candidateAI.isDead && !candidateAI.isDowned && candidateAI.teamId != localTeam && sh.distance < closestDist)
+                {
+                    closestDist = sh.distance;
+                    bestHit = sh;
+                    hasHit = true;
+                    continue;
+                }
+                OasisRemotePlayerHitbox candidateRemote = sh.collider.GetComponentInParent<OasisRemotePlayerHitbox>();
+                if (candidateRemote != null && !candidateRemote.IsDead && candidateRemote.TeamId != localTeam && sh.distance < closestDist)
                 {
                     closestDist = sh.distance;
                     bestHit = sh;
@@ -978,11 +1070,14 @@ public class BlasterWeapon : MonoBehaviour
         {
             targetPoint = bestHit.point;
             OasisCombatAI hitAI = bestHit.collider.GetComponentInParent<OasisCombatAI>();
+            OasisRemotePlayerHitbox hitRemote = bestHit.collider.GetComponentInParent<OasisRemotePlayerHitbox>();
+            float critMultiplier = deadshotActive ? 1.85f : 1.5f;
+
             if (hitAI != null && hitAI.teamId != localTeam && !hitAI.isDead && !hitAI.isDowned)
             {
                 hitHostile = true;
                 bool isHeadshot = !isPellet && ((bestHit.point.y - hitAI.transform.position.y) >= 1.42f);
-                float finalDmg = isHeadshot ? (dmg * 1.5f) : dmg;
+                float finalDmg = isHeadshot ? (dmg * critMultiplier) : dmg;
                 bool hadShield = hitAI.currentShield > 0f;
 
                 outHitAI = hitAI;
@@ -996,7 +1091,44 @@ public class BlasterWeapon : MonoBehaviour
                 OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
                 OasisShooterManager.Instance?.OnTargetHit(finalDmg, hitAI.isDowned);
                 OasisShooterManager.Instance?.AddPlayerScore(isPellet ? 2 : (isHeadshot ? 25 : 15));
+
+                if (deadshotActive && OasisShooterManager.Instance != null)
+                {
+                    OasisShooterManager.Instance.currentHealth = Mathf.Min(
+                        OasisShooterManager.Instance.maxHealth,
+                        OasisShooterManager.Instance.currentHealth + 25f);
+                    OasisShooterManager.Instance.UpdateHealthUI();
+                }
+
                 if (_audioSource != null && (!isPellet || Random.value < 0.3f))
+                {
+                    _audioSource.pitch = isHeadshot ? 1.28f : 1.0f;
+                    _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), isHeadshot ? 0.85f : 0.65f);
+                    _audioSource.pitch = 1.0f;
+                }
+            }
+            else if (hitRemote != null && hitRemote.TeamId != localTeam && !hitRemote.IsDead)
+            {
+                hitHostile = true;
+                bool isHeadshot = !isPellet && ((bestHit.point.y - hitRemote.transform.position.y) >= 1.42f);
+                float finalDmg = isHeadshot ? (dmg * critMultiplier) : dmg;
+
+                OasisNetworkManager.Instance?.SendPlayerHit(hitRemote.playerId, finalDmg, localTeam);
+                BlasterVFX.SpawnDamagePopup(bestHit.point, finalDmg, isHeadshot, true);
+                BlasterVFX.SpawnImpact(bestHit.point, bestHit.normal, true);
+                OasisCombatMovement.Instance?.TriggerHitmarker(isHeadshot);
+                OasisShooterManager.Instance?.OnTargetHit(finalDmg, false);
+                OasisShooterManager.Instance?.AddPlayerScore(isHeadshot ? 25 : 15);
+
+                if (deadshotActive && OasisShooterManager.Instance != null)
+                {
+                    OasisShooterManager.Instance.currentHealth = Mathf.Min(
+                        OasisShooterManager.Instance.maxHealth,
+                        OasisShooterManager.Instance.currentHealth + 25f);
+                    OasisShooterManager.Instance.UpdateHealthUI();
+                }
+
+                if (_audioSource != null)
                 {
                     _audioSource.pitch = isHeadshot ? 1.28f : 1.0f;
                     _audioSource.PlayOneShot(ProceduralAudio.GetHitTargetClip(), isHeadshot ? 0.85f : 0.65f);

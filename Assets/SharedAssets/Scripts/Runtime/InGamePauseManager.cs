@@ -194,7 +194,7 @@ public class InGamePauseManager : MonoBehaviour
         GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _backdropTex, ScaleMode.StretchToFill);
 
         float cardW = Mathf.Clamp(Screen.width * 0.38f, 440f, 560f);
-        float cardH = _showSettingsInGUI ? 530f : 490f;
+        float cardH = _showSettingsInGUI ? 600f : 610f;
         float cardX = (Screen.width - cardW) * 0.5f;
         float cardY = (Screen.height - cardH) * 0.5f;
 
@@ -215,21 +215,42 @@ public class InGamePauseManager : MonoBehaviour
             GUILayout.Label("OASIS PROTOCOL // TACTICAL PAUSE", _titleStyle);
             GUILayout.Space(2);
             GUILayout.Label("PRESS [ESC] TO RESUME COMBAT", _subTitleStyle);
-            GUILayout.Space(14);
+            GUILayout.Space(12);
 
             GUI.backgroundColor = new Color(0.12f, 0.65f, 0.38f, 1f);
-            if (GUILayout.Button("▶   RESUME COMBAT  [ESC]", _primaryBtnStyle, GUILayout.Height(46)))
+            if (GUILayout.Button("▶   RESUME COMBAT  [ESC]", _primaryBtnStyle, GUILayout.Height(44)))
             {
                 ResumeGame();
             }
-            GUILayout.Space(10);
+            GUILayout.Space(6);
+
+            // Quick AI Difficulty Selector Row right on the Pause Menu
+            int curDiff = OasisCombatAI.CurrentDifficulty;
+            GUILayout.Label(string.Format("AI DIFFICULTY: {0}", OasisCombatAI.GetDifficultyShortLabel(curDiff)), _labelStyle);
+            GUILayout.BeginHorizontal();
+            GUI.backgroundColor = (curDiff == 0) ? new Color(0.12f, 0.65f, 0.38f, 1f) : new Color(0.16f, 0.22f, 0.32f, 1f);
+            if (GUILayout.Button("RECRUIT (EASY)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(0);
+            GUI.backgroundColor = (curDiff == 1) ? new Color(0.12f, 0.52f, 0.78f, 1f) : new Color(0.16f, 0.22f, 0.32f, 1f);
+            if (GUILayout.Button("TACTICAL (DELAY)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(1);
+            GUI.backgroundColor = (curDiff == 2) ? new Color(0.75f, 0.24f, 0.20f, 1f) : new Color(0.16f, 0.22f, 0.32f, 1f);
+            if (GUILayout.Button("ELITE (+HP/HARD)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(2);
+            GUI.backgroundColor = Color.white;
+            GUILayout.EndHorizontal();
+            GUILayout.Space(8);
+
+            GUI.backgroundColor = new Color(0.10f, 0.52f, 0.76f, 1f);
+            if (GUILayout.Button("🛠   MAP DESIGNER (MOVE ITEMS)  [F10]", _secondaryBtnStyle, GUILayout.Height(40)))
+            {
+                OpenMapDesignerFromPause();
+            }
+            GUILayout.Space(8);
 
             GUI.backgroundColor = new Color(0.12f, 0.45f, 0.72f, 1f);
-            if (GUILayout.Button("⚙   SETTINGS  (SENSITIVITY, AUDIO & KEYS)", _secondaryBtnStyle, GUILayout.Height(42)))
+            if (GUILayout.Button("⚙   SETTINGS  (SENSITIVITY, AUDIO & KEYS)", _secondaryBtnStyle, GUILayout.Height(38)))
             {
                 OpenSettingsSubPanel();
             }
-            GUILayout.Space(10);
+            GUILayout.Space(8);
 
             GUI.backgroundColor = new Color(0.18f, 0.30f, 0.48f, 1f);
             if (GUILayout.Button("🔄   RESTART MATCH", _secondaryBtnStyle, GUILayout.Height(38)))
@@ -264,8 +285,22 @@ public class InGamePauseManager : MonoBehaviour
             // SETTINGS SUB-PANEL
             GUILayout.Label("TACTICAL SETTINGS", _titleStyle);
             GUILayout.Space(2);
-            GUILayout.Label("AUDIO, SENSITIVITY & DISPLAY", _subTitleStyle);
-            GUILayout.Space(14);
+            GUILayout.Label("AI DIFFICULTY, AUDIO, SENSITIVITY & DISPLAY", _subTitleStyle);
+            GUILayout.Space(12);
+
+            // AI Difficulty Mode
+            int curDiff = OasisCombatAI.CurrentDifficulty;
+            GUILayout.Label(string.Format("AI Combat Difficulty: {0}", OasisCombatAI.GetDifficultyName(curDiff)), _labelStyle);
+            GUILayout.BeginHorizontal();
+            GUI.backgroundColor = (curDiff == 0) ? new Color(0.12f, 0.65f, 0.38f, 1f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("RECRUIT (EASY)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(0);
+            GUI.backgroundColor = (curDiff == 1) ? new Color(0.12f, 0.52f, 0.78f, 1f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("TACTICAL (DELAY)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(1);
+            GUI.backgroundColor = (curDiff == 2) ? new Color(0.75f, 0.24f, 0.20f, 1f) : new Color(0.2f, 0.25f, 0.35f);
+            if (GUILayout.Button("ELITE (+HP/HARD)", GUILayout.Height(30))) OasisCombatAI.SetDifficultyMode(2);
+            GUI.backgroundColor = Color.white;
+            GUILayout.EndHorizontal();
+            GUILayout.Space(10);
 
             // Audio Volume
             float currentVol = AudioListener.volume;
@@ -542,6 +577,23 @@ public class InGamePauseManager : MonoBehaviour
         if (_mainPausePanel != null) _mainPausePanel.SetActive(true);
     }
 
+    public void StartOrRestartCombatMatch()
+    {
+        Time.timeScale = 1f;
+        _isPaused = false;
+        if (_pauseCanvas != null) _pauseCanvas.SetActive(false);
+
+        if (OasisShooterManager.Instance != null && OasisShooterManager.Instance.isMapExplorationMode)
+        {
+            OasisShooterManager.Instance.SetHUDActive(true);
+            OasisShooterManager.Instance.StartTeamBattle();
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+            return;
+        }
+        RestartCurrentScene();
+    }
+
     public void RestartCurrentScene()
     {
         Time.timeScale = 1f;
@@ -667,31 +719,46 @@ public class InGamePauseManager : MonoBehaviour
         CreateAnchoredButton(card.transform, font, "Btn_Resume",
             "▶   RESUME COMBAT  [ESC]",
             16, new Color(0.10f, 0.65f, 0.38f, 0.98f), Color.white,
-            new Vector2(0.12f, 0.64f), new Vector2(0.88f, 0.74f), ResumeGame);
+            new Vector2(0.12f, 0.66f), new Vector2(0.88f, 0.75f), ResumeGame);
 
-        // 2. SETTINGS (AUDIO, SENSITIVITY, DISPLAY & KEYBINDS)
+        // 2. MAP DESIGNER (MANUAL ITEM POSITIONING)
+        CreateAnchoredButton(card.transform, font, "Btn_MapDesigner",
+            "🛠   MAP DESIGNER (MOVE ITEMS)  [F10]",
+            15, new Color(0.10f, 0.50f, 0.72f, 0.98f), new Color(0.28f, 0.96f, 1.0f),
+            new Vector2(0.12f, 0.55f), new Vector2(0.88f, 0.64f), OpenMapDesignerFromPause);
+
+        // 3. SETTINGS (AUDIO, SENSITIVITY, DISPLAY & KEYBINDS)
         CreateAnchoredButton(card.transform, font, "Btn_Settings",
             "⚙   SETTINGS  (SENSITIVITY, AUDIO & KEYS)",
             15, new Color(0.12f, 0.44f, 0.72f, 0.98f), Color.white,
-            new Vector2(0.12f, 0.51f), new Vector2(0.88f, 0.61f), OpenSettingsSubPanel);
+            new Vector2(0.12f, 0.44f), new Vector2(0.88f, 0.53f), OpenSettingsSubPanel);
 
-        // 3. CHANGE OPERATIVE / RESTART MATCH
+        // 4. CHANGE OPERATIVE / RESTART MATCH
         CreateAnchoredButton(card.transform, font, "Btn_Restart",
             "↻   CHANGE OPERATIVE / RESTART MATCH",
             15, new Color(0.16f, 0.26f, 0.42f, 0.98f), new Color(0.88f, 0.95f, 1.0f),
-            new Vector2(0.12f, 0.38f), new Vector2(0.88f, 0.48f), ReturnToOperativeSelection);
+            new Vector2(0.12f, 0.33f), new Vector2(0.88f, 0.42f), ReturnToOperativeSelection);
 
-        // 4. RETURN TO MAIN MENU
+        // 5. RETURN TO MAIN MENU
         CreateAnchoredButton(card.transform, font, "Btn_MainMenu",
             "⌂   RETURN TO MAIN MENU",
             15, new Color(0.48f, 0.28f, 0.12f, 0.98f), new Color(1.0f, 0.92f, 0.78f),
-            new Vector2(0.12f, 0.25f), new Vector2(0.88f, 0.35f), ReturnToMainMenu);
+            new Vector2(0.12f, 0.22f), new Vector2(0.88f, 0.31f), ReturnToMainMenu);
 
-        // 5. QUIT TO DESKTOP
+        // 6. QUIT TO DESKTOP
         CreateAnchoredButton(card.transform, font, "Btn_QuitGame",
             "✕   QUIT GAME TO DESKTOP",
             15, new Color(0.68f, 0.16f, 0.18f, 0.98f), Color.white,
-            new Vector2(0.12f, 0.10f), new Vector2(0.88f, 0.20f), QuitApplication);
+            new Vector2(0.12f, 0.09f), new Vector2(0.88f, 0.18f), QuitApplication);
+    }
+
+    public void OpenMapDesignerFromPause()
+    {
+        ResumeGame();
+        if (OasisMapDesigner.Instance != null)
+        {
+            OasisMapDesigner.Instance.OpenDesignerMode();
+        }
     }
 
     private void BuildSettingsSubPanel(Transform parent, Font font)

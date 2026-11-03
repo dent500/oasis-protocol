@@ -30,9 +30,12 @@ public class OasisWorldExpander : MonoBehaviour
     public static Bounds PlayableTerrainBounds { get; private set; }
     public static bool HasTerrainBounds { get; private set; }
 
-    private Vector3 _pondCenter = new Vector3(6.65f, -4.35f, -6.53f);
+    private Vector3 _pondCenter = new Vector3(6.65f, -4.35f, -163.97f);
     private Transform _playerTransform;
     private CharacterController _playerCharacterController;
+    private bool _isWorldExpanded = false;
+    private readonly List<Collider> _authenticTerrainColliders = new List<Collider>();
+    private readonly List<Vector3> _placedBuildingCenters = new List<Vector3>();
 
     private void Awake()
     {
@@ -46,13 +49,20 @@ public class OasisWorldExpander : MonoBehaviour
 
     private void Start()
     {
+        EnsureWorldExpanded();
+    }
+
+    public void EnsureWorldExpanded()
+    {
+        if (_isWorldExpanded) return;
+        _isWorldExpanded = true;
+
         CachePlayer();
         ExpandOriginalTerrainCollision();
         EnsureWaterSurfaceVisibility();
         BuildUndergroundSafetyFloor();
-        BuildStartingBunker();
-        BuildTacticalContainmentDome();
         BuildExpandedWorldLandmarks();
+        BuildTacticalContainmentDome();
         SanitizeAndValidateAllMaterials();
     }
 
@@ -99,7 +109,8 @@ public class OasisWorldExpander : MonoBehaviour
                 n.StartsWith("NaturalMountainWall_") || n.StartsWith("Expanded_") || n.StartsWith("DuneMesh_") ||
                 n.StartsWith("Tactical_Energy_Dome") || n.StartsWith("Dome_Emitter_") || n.StartsWith("Dome_Wall_") ||
                 n.StartsWith("Natural_Mountain_Perimeter") || n.StartsWith("Perimeter_Mountain_Ridge_") ||
-                n.StartsWith("Perimeter_Cliff_Ridge_") || n.StartsWith("Oasis_Expanded_World_Landmarks") ||
+                n.StartsWith("Perimeter_Cliff_Ridge_") || n.StartsWith("Perimeter_Rock_Wall_") ||
+                n.StartsWith("Oasis_Expanded_World_Landmarks") ||
                 n.StartsWith("Satellite_Oasis_Grove_") || n.StartsWith("Desert_Rock_") || n.StartsWith("Canyon_Gateway_") ||
                 n.StartsWith("East_Ridge_") || n.StartsWith("West_Dune_") || n.StartsWith("South_Citadel_") ||
                 n.StartsWith("Tactical_Cover_Station_"))
@@ -212,6 +223,7 @@ public class OasisWorldExpander : MonoBehaviour
         }
 
         // 3. Ensure EVERY authentic terrain surface mesh filter has a solid MeshCollider using its exact visual mesh
+        _authenticTerrainColliders.Clear();
         int collidersConfigured = 0;
         foreach (var mf in terrainMeshFilters)
         {
@@ -232,6 +244,7 @@ public class OasisWorldExpander : MonoBehaviour
                     col.sharedMesh = mf.sharedMesh;
                     col.convex = false;
                     col.enabled = true;
+                    _authenticTerrainColliders.Add(col);
                     collidersConfigured++;
                     Debug.Log($"[OasisWorldExpander] Successfully enabled full collision on original terrain mesh: {mf.gameObject.name} ({mf.sharedMesh.vertexCount} vertices)");
                 }
@@ -241,6 +254,7 @@ public class OasisWorldExpander : MonoBehaviour
                 Debug.LogWarning($"[OasisWorldExpander] Could not attach MeshCollider to {mf.gameObject.name}: {ex.Message}");
             }
         }
+        Physics.SyncTransforms();
 
         // 4. Ensure ALL natural Cliffs and Rocks anywhere in the scene have active colliders on their primary visual mesh (LOD0)
         foreach (var mf in FindObjectsByType<MeshFilter>(FindObjectsInactive.Include))
@@ -294,23 +308,26 @@ public class OasisWorldExpander : MonoBehaviour
             }
         }
 
-        // 5. Spawn shelter tent handling:
-        // Do NOT add complex non-convex MeshColliders to decorative tent fabric, carpets, or cushions.
+        // 5. Remove all Bedouin Tent meshes & legacy Teleporter pads near the oasis pond so AI bots never get trapped
+        int removedTentObjects = 0;
         foreach (var obj in allSceneObjects)
         {
             if (obj == null) continue;
             string objName = obj.name;
-            if (objName.IndexOf("Tent", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            if (objName.IndexOf("Tent", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Bedouin", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Teleporter_Platform", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Spawn Start", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Spawn End", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (objName.Equals("Tent", System.StringComparison.OrdinalIgnoreCase) ||
-                    objName.StartsWith("Tent_01_Prefab", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    obj.transform.localScale = Vector3.one;
-                }
+                foreach (var mr in obj.GetComponentsInChildren<MeshRenderer>(true)) mr.enabled = false;
+                foreach (var col in obj.GetComponentsInChildren<Collider>(true)) col.enabled = false;
+                obj.SetActive(false);
+                removedTentObjects++;
             }
         }
 
-        Debug.Log($"[OasisWorldExpander] Original terrain expanded with full surface collision. Configured {collidersConfigured} terrain colliders. Zero overlapping layers.");
+        Debug.Log($"[OasisWorldExpander] Original terrain expanded with full surface collision. Configured {collidersConfigured} terrain colliders. Disabled {removedTentObjects} tent/teleporter objects.");
     }
 
     /// <summary>
@@ -343,7 +360,7 @@ public class OasisWorldExpander : MonoBehaviour
             var mf = wObj.GetComponent<MeshFilter>();
             if (mr == null || mr.sharedMaterial == null) continue;
 
-            _pondCenter = wObj.transform.position;
+            _pondCenter = mr.bounds.center;
 
             // 1. Ensure material instance has Cull = Off (0) for two-sided rendering
             Material mat = mr.material;
@@ -404,9 +421,9 @@ public class OasisWorldExpander : MonoBehaviour
     }
 
     /// <summary>
-    /// Surrounds the entire outer edge of the playable 216m x 216m map with natural, continuous desert cliffs
-    /// (without using Mountain_01/02 which have 86m flat desert floor aprons that float above the canyon),
-    /// reinforced with exact MeshColliders on every cliff wall plus invisible solid boundary colliders.
+    /// Surrounds the outer edge of the authentic Terrain_01 playable desert mesh with natural, continuous desert cliffs,
+    /// dynamically clamped inside the verified Terrain_01 mesh boundary in all 360 degrees so players can NEVER
+    /// walk off the edge of the terrain or fall through the floor.
     /// </summary>
     private void BuildTacticalContainmentDome()
     {
@@ -417,25 +434,23 @@ public class OasisWorldExpander : MonoBehaviour
         GameObject perimeterRoot = new GameObject("Natural_Mountain_Perimeter");
         perimeterRoot.transform.SetParent(transform, false);
 
-        // Center perimeter strictly on the true center of the 216m x 216m Terrain_01 playable mesh (~ (8.0, 0, -164.2))
-        // so the cliff wall runs strictly along the outer edge of the map and NEVER cuts through the oasis canyon!
         Vector3 arenaCenter = HasTerrainBounds
             ? new Vector3(PlayableTerrainBounds.center.x, 0f, PlayableTerrainBounds.center.z)
             : new Vector3(8.0f, 0f, -164.2f);
         perimeterRoot.transform.position = arenaCenter;
 
-        // Place the cliff ring right along the outer rim of the 216m x 216m terrain (half-extent ~108m -> radius ~98m)
-        float boundaryRadius = HasTerrainBounds
-            ? Mathf.Clamp(Mathf.Min(PlayableTerrainBounds.extents.x, PlayableTerrainBounds.extents.z) * 0.91f, 92f, 102f)
-            : 98f;
-        float boundaryHeight = 65f;
-        int numSegments = 44;
+        float defaultBoundaryRadius = HasTerrainBounds
+            ? Mathf.Clamp(Mathf.Min(PlayableTerrainBounds.extents.x, PlayableTerrainBounds.extents.z) * 0.96f, 96f, 106f)
+            : 100f;
+        float boundaryHeight = 72f;
+        int cliffCount = 72; // Every 5 degrees around the full 360-degree map perimeter
+        float angleStep = 360f / cliffCount;
 
-        // 2. Discover authentic solid Cliff_01, Cliff_02, Cliff_03 LOD0 meshes & materials from the scene
-        // IMPORTANT: Do NOT use Mountain_01 or Mountain_02 meshes because those FBX assets have 86m-wide flat ground aprons
-        // that create huge floating ground layers when scaled!
+        // 2. Discover authentic solid Cliff_01..03 and BigRock_01 / Rock_01..06 LOD0 meshes & materials from the scene
         List<Mesh> cliffMeshes = new List<Mesh>();
         List<Material> cliffMaterials = new List<Material>();
+        List<Mesh> rockWallMeshes = new List<Mesh>();
+        List<Material[]> rockWallMaterials = new List<Material[]>();
 
         foreach (var mr in FindObjectsByType<MeshRenderer>(FindObjectsInactive.Include))
         {
@@ -444,13 +459,17 @@ public class OasisWorldExpander : MonoBehaviour
             if (mf != null && mf.sharedMesh != null && mr.sharedMaterial != null)
             {
                 string mName = mf.sharedMesh.name;
-                // Only pick high-detail LOD0 Cliff_01/02/03 wall meshes (18m-27.5m wide vertical rock walls with zero ground apron)
+                if (mName.IndexOf("LOD1", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    mName.IndexOf("LOD2", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    mName.IndexOf("Col", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    mName.IndexOf("ShadowCage", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+
                 if ((mName.IndexOf("Cliff_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                      mName.IndexOf("Cliff_02", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                      mName.IndexOf("Cliff_03", System.StringComparison.OrdinalIgnoreCase) >= 0) &&
-                    mName.IndexOf("LOD1", System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mName.IndexOf("LOD2", System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mName.IndexOf("Col", System.StringComparison.OrdinalIgnoreCase) < 0 &&
                     mf.sharedMesh.vertexCount > 500)
                 {
                     if (!cliffMeshes.Contains(mf.sharedMesh))
@@ -459,54 +478,134 @@ public class OasisWorldExpander : MonoBehaviour
                         cliffMaterials.Add(mr.sharedMaterial);
                     }
                 }
+                else if (mName.IndexOf("BigRock_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         mName.IndexOf("Rock_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         mName.IndexOf("Rock_02", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    if (!rockWallMeshes.Contains(mf.sharedMesh))
+                    {
+                        rockWallMeshes.Add(mf.sharedMesh);
+                        rockWallMaterials.Add(mr.sharedMaterials);
+                    }
+                }
             }
         }
 
-        // Fallback default desert rock material if none found
         Material fallbackMat = null;
-        if (cliffMaterials.Count == 0)
+        if (cliffMaterials.Count == 0 || rockWallMeshes.Count == 0)
         {
             fallbackMat = new Material(OasisShaderHelper.GetLitShader());
             fallbackMat.color = new Color(0.72f, 0.52f, 0.36f);
         }
 
-        // 3. Spawn a continuous, interlocking ring of SOLID cliff walls strictly along the outer edge of the playable map
-        int cliffCount = 44;
-        float angleStep = 360f / cliffCount;
+        // 2b. Measure the expanded valid radius of Terrain_01 in all 72 angular sectors so the perimeter rock wall
+        // lines the outer edge of the expanded playable terrain without breaking early on inner dune ridges!
+        float[] rawRadii = new float[cliffCount];
+        for (int i = 0; i < cliffCount; i++)
+        {
+            float angleRad = (i * angleStep) * Mathf.Deg2Rad;
+            Vector3 radialDir = new Vector3(Mathf.Sin(angleRad), 0f, Mathf.Cos(angleRad));
+            float maxValidR = 84f;
+            for (float testR = 56f; testR <= 108f; testR += 2.0f)
+            {
+                Vector3 testPt = arenaCenter + radialDir * testR;
+                if (TrySampleAuthenticTerrainY(testPt.x, testPt.z, out float ty) && ty > -9.0f && ty < 25.0f)
+                {
+                    maxValidR = testR;
+                }
+            }
+            rawRadii[i] = Mathf.Clamp(maxValidR - 3.5f, 82f, defaultBoundaryRadius);
+        }
 
+        // Smooth sector radii with neighbor average/minimum so adjacent rock walls form a continuous rim
+        float[] segRadii = new float[cliffCount];
+        for (int i = 0; i < cliffCount; i++)
+        {
+            float rPrev = rawRadii[(i - 1 + cliffCount) % cliffCount];
+            float rCurr = rawRadii[i];
+            float rNext = rawRadii[(i + 1) % cliffCount];
+            segRadii[i] = Mathf.Min(rCurr, (rPrev + rNext) * 0.5f);
+        }
+
+        // 3a. INNER CONTINUOUS ROCK WALL RING (72 interlocking volumetric BigRock_01 walls seated flush on the sand)
         for (int i = 0; i < cliffCount; i++)
         {
             float angleDeg = i * angleStep;
             float angleRad = angleDeg * Mathf.Deg2Rad;
+            float rockR = segRadii[i] - 1.5f + ((i % 2 == 0) ? 0f : 0.8f);
+            Vector3 radialDir = new Vector3(Mathf.Sin(angleRad), 0f, Mathf.Cos(angleRad));
+            Vector3 rockWorldPos = arenaCenter + radialDir * rockR;
 
-            // Keep radius strictly at the outer rim (98m..100.5m) so no cliff is ever placed inside the playable space
-            float r = boundaryRadius + ((i % 2 == 0) ? 0f : 2.5f);
+            float rockGroundY = -2.0f;
+            if (TrySampleAuthenticTerrainY(rockWorldPos.x, rockWorldPos.z, out float rBestY))
+            {
+                rockGroundY = rBestY - 1.6f; // Seat firmly into the desert sand floor so there is zero gap underneath
+            }
+            rockWorldPos.y = rockGroundY;
+
+            GameObject rockWallObj = new GameObject($"Perimeter_Rock_Wall_{i}");
+            rockWallObj.transform.SetParent(perimeterRoot.transform, true);
+            rockWallObj.transform.position = rockWorldPos;
+
+            Vector3 tangentDir = new Vector3(Mathf.Cos(angleRad), 0f, -Mathf.Sin(angleRad));
+            Quaternion baseRot = Quaternion.LookRotation(tangentDir, Vector3.up);
+            rockWallObj.transform.rotation = baseRot * Quaternion.Euler(0f, (i % 2 == 0) ? 0f : 180f, 0f);
+
+            // Wide tangential scale so adjacent rock walls overlap into an unbroken 360-degree rock wall
+            rockWallObj.transform.localScale = new Vector3(3.2f, 2.8f + (i % 3) * 0.35f, 3.8f);
+
+            MeshFilter rMf = rockWallObj.AddComponent<MeshFilter>();
+            MeshRenderer rMr = rockWallObj.AddComponent<MeshRenderer>();
+
+            if (rockWallMeshes.Count > 0)
+            {
+                int rIdx = i % rockWallMeshes.Count;
+                Mesh rMesh = rockWallMeshes[rIdx];
+                rMf.sharedMesh = rMesh;
+                rMr.sharedMaterials = rockWallMaterials[rIdx];
+
+                if (rMesh.isReadable)
+                {
+                    MeshCollider rMc = rockWallObj.AddComponent<MeshCollider>();
+                    rMc.sharedMesh = rMesh;
+                    rMc.convex = false;
+                    rMc.enabled = true;
+                }
+                BoxCollider rBox = rockWallObj.AddComponent<BoxCollider>();
+                rBox.center = rMesh.bounds.center;
+                rBox.size = rMesh.bounds.size * 0.90f;
+            }
+            else if (cliffMeshes.Count > 0)
+            {
+                int cIdx = i % cliffMeshes.Count;
+                rMf.sharedMesh = cliffMeshes[cIdx];
+                rMr.sharedMaterial = cliffMaterials[cIdx];
+                rockWallObj.AddComponent<BoxCollider>();
+            }
+            else
+            {
+                var tempCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                rMf.sharedMesh = tempCube.GetComponent<MeshFilter>().sharedMesh;
+                Destroy(tempCube);
+                rMr.sharedMaterial = fallbackMat;
+                rockWallObj.AddComponent<BoxCollider>();
+            }
+            rMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        }
+
+        // 3b. OUTER TOWERING CANYON CLIFF RING (72 massive Cliff_01..03 canyon walls rising behind the rock wall rim)
+        for (int i = 0; i < cliffCount; i++)
+        {
+            float angleDeg = i * angleStep;
+            float angleRad = angleDeg * Mathf.Deg2Rad;
+            float r = segRadii[i] + 3.5f + ((i % 2 == 0) ? 0f : 1.8f);
             Vector3 radialDir = new Vector3(Mathf.Sin(angleRad), 0f, Mathf.Cos(angleRad));
             Vector3 cliffWorldPos = arenaCenter + radialDir * r;
 
-            // Check clearance from starting bunker so perimeter cliffs always frame behind the bunker at a safe distance
-            Vector3 bunkerPos = HasBunker ? BunkerBounds.center : safeRespawnPosition;
-            float distToBunker = Vector2.Distance(new Vector2(cliffWorldPos.x, cliffWorldPos.z), new Vector2(bunkerPos.x, bunkerPos.z));
-            if (distToBunker < 24f)
+            float groundY = -2.0f;
+            if (TrySampleAuthenticTerrainY(cliffWorldPos.x, cliffWorldPos.z, out float bestY))
             {
-                // Push outward along the radial vector away from arenaCenter so it never intrudes inward
-                cliffWorldPos = arenaCenter + radialDir * (boundaryRadius + 8f);
-            }
-
-            // Raycast ONLY against the authentic Terrain_01_Mesh to find exact desert floor height at the outer edge
-            float groundY = -1.5f;
-            RaycastHit[] hits = Physics.RaycastAll(new Vector3(cliffWorldPos.x, 80f, cliffWorldPos.z), Vector3.down, 160f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
-            float bestY = float.MinValue;
-            foreach (var h in hits)
-            {
-                if (h.collider != null && (h.collider.gameObject.name.Contains("Terrain_01") || h.collider.gameObject.name.Contains("Polybrush")))
-                {
-                    if (h.point.y > bestY) bestY = h.point.y;
-                }
-            }
-            if (bestY > -50f)
-            {
-                groundY = bestY - 2.0f; // Sink 2.0m into the outer sand dune rim so the base is 100% grounded
+                groundY = bestY - 2.5f; // Sink 2.5m into the outer sand dune rim so the base is 100% grounded
             }
             cliffWorldPos.y = groundY;
 
@@ -514,7 +613,6 @@ public class OasisWorldExpander : MonoBehaviour
             cliffObj.transform.SetParent(perimeterRoot.transform, true);
             cliffObj.transform.position = cliffWorldPos;
 
-            // Determine whether the mesh's front rock face normals point along local +Z or -Z
             int meshIdx = (cliffMeshes.Count > 0) ? (i % cliffMeshes.Count) : 0;
             bool flipForward = false;
             if (cliffMeshes.Count > 0 && cliffMeshes[meshIdx] != null && cliffMeshes[meshIdx].isReadable)
@@ -532,17 +630,14 @@ public class OasisWorldExpander : MonoBehaviour
                 }
             }
 
-            // Face inward toward the arena center so the 26m-wide X-axis of each cliff runs tangentially along the outer boundary ring
-            // and its front-facing rock normals point inward toward the player
             Vector3 toCenter = (arenaCenter - cliffWorldPos);
             toCenter.y = 0f;
             if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
             Vector3 lookDir = flipForward ? -toCenter.normalized : toCenter.normalized;
             cliffObj.transform.rotation = Quaternion.LookRotation(lookDir);
 
-            // Use 1.45x - 1.65x scale for 26m-wide Cliff_01/02/03 meshes so adjacent cliffs (spaced ~14m apart) overlap seamlessly
-            float scaleMult = 1.45f + (i % 2) * 0.18f;
-            cliffObj.transform.localScale = new Vector3(scaleMult * 1.25f, scaleMult * 1.35f, scaleMult);
+            float scaleMult = 1.55f + (i % 2) * 0.20f;
+            cliffObj.transform.localScale = new Vector3(scaleMult * 1.35f, scaleMult * 1.45f, scaleMult);
 
             MeshFilter mf = cliffObj.AddComponent<MeshFilter>();
             MeshRenderer mr = cliffObj.AddComponent<MeshRenderer>();
@@ -553,7 +648,6 @@ public class OasisWorldExpander : MonoBehaviour
                 mf.sharedMesh = sharedCliffMesh;
                 mr.sharedMaterial = cliffMaterials[meshIdx];
 
-                // Attach a solid non-convex MeshCollider directly to the cliff so players & projectiles collide with the exact rock face!
                 if (sharedCliffMesh.isReadable)
                 {
                     MeshCollider mc = cliffObj.AddComponent<MeshCollider>();
@@ -562,7 +656,6 @@ public class OasisWorldExpander : MonoBehaviour
                     mc.enabled = true;
                 }
 
-                // Also add a solid volumetric BoxCollider core matching the cliff's local bounds so players can never walk or dash through from any angle
                 BoxCollider cliffBox = cliffObj.AddComponent<BoxCollider>();
                 Bounds mb = sharedCliffMesh.bounds;
                 cliffBox.center = mb.center;
@@ -580,30 +673,28 @@ public class OasisWorldExpander : MonoBehaviour
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
         }
 
-        // 4. Invisible Solid Perimeter Wall Colliders (NO renderers, zero visual artifacts)
-        // Enforces an airtight 65m-tall physical boundary right along the cliff ring
-        float wallAngleStep = 360f / numSegments;
-        float segmentWidth = 2f * boundaryRadius * Mathf.Sin(Mathf.PI / numSegments) + 2f;
-
-        for (int i = 0; i < numSegments; i++)
+        // 4. Invisible Solid Perimeter Wall Colliders flush with the inner rock wall face
+        for (int i = 0; i < cliffCount; i++)
         {
-            float angleDeg = i * wallAngleStep;
+            float angleDeg = i * angleStep;
             float angleRad = angleDeg * Mathf.Deg2Rad;
+            float wallR = segRadii[i] - 2.5f;
+            float segmentWidth = 2f * wallR * Mathf.Sin(Mathf.PI / cliffCount) + 6f;
 
             Vector3 segPos = new Vector3(
-                Mathf.Sin(angleRad + (wallAngleStep * 0.5f * Mathf.Deg2Rad)) * (boundaryRadius - 5.5f),
+                Mathf.Sin(angleRad + (angleStep * 0.5f * Mathf.Deg2Rad)) * wallR,
                 boundaryHeight * 0.5f - 5f,
-                Mathf.Cos(angleRad + (wallAngleStep * 0.5f * Mathf.Deg2Rad)) * (boundaryRadius - 5.5f)
+                Mathf.Cos(angleRad + (angleStep * 0.5f * Mathf.Deg2Rad)) * wallR
             );
 
             GameObject wallColObj = new GameObject($"Perimeter_Invisible_Boundary_{i}");
             wallColObj.transform.SetParent(perimeterRoot.transform, false);
             wallColObj.transform.localPosition = segPos;
-            wallColObj.transform.localRotation = Quaternion.Euler(0f, angleDeg + (wallAngleStep * 0.5f), 0f);
+            wallColObj.transform.localRotation = Quaternion.Euler(0f, angleDeg + (angleStep * 0.5f), 0f);
             wallColObj.layer = LayerMask.NameToLayer("Ignore Raycast");
 
             BoxCollider boxCol = wallColObj.AddComponent<BoxCollider>();
-            boxCol.size = new Vector3(segmentWidth, boundaryHeight + 30f, 3.0f);
+            boxCol.size = new Vector3(segmentWidth, boundaryHeight + 30f, 3.5f);
             boxCol.center = Vector3.zero;
         }
 
@@ -613,43 +704,71 @@ public class OasisWorldExpander : MonoBehaviour
         ceiling.transform.localPosition = new Vector3(0f, boundaryHeight + 5f, 0f);
         ceiling.layer = LayerMask.NameToLayer("Ignore Raycast");
         BoxCollider ceilCol = ceiling.AddComponent<BoxCollider>();
-        ceilCol.size = new Vector3(boundaryRadius * 2.3f, 2.0f, boundaryRadius * 2.3f);
+        ceilCol.size = new Vector3(defaultBoundaryRadius * 2.5f, 2.0f, defaultBoundaryRadius * 2.5f);
         ceilCol.center = Vector3.zero;
 
-        Debug.Log($"<color=cyan>[OasisWorldExpander]</color> Natural Cliff Perimeter deployed around outer map edge at {arenaCenter} (radius {boundaryRadius:F1}m, {cliffCount} solid interlocking cliff ridges with MeshColliders). Zero floating ground layers.");
+        Debug.Log($"<color=cyan>[OasisWorldExpander]</color> Expanded Rock Wall & Cliff Perimeter deployed around verified Terrain_01 rim at {arenaCenter} ({cliffCount} interlocking rock walls + {cliffCount} cliff ridges).");
     }
 
     /// <summary>
-    /// Fail-safe void catch: if player ever falls below y = -15m, safely lifts them back to the oasis core.
+    /// Continuous sub-terrain & boundary safeguard: guarantees neither the player nor any AI bot
+    /// can ever drop below the authentic Terrain_01 surface or get stuck under the map.
     /// </summary>
     private void CheckVoidCatch()
     {
         if (_playerTransform == null)
         {
             CachePlayer();
-            if (_playerTransform == null) return;
         }
 
-        if (_playerTransform.position.y < voidResetThreshold)
+        if (_playerTransform != null && _playerTransform.gameObject.activeInHierarchy)
         {
-            Vector3 resetPos = (OasisShooterManager.Instance != null && OasisShooterManager.Instance.HasSafeShelter)
-                ? OasisShooterManager.Instance.SafeShelterCenter
-                : new Vector3(0, 2f, 15f);
-
-            Debug.LogWarning($"[OasisWorldExpander] Player fell below void threshold! Repositioning to safe ground: {resetPos}");
-
-            if (_playerCharacterController != null)
+            Vector3 pPos = _playerTransform.position;
+            if (TrySampleAuthenticTerrainY(pPos.x, pPos.z, out float terrainY))
             {
-                _playerCharacterController.enabled = false;
-                _playerTransform.position = resetPos + Vector3.up * 0.5f;
-                _playerCharacterController.enabled = true;
+                if (pPos.y < terrainY - 0.75f || pPos.y < -6.2f)
+                {
+                    if (_playerCharacterController != null) _playerCharacterController.enabled = false;
+                    _playerTransform.position = new Vector3(pPos.x, terrainY + 0.20f, pPos.z);
+                    Physics.SyncTransforms();
+                    if (_playerCharacterController != null) _playerCharacterController.enabled = true;
+                }
             }
-            else
+            else if (pPos.y < -6.0f)
             {
-                _playerTransform.position = resetPos + Vector3.up * 0.5f;
+                int myTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+                Vector3 safePos = (OasisSpawnSystem.Instance != null)
+                    ? OasisSpawnSystem.Instance.GetTacticalSafeSpawnPosition(myTeam, _playerTransform)
+                    : new Vector3(0f, -1.5f, -150f);
+                if (_playerCharacterController != null) _playerCharacterController.enabled = false;
+                _playerTransform.position = safePos + Vector3.up * 0.25f;
+                Physics.SyncTransforms();
+                if (_playerCharacterController != null) _playerCharacterController.enabled = true;
             }
+        }
 
-            OasisShooterManager.Instance?.DamagePlayer(-20f);
+        if (OasisCombatAI.ActiveBots != null)
+        {
+            for (int i = 0; i < OasisCombatAI.ActiveBots.Count; i++)
+            {
+                var bot = OasisCombatAI.ActiveBots[i];
+                if (bot == null || bot.isDead || !bot.gameObject.activeInHierarchy) continue;
+                Vector3 bPos = bot.transform.position;
+                if (TrySampleAuthenticTerrainY(bPos.x, bPos.z, out float bTerrainY))
+                {
+                    if (bPos.y < bTerrainY - 0.75f || bPos.y < -6.2f)
+                    {
+                        var cc = bot.GetComponent<CharacterController>();
+                        if (cc != null) cc.enabled = false;
+                        bot.transform.position = new Vector3(bPos.x, bTerrainY + 0.20f, bPos.z);
+                        if (cc != null) cc.enabled = true;
+                    }
+                }
+                else if (bPos.y < -6.0f && OasisSpawnSystem.Instance != null)
+                {
+                    OasisSpawnSystem.Instance.RespawnCombatant(bot.transform, bot.teamId);
+                }
+            }
         }
     }
 
@@ -1242,101 +1361,338 @@ public class OasisWorldExpander : MonoBehaviour
         Material amberGlowMat = new Material(OasisShaderHelper.GetUnlitShader());
         amberGlowMat.color = new Color(1.0f, 0.65f, 0.15f);
 
-        // 2. Build 6 Duplicated Satellite Oasis Palm Groves & Nomad Encampments across the outer quadrants
+        _placedBuildingCenters.Clear();
+
+        // 2. Build 8 Enclosed Undercover Sci-Fi Hangar Hideouts around the perimeter valley floor (inspired by OasisMenuBackground.jpg)
+        // Zero center spawns; all 8 Hangar Hideouts sit flush on the verified flat valley floor of Terrain_01.
+        if (OasisSpawnSystem.Instance != null)
+        {
+            OasisSpawnSystem.Instance.ClearRegisteredHangarSpawns();
+            Vector3 playableCenter = OasisSpawnSystem.Instance.GetPlayableCenter();
+            for (int h = 0; h < OasisSpawnSystem.UndercoverHangarLocations.Length; h++)
+            {
+                BuildUndercoverSciFiHangarHideout(
+                    landmarksRoot.transform, h,
+                    OasisSpawnSystem.UndercoverHangarLocations[h],
+                    playableCenter,
+                    alloyMat, deckMat, sandstoneMat, darkStoneMat, cyanGlowMat, amberGlowMat
+                );
+            }
+        }
+
+        // 3. Build 3 Multi-Level Walkable Tactical Structures on verified flat valley floor spots
+        BuildEasternWatchtowerOutpost(landmarksRoot.transform, arenaCenter + new Vector3(44f, 0f, -12f), arenaCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
+        BuildWesternSkybridgeCompound(landmarksRoot.transform, arenaCenter + new Vector3(-46f, 0f, -10f), arenaCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
+        BuildSouthernCitadelRuins(landmarksRoot.transform, arenaCenter + new Vector3(0f, 0f, -50f), arenaCenter, sandstoneMat, darkStoneMat, alloyMat, cyanGlowMat);
+
+        // 4. Build 6 Duplicated Satellite Oasis Palm Groves & Circular Cyan Energy Beacon Pads across the expanded valley quadrants
         Vector3[] groveOffsets = new Vector3[]
         {
-            new Vector3(-54f, 0f,  22f), // West Dune Sanctuary Grove & Camp
-            new Vector3( 56f, 0f,  20f), // East Ridge Overlook Grove & Camp
-            new Vector3(-50f, 0f, -46f), // South-West Canyon Oasis Grove
-            new Vector3( 52f, 0f, -46f), // South-East Palm Sanctuary
-            new Vector3(-44f, 0f,  54f), // North-West Flanking Grove
-            new Vector3( 46f, 0f,  52f)  // North-East Flanking Grove
+            new Vector3(-46f, 0f,  22f),
+            new Vector3( 48f, 0f,  22f),
+            new Vector3(-44f, 0f, -40f),
+            new Vector3( 46f, 0f, -40f),
+            new Vector3(-38f, 0f,  46f),
+            new Vector3( 40f, 0f,  46f)
         };
 
         for (int g = 0; g < groveOffsets.Length; g++)
         {
             Vector3 groveCenter = arenaCenter + groveOffsets[g];
-            if (!IsSafeWorldPlacement(groveCenter, arenaCenter, 22f)) continue;
+            if (!IsSafeWorldPlacement(groveCenter, arenaCenter, 24f)) continue;
             BuildSatelliteOasisGrove(
                 landmarksRoot.transform, g, groveCenter,
                 tallPalms, sagoShrubs, bigRocks, medRocks, firepits, carpets, cushions,
-                sandstoneMat, canopyClothMat, amberGlowMat
+                sandstoneMat, alloyMat, cyanGlowMat
             );
         }
 
-        // 3. Build 14 Duplicated Natural Rock Outcrops & Boulder Clusters across the desert dunes
+        // 5. Build 14 Duplicated Natural Rock Outcrops & Boulder Clusters across the expanded desert dunes
         Vector3[] outcropOffsets = new Vector3[]
         {
-            new Vector3(-34f, 0f,  36f),
-            new Vector3( 36f, 0f,  36f),
-            new Vector3(-68f, 0f,   4f),
-            new Vector3( 68f, 0f,   4f),
-            new Vector3(-38f, 0f, -28f),
-            new Vector3( 38f, 0f, -28f),
-            new Vector3(-26f, 0f, -56f),
-            new Vector3( 26f, 0f, -56f),
-            new Vector3(-66f, 0f, -34f),
-            new Vector3( 66f, 0f, -34f),
-            new Vector3(-22f, 0f,  46f),
-            new Vector3( 24f, 0f,  46f),
-            new Vector3(-72f, 0f,  36f),
-            new Vector3( 72f, 0f,  36f)
+            new Vector3(-34f, 0f,  34f),
+            new Vector3( 34f, 0f,  34f),
+            new Vector3(-58f, 0f,   6f),
+            new Vector3( 58f, 0f,   6f),
+            new Vector3(-36f, 0f, -28f),
+            new Vector3( 36f, 0f, -28f),
+            new Vector3(-28f, 0f, -52f),
+            new Vector3( 28f, 0f, -52f),
+            new Vector3(-58f, 0f, -32f),
+            new Vector3( 58f, 0f, -32f),
+            new Vector3(-22f, 0f,  44f),
+            new Vector3( 24f, 0f,  44f),
+            new Vector3(-62f, 0f,  32f),
+            new Vector3( 62f, 0f,  32f)
         };
 
         for (int rIdx = 0; rIdx < outcropOffsets.Length; rIdx++)
         {
             Vector3 outcropPos = arenaCenter + outcropOffsets[rIdx];
-            if (!IsSafeWorldPlacement(outcropPos, arenaCenter, 20f)) continue;
+            if (!IsSafeWorldPlacement(outcropPos, arenaCenter, 22f)) continue;
             BuildNaturalRockOutcrop(landmarksRoot.transform, rIdx, outcropPos, bigRocks, medRocks, tallPalms, sagoShrubs);
         }
 
-        // 4. Build 2 Giant Walk-Through Natural Canyon Stone Archways (East & West Approaches)
-        BuildCanyonStoneArchway(landmarksRoot.transform, "West_Canyon_Stone_Arch", arenaCenter + new Vector3(-40f, 0f, -6f), Quaternion.Euler(0f, 18f, 0f), cliffWalls, bigRocks, sandstoneMat);
-        BuildCanyonStoneArchway(landmarksRoot.transform, "East_Canyon_Stone_Arch", arenaCenter + new Vector3( 40f, 0f, -6f), Quaternion.Euler(0f, -18f, 0f), cliffWalls, bigRocks, sandstoneMat);
+        // 6. Build 4 Giant Walk-Through Natural Canyon Stone Archways (Inner & Outer Approaches)
+        BuildCanyonStoneArchway(landmarksRoot.transform, "West_Canyon_Stone_Arch", arenaCenter + new Vector3(-36f, 0f, -4f), Quaternion.Euler(0f, 18f, 0f), cliffWalls, bigRocks, sandstoneMat);
+        BuildCanyonStoneArchway(landmarksRoot.transform, "East_Canyon_Stone_Arch", arenaCenter + new Vector3( 36f, 0f, -4f), Quaternion.Euler(0f, -18f, 0f), cliffWalls, bigRocks, sandstoneMat);
+        BuildCanyonStoneArchway(landmarksRoot.transform, "North_Outer_Stone_Arch", arenaCenter + new Vector3( 0f, 0f, 44f), Quaternion.Euler(0f, 90f, 0f), cliffWalls, bigRocks, sandstoneMat);
+        BuildCanyonStoneArchway(landmarksRoot.transform, "South_Outer_Stone_Arch", arenaCenter + new Vector3(-26f, 0f, -44f), Quaternion.Euler(0f, 72f, 0f), cliffWalls, bigRocks, sandstoneMat);
 
-        // 5. Build 3 Multi-Level Walkable Tactical Structures (Adding True 3D Elevation & Verticality)
-        BuildEasternWatchtowerOutpost(landmarksRoot.transform, arenaCenter + new Vector3(62f, 0f, -14f), arenaCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
-        BuildWesternSkybridgeCompound(landmarksRoot.transform, arenaCenter + new Vector3(-62f, 0f, -14f), arenaCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
-        BuildSouthernCitadelRuins(landmarksRoot.transform, arenaCenter + new Vector3(0f, 0f, -68f), arenaCenter, sandstoneMat, darkStoneMat, alloyMat, cyanGlowMat);
-
-        // 6. Build 8 Tactical Field Barricades & Jumpable Supply Crate Stations along combat lanes
+        // 7. Build 8 Tactical Field Barricades & Jumpable Supply Crate Stations along combat lanes
         Vector3[] coverOffsets = new Vector3[]
         {
-            new Vector3(-18f, 0f,  34f),
-            new Vector3( 18f, 0f,  34f),
-            new Vector3(-32f, 0f,  12f),
-            new Vector3( 32f, 0f,  12f),
-            new Vector3(-30f, 0f, -42f),
-            new Vector3( 30f, 0f, -42f),
-            new Vector3(-48f, 0f, -18f),
-            new Vector3( 48f, 0f, -18f)
+            new Vector3(-20f, 0f,  34f),
+            new Vector3( 20f, 0f,  34f),
+            new Vector3(-30f, 0f,  12f),
+            new Vector3( 30f, 0f,  12f),
+            new Vector3(-28f, 0f, -38f),
+            new Vector3( 28f, 0f, -38f),
+            new Vector3(-46f, 0f, -16f),
+            new Vector3( 46f, 0f, -16f)
         };
 
         for (int cIdx = 0; cIdx < coverOffsets.Length; cIdx++)
         {
             Vector3 cPos = arenaCenter + coverOffsets[cIdx];
-            if (!IsSafeWorldPlacement(cPos, arenaCenter, 18f)) continue;
+            if (!IsSafeWorldPlacement(cPos, arenaCenter, 20f)) continue;
             BuildTacticalCoverStation(landmarksRoot.transform, cIdx, cPos, arenaCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
         }
 
-        Debug.Log($"<color=cyan>[OasisWorldExpander]</color> Expanded world landmarks deployed: 6 Oasis Groves & Nomad Camps, 14 Rock Outcrops, 2 Stone Archways, and 3 Multi-Level Walkable Structures.");
+        // 8. Register all landmarks with OasisMapDesigner & apply any saved custom user layout
+        OasisMapDesigner designer = FindAnyObjectByType<OasisMapDesigner>();
+        if (designer == null)
+        {
+            designer = gameObject.AddComponent<OasisMapDesigner>();
+        }
+        designer.RegisterSceneLandmarksAndApplySavedLayout(landmarksRoot.transform);
+
+        if (OasisSpawnSystem.Instance != null)
+        {
+            OasisSpawnSystem.Instance.RebuildHangarSpawnsFromScene();
+        }
+
+        Debug.Log($"<color=cyan>[OasisWorldExpander]</color> Expanded world landmarks deployed flush on Terrain_01 floor: 8 Undercover Hangar Hideouts, 6 Oasis Beacon Groves, 14 Rock Outcrops, 4 Stone Archways, and 3 Multi-Level Structures.");
     }
 
-    private float SampleDesertGroundY(float worldX, float worldZ, float fallbackY = -4.5f)
+    /// <summary>
+    /// Spawns a new placeable landmark/building for the interactive Map Designer at worldPos/worldRot.
+    /// </summary>
+    public GameObject SpawnCustomLandmarkForDesigner(string prefabType, int customId, Vector3 worldPos, Quaternion worldRot)
     {
-        // Raycast down from y=25m (safely below any ceiling barrier, upper mountain ridges, or sky colliders)
-        RaycastHit[] hits = Physics.RaycastAll(new Vector3(worldX, 25f, worldZ), Vector3.down, 55f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        GameObject landmarksRoot = GameObject.Find("Oasis_Expanded_World_Landmarks");
+        if (landmarksRoot == null)
+        {
+            landmarksRoot = new GameObject("Oasis_Expanded_World_Landmarks");
+            landmarksRoot.transform.SetParent(transform, false);
+        }
+
+        Material sandstoneMat = new Material(OasisShaderHelper.GetLitShader()) { color = new Color(0.76f, 0.60f, 0.44f) };
+        Material darkStoneMat = new Material(OasisShaderHelper.GetLitShader()) { color = new Color(0.52f, 0.41f, 0.31f) };
+        Material alloyMat = new Material(OasisShaderHelper.GetLitShader()) { color = new Color(0.25f, 0.29f, 0.34f) };
+        Material deckMat = new Material(OasisShaderHelper.GetLitShader()) { color = new Color(0.20f, 0.22f, 0.26f) };
+        Material cyanGlowMat = new Material(OasisShaderHelper.GetUnlitShader()) { color = new Color(0.15f, 0.92f, 1.0f) };
+        Material amberGlowMat = new Material(OasisShaderHelper.GetUnlitShader()) { color = new Color(1.0f, 0.65f, 0.15f) };
+
+        Vector3 playableCenter = (OasisSpawnSystem.Instance != null) ? OasisSpawnSystem.Instance.GetPlayableCenter() : new Vector3(0f, -2f, -150f);
+        int beforeCount = landmarksRoot.transform.childCount;
+
+        switch (prefabType)
+        {
+            case "HangarBunker":
+                BuildUndercoverSciFiHangarHideout(landmarksRoot.transform, 100 + customId, worldPos, playableCenter, alloyMat, deckMat, sandstoneMat, darkStoneMat, cyanGlowMat, amberGlowMat);
+                break;
+            case "Watchtower":
+                BuildEasternWatchtowerOutpost(landmarksRoot.transform, worldPos, playableCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
+                break;
+            case "Skybridge":
+                BuildWesternSkybridgeCompound(landmarksRoot.transform, worldPos, playableCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
+                break;
+            case "Citadel":
+                BuildSouthernCitadelRuins(landmarksRoot.transform, worldPos, playableCenter, sandstoneMat, darkStoneMat, alloyMat, cyanGlowMat);
+                break;
+            default:
+                BuildTacticalCoverStation(landmarksRoot.transform, 100 + customId, worldPos, playableCenter, alloyMat, deckMat, sandstoneMat, cyanGlowMat);
+                break;
+        }
+
+        if (landmarksRoot.transform.childCount > beforeCount)
+        {
+            GameObject created = landmarksRoot.transform.GetChild(landmarksRoot.transform.childCount - 1).gameObject;
+            created.name = $"Custom_{prefabType}_{customId}";
+            if (prefabType == "HangarBunker")
+            {
+                created.name = $"Undercover_Hangar_Hideout_Custom_{customId}";
+            }
+            created.transform.position = worldPos;
+            created.transform.rotation = worldRot;
+            SnapBuildingFlushToGround(created.transform, 0f);
+            return created;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Computes the exact grounded Y coordinate for any building or item at its current (X, Z) and rotation,
+    /// ensuring no part of its floor sinks beneath the Terrain_01 sand dunes, and clears any intruding scene rocks/palms.
+    /// </summary>
+    public void SnapBuildingFlushToGround(Transform itemTransform, float heightOffset = 0f)
+    {
+        if (itemTransform == null) return;
+        Vector3 pos = itemTransform.position;
+        Quaternion rot = itemTransform.rotation;
+        string n = itemTransform.name;
+
+        float halfW = 3.5f;
+        float halfD = 3.5f;
+        bool isHangar = n.IndexOf("Hangar_Hideout", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        if (isHangar) { halfW = 7.0f; halfD = 5.5f; }
+        else if (n.IndexOf("Watchtower", System.StringComparison.OrdinalIgnoreCase) >= 0) { halfW = 5.0f; halfD = 5.0f; }
+        else if (n.IndexOf("Skybridge", System.StringComparison.OrdinalIgnoreCase) >= 0) { halfW = 5.5f; halfD = 10.5f; }
+        else if (n.IndexOf("Citadel", System.StringComparison.OrdinalIgnoreCase) >= 0) { halfW = 8.0f; halfD = 5.5f; }
+
+        float maxGroundY = float.MinValue;
+        float minGroundY = float.MaxValue;
+        for (int ix = -1; ix <= 1; ix++)
+        {
+            for (int iz = -1; iz <= 1; iz++)
+            {
+                Vector3 pt = pos + rot * new Vector3(ix * halfW * 0.85f, 0f, iz * halfD * 0.85f);
+                if (TrySampleAuthenticTerrainY(pt.x, pt.z, out float sy))
+                {
+                    if (sy > maxGroundY) maxGroundY = sy;
+                    if (sy < minGroundY) minGroundY = sy;
+                }
+            }
+        }
+
+        Vector3 frontPt = pos + rot * new Vector3(0f, 0f, halfD + 3.0f);
+        if (TrySampleAuthenticTerrainY(frontPt.x, frontPt.z, out float fY))
+        {
+            if (fY > maxGroundY) maxGroundY = fY;
+        }
+
+        if (maxGroundY > -50f)
+        {
+            float baseGroundY = isHangar ? (maxGroundY + 0.20f) : Mathf.Lerp(minGroundY, maxGroundY, 0.75f) + 0.12f;
+            itemTransform.position = new Vector3(pos.x, baseGroundY + heightOffset, pos.z);
+        }
+
+        if (isHangar)
+        {
+            ClearSceneObstaclesAroundBuilding(itemTransform, halfW * 2f + 6f, halfD * 2f + 8f);
+        }
+        Physics.SyncTransforms();
+    }
+
+    /// <summary>
+    /// Sweeps around a bunker/building and disables any original scene rocks, cliffs, palms, or props
+    /// that could intrude into the interior or block the doorways/ramps.
+    /// </summary>
+    public void ClearSceneObstaclesAroundBuilding(Transform buildingRoot, float clearWidth, float clearDepth)
+    {
+        if (buildingRoot == null) return;
+        Vector3 center = buildingRoot.position + Vector3.up * 2.2f;
+        float radius = Mathf.Max(clearWidth, clearDepth) * 0.62f;
+
+        Collider[] cols = Physics.OverlapSphere(center, radius, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        foreach (var col in cols)
+        {
+            if (col == null || col.transform.IsChildOf(buildingRoot)) continue;
+            if (col.GetComponentInParent<CharacterController>() != null) continue;
+            if (col.GetComponentInParent<OasisCombatAI>() != null) continue;
+
+            // Never disable Terrain_01, Perimeter Containment, or Expanded World Landmarks
+            Transform t = col.transform;
+            bool isProtected = false;
+            while (t != null)
+            {
+                string tn = t.name;
+                if (tn.IndexOf("Terrain_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    tn.IndexOf("Polybrush", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    tn.IndexOf("Oasis_Expanded_World_Landmarks", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    tn.IndexOf("Oasis_Perimeter_Containment", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    tn.IndexOf("Player", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    isProtected = true;
+                    break;
+                }
+                t = t.parent;
+            }
+            if (isProtected) continue;
+
+            string objName = col.gameObject.name;
+            if (objName.IndexOf("Rock", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Cliff", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Palm", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Fountain", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Grass", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Shrub", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Step", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Stone", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                objName.IndexOf("Tent", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                col.enabled = false;
+                var mr = col.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+                foreach (var childMr in col.GetComponentsInChildren<MeshRenderer>(true)) childMr.enabled = false;
+                foreach (var childCol in col.GetComponentsInChildren<Collider>(true)) childCol.enabled = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Raycasts directly against the cached MeshCollider(s) of the authentic 46,468-vertex Terrain_01 mesh.
+    /// Never hits roofs, rocks, cliffs, or procedural foundations.
+    /// </summary>
+    public bool TrySampleAuthenticTerrainY(float worldX, float worldZ, out float groundY)
+    {
+        groundY = -2.2f;
+        Ray ray = new Ray(new Vector3(worldX, 65f, worldZ), Vector3.down);
+        float bestY = float.MinValue;
+        bool found = false;
+
+        for (int i = 0; i < _authenticTerrainColliders.Count; i++)
+        {
+            Collider col = _authenticTerrainColliders[i];
+            if (col == null || !col.enabled) continue;
+            if (col.Raycast(ray, out RaycastHit hit, 130f))
+            {
+                if (hit.point.y > bestY && hit.point.y < 26.0f)
+                {
+                    bestY = hit.point.y;
+                    found = true;
+                }
+            }
+        }
+
+        if (found)
+        {
+            groundY = bestY;
+            return true;
+        }
+        return false;
+    }
+
+    private float SampleDesertGroundY(float worldX, float worldZ, float fallbackY = -2.5f)
+    {
+        if (TrySampleAuthenticTerrainY(worldX, worldZ, out float authenticY))
+        {
+            return authenticY;
+        }
+
+        RaycastHit[] hits = Physics.RaycastAll(new Vector3(worldX, 30f, worldZ), Vector3.down, 65f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         float bestY = float.MinValue;
         foreach (var h in hits)
         {
             if (h.collider == null || h.collider.isTrigger) continue;
             string cName = h.collider.gameObject.name;
-            // Only accept authentic desert terrain ground surface hits!
-            if (cName.IndexOf("Terrain_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                cName.IndexOf("Polybrush", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            if ((cName.IndexOf("Terrain_01", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 cName.IndexOf("Polybrush", System.StringComparison.OrdinalIgnoreCase) >= 0) &&
+                cName.IndexOf("Hangar", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                cName.IndexOf("OuterDune", System.StringComparison.OrdinalIgnoreCase) < 0)
             {
-                // Genuine sand dunes are between -8m and +10m; anything above 12m is in the air/sky
-                if (h.point.y > bestY && h.point.y < 12.0f)
+                if (h.point.y > bestY && h.point.y < 25.0f)
                 {
                     bestY = h.point.y;
                 }
@@ -1345,19 +1701,120 @@ public class OasisWorldExpander : MonoBehaviour
         return (bestY > -50f) ? bestY : fallbackY;
     }
 
+    /// <summary>
+    /// Searches around desiredWorldPos for the flattest valley-floor site on Terrain_01 where every point
+    /// under the building footprint is grounded on authentic desert sand (avoiding steep dune walls, cliffs, and the pond).
+    /// </summary>
+    private Vector3 FindFlatValleyFloorSpot(
+        Vector3 desiredWorldPos, float halfWidth, float halfDepth, Quaternion rot,
+        float searchRadius, float minBuildingSeparation,
+        out float minFootprintY, out float maxFootprintY, out float frontEntryY)
+    {
+        Vector3 bestPos = desiredWorldPos;
+        float bestScore = float.MaxValue;
+        minFootprintY = -2.2f;
+        maxFootprintY = -2.0f;
+        frontEntryY = -2.2f;
+
+        if (TrySampleAuthenticTerrainY(desiredWorldPos.x, desiredWorldPos.z, out float initY))
+        {
+            minFootprintY = initY;
+            maxFootprintY = initY;
+            frontEntryY = initY;
+        }
+
+        float step = Mathf.Max(2.5f, searchRadius / 5f);
+        for (float dx = -searchRadius; dx <= searchRadius + 0.01f; dx += step)
+        {
+            for (float dz = -searchRadius; dz <= searchRadius + 0.01f; dz += step)
+            {
+                Vector3 cand = new Vector3(desiredWorldPos.x + dx, 0f, desiredWorldPos.z + dz);
+
+                // Keep clear of central Oasis water pond
+                if (Vector2.Distance(new Vector2(cand.x, cand.z), new Vector2(_pondCenter.x, _pondCenter.z)) < 25f)
+                    continue;
+
+                // Keep clear of other major buildings
+                bool tooCloseToBuilding = false;
+                if (minBuildingSeparation > 0.1f)
+                {
+                    for (int b = 0; b < _placedBuildingCenters.Count; b++)
+                    {
+                        if (Vector2.Distance(new Vector2(cand.x, cand.z), new Vector2(_placedBuildingCenters[b].x, _placedBuildingCenters[b].z)) < minBuildingSeparation)
+                        {
+                            tooCloseToBuilding = true;
+                            break;
+                        }
+                    }
+                }
+                if (tooCloseToBuilding) continue;
+
+                bool allValid = true;
+                float cMinY = float.MaxValue;
+                float cMaxY = float.MinValue;
+                for (int ix = -1; ix <= 1; ix++)
+                {
+                    for (int iz = -1; iz <= 1; iz++)
+                    {
+                        Vector3 pt = cand + rot * new Vector3(ix * halfWidth * 0.85f, 0f, iz * halfDepth * 0.85f);
+                        if (!TrySampleAuthenticTerrainY(pt.x, pt.z, out float sy) || sy < -5.2f || sy > 8.5f)
+                        {
+                            allValid = false;
+                            break;
+                        }
+                        if (sy < cMinY) cMinY = sy;
+                        if (sy > cMaxY) cMaxY = sy;
+                    }
+                    if (!allValid) break;
+                }
+                if (!allValid) continue;
+
+                Vector3 frontPt = cand + rot * new Vector3(0f, 0f, halfDepth + 3.5f);
+                if (!TrySampleAuthenticTerrainY(frontPt.x, frontPt.z, out float fY) || fY < -5.2f || fY > 8.5f)
+                    continue;
+
+                float slope = Mathf.Max(cMaxY, fY) - Mathf.Min(cMinY, fY);
+                float elevPenalty = Mathf.Max(0f, cMaxY + 0.5f) * 2.2f;
+                float distPenalty = Mathf.Sqrt(dx * dx + dz * dz) * 0.14f;
+                float score = slope * 14.0f + elevPenalty + distPenalty;
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestPos = cand;
+                    minFootprintY = cMinY;
+                    maxFootprintY = cMaxY;
+                    frontEntryY = fY;
+                }
+            }
+        }
+
+        if (minBuildingSeparation > 0.1f)
+        {
+            _placedBuildingCenters.Add(bestPos);
+        }
+        return bestPos;
+    }
+
     private bool IsSafeWorldPlacement(Vector3 candidatePos, Vector3 arenaCenter, float minPondDist)
     {
-        // Reject any candidate position floating in the sky (y > 10m) or falling into the void (y < -20m)
-        if (candidatePos.y > 10.0f || candidatePos.y < -20.0f) return false;
+        if (!TrySampleAuthenticTerrainY(candidatePos.x, candidatePos.z, out float ty)) return false;
+        if (ty > 8.5f || ty < -5.2f) return false;
 
-        // Keep clear of central Oasis water pond (using verified pond center)
+        // Verify surrounding 4m footprint isn't on a vertical cliff face
+        if (!TrySampleAuthenticTerrainY(candidatePos.x + 4f, candidatePos.z, out float tx1) || Mathf.Abs(tx1 - ty) > 2.0f) return false;
+        if (!TrySampleAuthenticTerrainY(candidatePos.x - 4f, candidatePos.z, out float tx2) || Mathf.Abs(tx2 - ty) > 2.0f) return false;
+        if (!TrySampleAuthenticTerrainY(candidatePos.x, candidatePos.z + 4f, out float tz1) || Mathf.Abs(tz1 - ty) > 2.0f) return false;
+        if (!TrySampleAuthenticTerrainY(candidatePos.x, candidatePos.z - 4f, out float tz2) || Mathf.Abs(tz2 - ty) > 2.0f) return false;
+
         float distToPond = Vector2.Distance(new Vector2(candidatePos.x, candidatePos.z), new Vector2(_pondCenter.x, _pondCenter.z));
         if (distToPond < minPondDist) return false;
 
-        // Keep clear of Starting Bunker and its front elevator approach
-        Vector3 bunkerCenter = HasBunker ? BunkerBounds.center : safeRespawnPosition;
-        float distToBunker = Vector2.Distance(new Vector2(candidatePos.x, candidatePos.z), new Vector2(bunkerCenter.x, bunkerCenter.z));
-        if (distToBunker < 22f) return false;
+        for (int b = 0; b < _placedBuildingCenters.Count; b++)
+        {
+            if (Vector2.Distance(new Vector2(candidatePos.x, candidatePos.z), new Vector2(_placedBuildingCenters[b].x, _placedBuildingCenters[b].z)) < 15f)
+                return false;
+        }
 
         return true;
     }
@@ -1411,7 +1868,8 @@ public class OasisWorldExpander : MonoBehaviour
         List<SceneAssetTemplate> firepits, List<SceneAssetTemplate> carpets, List<SceneAssetTemplate> cushions,
         Material pillarMat, Material canopyMat, Material lanternMat)
     {
-        float baseGroundY = SampleDesertGroundY(centerWorldPos.x, centerWorldPos.z);
+        centerWorldPos = FindFlatValleyFloorSpot(centerWorldPos, 3.8f, 3.8f, Quaternion.identity, 10f, 14f, out float minY, out float maxY, out float frontY);
+        float baseGroundY = Mathf.Clamp(maxY, minY, minY + 0.55f);
         centerWorldPos.y = baseGroundY;
 
         GameObject groveRoot = new GameObject($"Satellite_Oasis_Grove_{index}");
@@ -1427,7 +1885,7 @@ public class OasisWorldExpander : MonoBehaviour
                 float angle = (p * (360f / palmCount) + (index * 23f)) * Mathf.Deg2Rad;
                 float radius = 6.5f + (p % 3) * 2.2f;
                 Vector3 pPos = centerWorldPos + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                pPos.y = SampleDesertGroundY(pPos.x, pPos.z, baseGroundY) - 0.25f;
+                pPos.y = SampleDesertGroundY(pPos.x, pPos.z, baseGroundY) - 0.35f;
 
                 Quaternion pRot = Quaternion.Euler(
                     (p % 2 == 0) ? 3.5f : -3.0f,
@@ -1448,7 +1906,7 @@ public class OasisWorldExpander : MonoBehaviour
                 float angle = (sIdx * (360f / shrubCount) + 15f) * Mathf.Deg2Rad;
                 float radius = 4.8f + (sIdx % 4) * 1.8f;
                 Vector3 sPos = centerWorldPos + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                sPos.y = SampleDesertGroundY(sPos.x, sPos.z, baseGroundY) - 0.15f;
+                sPos.y = SampleDesertGroundY(sPos.x, sPos.z, baseGroundY) - 0.20f;
 
                 Quaternion sRot = Quaternion.Euler(0f, (sIdx * 53f) % 360f, 0f);
                 float scale = 0.95f + (sIdx % 3) * 0.22f;
@@ -1462,7 +1920,7 @@ public class OasisWorldExpander : MonoBehaviour
             float angle = (b * 72f + index * 19f) * Mathf.Deg2Rad;
             float radius = 9.5f + (b % 2) * 2.0f;
             Vector3 rPos = centerWorldPos + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-            rPos.y = SampleDesertGroundY(rPos.x, rPos.z, baseGroundY) - 0.50f;
+            rPos.y = SampleDesertGroundY(rPos.x, rPos.z, baseGroundY) - 0.65f;
 
             Quaternion rRot = Quaternion.Euler(0f, (b * 83f + index * 29f) % 360f, 0f);
             if (b % 2 == 0 && bigRocks.Count > 0)
@@ -1477,77 +1935,221 @@ public class OasisWorldExpander : MonoBehaviour
             }
         }
 
-        // 4. Nomad Shade Pavilion & Camp Props in the center of the grove
-        GameObject pavilion = new GameObject("Nomad_Shade_Pavilion");
-        pavilion.transform.SetParent(groveRoot.transform, false);
-        pavilion.transform.localPosition = Vector3.zero;
-        pavilion.transform.localRotation = Quaternion.Euler(0f, index * 45f, 0f);
+        // 4. Circular Sci-Fi Cyan Energy Beacon Pad with a deep 4.4m foundation so it never floats on dune slopes
+        GameObject beaconPad = new GameObject("Oasis_Energy_Beacon_Pad");
+        beaconPad.transform.SetParent(groveRoot.transform, false);
+        beaconPad.transform.localPosition = Vector3.zero;
 
-        // Raised stone carpet plinth so the camp floor is level on any dune slope
-        GameObject plinth = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        plinth.name = "Pavilion_Stone_Base";
-        plinth.transform.SetParent(pavilion.transform, false);
-        plinth.transform.localPosition = new Vector3(0f, -0.35f, 0f);
-        plinth.transform.localScale = new Vector3(6.8f, 1.1f, 6.8f);
-        plinth.GetComponent<MeshRenderer>().sharedMaterial = pillarMat;
+        GameObject outerRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        outerRing.name = "Beacon_Pad_Outer_Base";
+        outerRing.transform.SetParent(beaconPad.transform, false);
+        outerRing.transform.localPosition = new Vector3(0f, -2.1f, 0f);
+        outerRing.transform.localScale = new Vector3(7.6f, 2.2f, 7.6f); // Cylinder height is 2*scale.y = 4.4m
+        outerRing.GetComponent<MeshRenderer>().sharedMaterial = pillarMat;
 
-        // 4 Timber/Sandstone Support Posts
-        float postOffset = 2.9f;
-        float postHeight = 3.4f;
-        Vector3[] postCorners = new Vector3[]
+        GameObject innerDeck = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        innerDeck.name = "Beacon_Pad_Inner_Deck";
+        innerDeck.transform.SetParent(beaconPad.transform, false);
+        innerDeck.transform.localPosition = new Vector3(0f, 0.12f, 0f);
+        innerDeck.transform.localScale = new Vector3(5.4f, 0.18f, 5.4f);
+        innerDeck.GetComponent<MeshRenderer>().sharedMaterial = canopyMat;
+
+        GameObject glowRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        glowRing.name = "Beacon_Cyan_Ring";
+        glowRing.transform.SetParent(beaconPad.transform, false);
+        glowRing.transform.localPosition = new Vector3(0f, 0.25f, 0f);
+        glowRing.transform.localScale = new Vector3(3.4f, 0.08f, 3.4f);
+        glowRing.GetComponent<MeshRenderer>().sharedMaterial = lanternMat;
+        Destroy(glowRing.GetComponent<Collider>());
+
+        GameObject skyBeam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        skyBeam.name = "Beacon_Sky_Beam";
+        skyBeam.transform.SetParent(beaconPad.transform, false);
+        skyBeam.transform.localPosition = new Vector3(0f, 11.0f, 0f);
+        skyBeam.transform.localScale = new Vector3(0.42f, 11.0f, 0.42f);
+        skyBeam.GetComponent<MeshRenderer>().sharedMaterial = lanternMat;
+        Destroy(skyBeam.GetComponent<Collider>());
+
+        for (int p = 0; p < 3; p++)
         {
-            new Vector3(-postOffset, postHeight * 0.5f, -postOffset),
-            new Vector3( postOffset, postHeight * 0.5f, -postOffset),
-            new Vector3(-postOffset, postHeight * 0.5f,  postOffset),
-            new Vector3( postOffset, postHeight * 0.5f,  postOffset)
-        };
-        for (int c = 0; c < postCorners.Length; c++)
+            float pAng = (p * 120f + index * 30f) * Mathf.Deg2Rad;
+            Vector3 pylPos = new Vector3(Mathf.Cos(pAng) * 3.1f, 0.75f, Mathf.Sin(pAng) * 3.1f);
+            GameObject pylon = CreateBoxPart(beaconPad.transform, $"Beacon_Cover_Pylon_{p}", pylPos, new Vector3(1.4f, 1.25f, 0.55f), canopyMat);
+            pylon.transform.localRotation = Quaternion.Euler(0f, -pAng * Mathf.Rad2Deg + 90f, 0f);
+        }
+    }
+
+    /// <summary>
+    /// Constructs one of the 8 Enclosed Undercover Sci-Fi Hangar Hideout Bays around the perimeter valley floor,
+    /// directly inspired by the cliffside sci-fi outposts in OasisMenuBackground.jpg:
+    /// - Automatically seated on a verified flat valley-floor spot on Terrain_01 with a 7m-deep foundation
+    /// - Chamfered steel portal frames [===] with glowing cyan/amber light strips
+    /// - Solid overhead armored roof & 3 enclosed walls for 100% undercover spawn protection
+    /// - Central front blast shield with two wide 3.9m unobstructed exit lanes & grounded boarding ramp
+    /// - Walkable side ramp (with solid sandstone support wall) to a 2nd-story observation deck + radar dish
+    /// </summary>
+    private void BuildUndercoverSciFiHangarHideout(
+        Transform parent, int index, Vector3 worldPos, Vector3 playableCenter,
+        Material alloyMat, Material deckMat, Material stoneMat, Material darkStoneMat,
+        Material cyanGlowMat, Material amberGlowMat)
+    {
+        Vector3 initToCenter = (playableCenter - worldPos);
+        initToCenter.y = 0f;
+        if (initToCenter.sqrMagnitude < 0.01f) initToCenter = Vector3.forward;
+        Quaternion initRot = Quaternion.LookRotation(initToCenter.normalized);
+
+        float hangarWidth = 14.0f;  // X: -7.0m .. +7.0m
+        float hangarDepth = 11.0f;  // Z: -5.5m .. +5.5m
+        float hangarHeight = 4.8f;  // Y: 0.0m .. +4.8m
+
+        // Locate the flattest valley-floor spot around worldPos so the hangar sits flush on the authentic desert floor
+        worldPos = FindFlatValleyFloorSpot(worldPos, hangarWidth * 0.5f, hangarDepth * 0.5f, initRot, 16f, 20f, out float minY, out float maxY, out float frontEntryY);
+
+        Vector3 toCenter = (playableCenter - worldPos);
+        toCenter.y = 0f;
+        if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
+        Quaternion hangarRot = Quaternion.LookRotation(toCenter.normalized);
+
+        // Anchor the hangar floor strictly ABOVE the highest terrain point in its footprint and front entrance so sand never pokes into the room
+        worldPos.y = Mathf.Max(maxY, frontEntryY) + 0.22f;
+
+        GameObject hangarRoot = new GameObject($"Undercover_Hangar_Hideout_{index}");
+        hangarRoot.transform.SetParent(parent, true);
+        hangarRoot.transform.position = worldPos;
+        hangarRoot.transform.rotation = hangarRot;
+
+        // 1. Deep 7.0m Sandstone Foundation + 0.80m Thick Walkable Interior Floor Deck (extended forward to z = +6.8m for an open front porch)
+        CreateBoxPart(hangarRoot.transform, $"HangarFoundation_{index}", new Vector3(0f, -3.50f, 0.5f), new Vector3(hangarWidth + 2.4f, 7.0f, hangarDepth + 3.0f), darkStoneMat);
+        CreateBoxPart(hangarRoot.transform, $"Terrain_01_HangarFloor_{index}", new Vector3(0f, -0.30f, 0.5f), new Vector3(hangarWidth + 1.2f, 0.80f, hangarDepth + 1.6f), deckMat);
+
+        // 2. Full-Width Gentle Front Entry/Exit Boarding Ramp + Solid Underground Ramp Support Base
+        Vector3 frontGroundCheck = hangarRoot.transform.TransformPoint(new Vector3(0f, 0f, hangarDepth * 0.5f + 5.2f));
+        float frontSandY = SampleDesertGroundY(frontGroundCheck.x, frontGroundCheck.z, frontEntryY);
+        float dropHeight = Mathf.Clamp(worldPos.y - frontSandY + 0.35f, 0.55f, 2.6f);
+        float rampLen = Mathf.Max(6.4f, dropHeight * 3.5f);
+        float rampPitch = Mathf.Atan2(dropHeight, rampLen) * Mathf.Rad2Deg;
+
+        GameObject frontRamp = CreateBoxPart(
+            hangarRoot.transform,
+            $"HangarFrontRamp_{index}",
+            new Vector3(0f, -dropHeight * 0.5f + 0.06f, hangarDepth * 0.5f + 0.8f + rampLen * 0.44f),
+            new Vector3(12.2f, 0.45f, rampLen + 1.6f),
+            deckMat
+        );
+        frontRamp.transform.localRotation = Quaternion.Euler(rampPitch, 0f, 0f);
+        CreateBoxPart(hangarRoot.transform, $"HangarFrontRampBase_{index}", new Vector3(0f, -dropHeight - 2.1f, hangarDepth * 0.5f + 0.8f + rampLen * 0.35f), new Vector3(12.4f, 4.2f, rampLen * 0.82f), darkStoneMat);
+
+        // 3. Enclosed Armored Back Wall & Left/Right Walls with Wide 4.2m Flank Exit Portals (3 Exits: Front, Left, Right!)
+        CreateBoxPart(hangarRoot.transform, $"Hangar_BackWall_{index}", new Vector3(0f, hangarHeight * 0.5f, -hangarDepth * 0.5f), new Vector3(hangarWidth + 0.4f, hangarHeight, 0.55f), alloyMat);
+
+        // Left & Right Walls split into Rear Pillar + Front Pillar + Upper Lintel leaving a 4.2m wide x 3.6m high Side Exit Doorway on both flanks
+        for (int side = -1; side <= 1; side += 2)
         {
-            GameObject post = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            post.name = $"Pavilion_Post_{c}";
-            post.transform.SetParent(pavilion.transform, false);
-            post.transform.localPosition = postCorners[c];
-            post.transform.localScale = new Vector3(0.32f, postHeight, 0.32f);
-            post.GetComponent<MeshRenderer>().sharedMaterial = pillarMat;
+            string sTag = (side < 0) ? "L" : "R";
+            float sx = side * (hangarWidth * 0.5f);
+            CreateBoxPart(hangarRoot.transform, $"Hangar_SideWall_{sTag}_Back_{index}",  new Vector3(sx, hangarHeight * 0.5f, -3.8f), new Vector3(0.55f, hangarHeight, 3.4f), alloyMat);
+            CreateBoxPart(hangarRoot.transform, $"Hangar_SideWall_{sTag}_Front_{index}", new Vector3(sx, hangarHeight * 0.5f,  3.8f), new Vector3(0.55f, hangarHeight, 3.4f), alloyMat);
+            CreateBoxPart(hangarRoot.transform, $"Hangar_SideWall_{sTag}_Lintel_{index}", new Vector3(sx, hangarHeight - 0.55f, 0f), new Vector3(0.65f, 1.1f, 4.4f), alloyMat);
+
+            // Walkable Side Exit Boarding Ramp on both Left (-X) and Right (+X) doorways
+            GameObject sideExitRamp = CreateBoxPart(
+                hangarRoot.transform,
+                $"Hangar_SideExitRamp_{sTag}_{index}",
+                new Vector3(sx + side * 2.2f, -0.45f, 0f),
+                new Vector3(4.6f, 0.40f, 4.2f),
+                deckMat
+            );
+            sideExitRamp.transform.localRotation = Quaternion.Euler(0f, 0f, -side * 14f);
+            CreateBoxPart(hangarRoot.transform, $"Hangar_SideExitBase_{sTag}_{index}", new Vector3(sx + side * 2.0f, -2.4f, 0f), new Vector3(4.2f, 4.0f, 4.2f), darkStoneMat);
         }
 
-        // Overhead Desert Shade Canopy
-        GameObject canopy = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        canopy.name = "Pavilion_Shade_Canopy";
-        canopy.transform.SetParent(pavilion.transform, false);
-        canopy.transform.localPosition = new Vector3(0f, postHeight + 0.1f, 0f);
-        canopy.transform.localScale = new Vector3(6.6f, 0.22f, 6.6f);
-        canopy.GetComponent<MeshRenderer>().sharedMaterial = canopyMat;
+        // 4. Chamfered Front Hangar Portal Frame [===] with 10.2m Wide Unobstructed Opening & Glowing Status Strips
+        CreateBoxPart(hangarRoot.transform, $"Hangar_FrontWall_L_{index}", new Vector3(-6.1f, hangarHeight * 0.5f, hangarDepth * 0.5f), new Vector3(1.9f, hangarHeight, 0.65f), alloyMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_FrontWall_R_{index}", new Vector3( 6.1f, hangarHeight * 0.5f, hangarDepth * 0.5f), new Vector3(1.9f, hangarHeight, 0.65f), alloyMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Portal_Lintel_{index}", new Vector3(0f, hangarHeight - 0.45f, hangarDepth * 0.5f), new Vector3(hangarWidth + 0.6f, 0.9f, 0.85f), alloyMat);
 
-        // Duplicated Firepit, Carpets & Cushions on the Pavilion Floor
-        Vector3 campFloorWorld = pavilion.transform.TransformPoint(new Vector3(0f, 0.21f, 0f));
-        if (carpets.Count > 0)
+        Material portalGlow = (index % 2 == 0) ? cyanGlowMat : amberGlowMat;
+        GameObject topPortalStrip = CreateBoxPart(hangarRoot.transform, $"Hangar_Portal_GlowTop_{index}", new Vector3(0f, hangarHeight - 0.55f, hangarDepth * 0.5f + 0.45f), new Vector3(9.6f, 0.14f, 0.08f), portalGlow);
+        Destroy(topPortalStrip.GetComponent<Collider>());
+
+        // 5. Exterior Front Blast Shield Baffle placed outside the doorway (Z = +5.8m) so interior room is 100% open
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Blast_Baffle_{index}", new Vector3(0f, 1.35f, hangarDepth * 0.5f + 0.4f), new Vector3(2.2f, 2.5f, 0.50f), alloyMat);
+        GameObject baffleStripe = CreateBoxPart(hangarRoot.transform, $"Hangar_Baffle_Glow_{index}", new Vector3(0f, 2.05f, hangarDepth * 0.5f + 0.12f), new Vector3(1.6f, 0.12f, 0.06f), cyanGlowMat);
+        Destroy(baffleStripe.GetComponent<Collider>());
+
+        // 6. Solid Overhead Hangar Roof Slab & Cantilevered 2nd-Story Observation Deck (Y = +4.8m)
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Roof_{index}", new Vector3(0f, hangarHeight, 0f), new Vector3(hangarWidth + 1.4f, 0.45f, hangarDepth + 1.8f), deckMat);
+
+        // Interior recessed ceiling light strips & point light so undercover spawns are brightly lit
+        for (int lx = -1; lx <= 1; lx += 2)
         {
-            SpawnMeshAsset(pavilion.transform, "Camp_Carpet", carpets[index % carpets.Count], campFloorWorld, pavilion.transform.rotation, Vector3.one * 1.15f, false, false);
+            GameObject cStrip = CreateBoxPart(hangarRoot.transform, $"Hangar_Ceiling_LightStrip_{lx}", new Vector3(lx * 3.2f, hangarHeight - 0.26f, -0.5f), new Vector3(0.45f, 0.08f, 7.5f), cyanGlowMat);
+            Destroy(cStrip.GetComponent<Collider>());
         }
-        if (firepits.Count > 0)
+        GameObject interiorLightObj = new GameObject($"Hangar_Interior_PointLight_{index}");
+        interiorLightObj.transform.SetParent(hangarRoot.transform, false);
+        interiorLightObj.transform.localPosition = new Vector3(0f, hangarHeight - 0.6f, -0.5f);
+        Light interiorLight = interiorLightObj.AddComponent<Light>();
+        interiorLight.type = LightType.Point;
+        interiorLight.color = new Color(0.85f, 0.95f, 1.0f);
+        interiorLight.intensity = 2.0f;
+        interiorLight.range = 16f;
+
+        // 7. Exterior Rear Boarding Ramp up to the 2nd-Story Observation Deck (leaves Front, Left, and Right doorways 100% open!)
+        GameObject upperRamp = CreateBoxPart(
+            hangarRoot.transform,
+            $"Hangar_UpperDeck_Ramp_{index}",
+            new Vector3(1.2f, hangarHeight * 0.5f - 0.35f, -hangarDepth * 0.5f - 2.0f),
+            new Vector3(14.0f, 0.40f, 2.8f),
+            deckMat
+        );
+        upperRamp.transform.localRotation = Quaternion.Euler(0f, 0f, 22.0f);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_UpperDeck_RampSupport_{index}", new Vector3(2.8f, -1.6f, -hangarDepth * 0.5f - 2.0f), new Vector3(10.8f, 5.2f, 2.8f), darkStoneMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Upper_Obs_Deck_Landing_{index}", new Vector3(hangarWidth * 0.5f - 1.2f, hangarHeight, -hangarDepth * 0.5f - 2.0f), new Vector3(3.2f, 0.4f, 3.0f), deckMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Upper_Landing_Pillar_{index}", new Vector3(hangarWidth * 0.5f - 1.2f, hangarHeight * 0.5f - 1.5f, -hangarDepth * 0.5f - 2.0f), new Vector3(2.6f, hangarHeight + 3.0f, 2.6f), stoneMat);
+
+        // Rooftop sniper parapets & glowing deck perimeter nodes
+        float parapetY = hangarHeight + 0.65f;
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Roof_Parapet_FL_{index}", new Vector3(-4.2f, parapetY, hangarDepth * 0.5f + 0.6f), new Vector3(4.6f, 1.1f, 0.4f), alloyMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Roof_Parapet_FR_{index}", new Vector3( 4.2f, parapetY, hangarDepth * 0.5f + 0.6f), new Vector3(4.6f, 1.1f, 0.4f), alloyMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Roof_Parapet_Back_{index}", new Vector3(-2.2f, parapetY, -hangarDepth * 0.5f - 0.6f), new Vector3(9.2f, 1.1f, 0.4f), alloyMat);
+
+        // 8. Rooftop Communications Mast & Parabolic Satellite/Radar Dish (matching OasisMenuBackground.jpg)
+        float mastBaseY = hangarHeight + 0.25f;
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Radar_Pedestal_{index}", new Vector3(-4.5f, mastBaseY + 1.2f, -3.2f), new Vector3(1.8f, 2.4f, 1.8f), alloyMat);
+        CreateBoxPart(hangarRoot.transform, $"Hangar_Radar_Mast_{index}", new Vector3(-4.5f, mastBaseY + 4.2f, -3.2f), new Vector3(0.55f, 6.0f, 0.55f), alloyMat);
+
+        GameObject dish = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        dish.name = $"Hangar_Parabolic_Dish_{index}";
+        dish.transform.SetParent(hangarRoot.transform, false);
+        dish.transform.localPosition = new Vector3(-4.5f, mastBaseY + 6.4f, -2.6f);
+        dish.transform.localRotation = Quaternion.Euler(52f, 20f, 0f);
+        dish.transform.localScale = new Vector3(3.6f, 0.22f, 3.6f);
+        dish.GetComponent<MeshRenderer>().sharedMaterial = alloyMat;
+        Destroy(dish.GetComponent<Collider>());
+
+        GameObject dishFeed = CreateBoxPart(hangarRoot.transform, $"Hangar_Dish_Beacon_{index}", new Vector3(-4.5f, mastBaseY + 7.6f, -3.2f), new Vector3(0.38f, 1.4f, 0.38f), portalGlow);
+        Destroy(dishFeed.GetComponent<Collider>());
+
+        // Clear any scene rocks, cliffs, or palms that could block the hangar interior or doorways
+        ClearSceneObstaclesAroundBuilding(hangarRoot.transform, hangarWidth + 6f, hangarDepth + 8f);
+
+        // 9. Register the 4 Undercover Interior Spawn Slots inside this Hangar Hideout with OasisSpawnSystem
+        if (OasisSpawnSystem.Instance != null)
         {
-            Vector3 fpPos = pavilion.transform.TransformPoint(new Vector3(0f, 0.22f, 2.2f));
-            SpawnMeshAsset(pavilion.transform, "Camp_Firepit", firepits[index % firepits.Count], fpPos, pavilion.transform.rotation, Vector3.one * 1.2f, true, false);
-        }
-        if (cushions.Count > 0)
-        {
-            for (int k = 0; k < 3; k++)
+            Vector3[] localSlots = new Vector3[]
             {
-                Vector3 cPos = pavilion.transform.TransformPoint(new Vector3(-1.4f + k * 1.4f, 0.24f, -1.2f));
-                Quaternion cRot = pavilion.transform.rotation * Quaternion.Euler(0f, k * 35f, 0f);
-                SpawnMeshAsset(pavilion.transform, $"Camp_Cushion_{k}", cushions[(k + index) % cushions.Count], cPos, cRot, Vector3.one * 1.15f, false, false);
+                new Vector3(-3.2f, 0.22f, -1.8f),
+                new Vector3( 3.2f, 0.22f, -1.8f),
+                new Vector3(-2.0f, 0.22f, -2.6f),
+                new Vector3( 2.0f, 0.22f, -2.6f)
+            };
+            for (int s = 0; s < localSlots.Length; s++)
+            {
+                Vector3 slotWorld = hangarRoot.transform.TransformPoint(localSlots[s]);
+                OasisSpawnSystem.Instance.RegisterHangarInteriorSpawn(index, slotWorld, hangarRot);
             }
         }
-
-        // Warm camp lantern light
-        GameObject lantern = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        lantern.name = "Pavilion_Lantern";
-        lantern.transform.SetParent(pavilion.transform, false);
-        lantern.transform.localPosition = new Vector3(0f, postHeight - 0.25f, 0f);
-        lantern.transform.localScale = new Vector3(0.35f, 0.25f, 0.35f);
-        lantern.GetComponent<MeshRenderer>().sharedMaterial = lanternMat;
-        Destroy(lantern.GetComponent<Collider>());
     }
 
     private void BuildNaturalRockOutcrop(
@@ -1567,7 +2169,7 @@ public class OasisWorldExpander : MonoBehaviour
         {
             Quaternion mainRot = Quaternion.Euler(0f, (index * 57f) % 360f, 0f);
             Vector3 mainScale = new Vector3(1.85f + (index % 3) * 0.35f, 2.1f + (index % 2) * 0.45f, 1.85f);
-            Vector3 mainPos = centerWorldPos + Vector3.down * 0.65f; // Firmly embedded into the sand dune
+            Vector3 mainPos = centerWorldPos + Vector3.down * 0.85f; // Firmly embedded into the sand dune
             GameObject mainRock = SpawnMeshAsset(outcropRoot.transform, "Primary_Boulder_Spire", bigRocks[index % bigRocks.Count], mainPos, mainRot, mainScale, true, false);
             if (mainRock != null)
             {
@@ -1585,7 +2187,7 @@ public class OasisWorldExpander : MonoBehaviour
             float angle = (f * 120f + index * 31f) * Mathf.Deg2Rad;
             float dist = 3.2f + f * 0.8f;
             Vector3 fPos = centerWorldPos + new Vector3(Mathf.Cos(angle) * dist, 0f, Mathf.Sin(angle) * dist);
-            fPos.y = SampleDesertGroundY(fPos.x, fPos.z, groundY) - 0.45f;
+            fPos.y = SampleDesertGroundY(fPos.x, fPos.z, groundY) - 0.65f;
             Quaternion fRot = Quaternion.Euler(0f, (f * 95f + index * 40f) % 360f, 0f);
 
             if (medRocks.Count > 0)
@@ -1599,13 +2201,13 @@ public class OasisWorldExpander : MonoBehaviour
         if (index % 2 == 0 && tallPalms.Count > 0)
         {
             Vector3 pPos = centerWorldPos + new Vector3(2.8f, 0f, -2.4f);
-            pPos.y = SampleDesertGroundY(pPos.x, pPos.z, groundY) - 0.30f;
+            pPos.y = SampleDesertGroundY(pPos.x, pPos.z, groundY) - 0.35f;
             SpawnMeshAsset(outcropRoot.transform, "Outcrop_Palm", tallPalms[index % tallPalms.Count], pPos, Quaternion.Euler(0f, index * 77f, 0f), Vector3.one * 0.95f, false, true);
         }
         if (sagoShrubs.Count > 0)
         {
             Vector3 sPos = centerWorldPos + new Vector3(-2.6f, 0f, 2.2f);
-            sPos.y = SampleDesertGroundY(sPos.x, sPos.z, groundY) - 0.25f;
+            sPos.y = SampleDesertGroundY(sPos.x, sPos.z, groundY) - 0.30f;
             SpawnMeshAsset(outcropRoot.transform, "Outcrop_Shrub", sagoShrubs[index % sagoShrubs.Count], sPos, Quaternion.Euler(0f, index * 43f, 0f), Vector3.one * 1.15f, false, false);
         }
     }
@@ -1624,42 +2226,47 @@ public class OasisWorldExpander : MonoBehaviour
 
         float spanHalfWidth = 5.2f;
 
-        // Left & Right Natural Rock Pillars (firmly embedded into terrain, forming a natural canyon gateway)
         if (bigRocks.Count > 0)
         {
-            Vector3 leftWorld = archRoot.transform.TransformPoint(new Vector3(-spanHalfWidth, -0.65f, 0f));
-            Vector3 rightWorld = archRoot.transform.TransformPoint(new Vector3( spanHalfWidth, -0.65f, 0f));
+            Vector3 leftWorld = archRoot.transform.TransformPoint(new Vector3(-spanHalfWidth, 0f, 0f));
+            leftWorld.y = SampleDesertGroundY(leftWorld.x, leftWorld.z, groundY) - 0.95f;
+            Vector3 rightWorld = archRoot.transform.TransformPoint(new Vector3(spanHalfWidth, 0f, 0f));
+            rightWorld.y = SampleDesertGroundY(rightWorld.x, rightWorld.z, groundY) - 0.95f;
 
             SpawnMeshAsset(archRoot.transform, "Arch_Pillar_Left", bigRocks[0], leftWorld, worldRot * Quaternion.Euler(0f, 0f, -6f), new Vector3(2.4f, 3.8f, 2.4f), true, false);
             SpawnMeshAsset(archRoot.transform, "Arch_Pillar_Right", bigRocks[0], rightWorld, worldRot * Quaternion.Euler(0f, 180f, -6f), new Vector3(2.4f, 3.8f, 2.4f), true, false);
         }
         else
         {
-            // Fallback sandstone gateway pillars
             GameObject leftPillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
             leftPillar.transform.SetParent(archRoot.transform, false);
-            leftPillar.transform.localPosition = new Vector3(-spanHalfWidth, 3.0f, 0f);
-            leftPillar.transform.localScale = new Vector3(3.2f, 6.0f, 3.6f);
+            leftPillar.transform.localPosition = new Vector3(-spanHalfWidth, 2.0f, 0f);
+            leftPillar.transform.localScale = new Vector3(3.2f, 8.0f, 3.6f);
             leftPillar.GetComponent<MeshRenderer>().sharedMaterial = stoneMat;
 
             GameObject rightPillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
             rightPillar.transform.SetParent(archRoot.transform, false);
-            rightPillar.transform.localPosition = new Vector3(spanHalfWidth, 3.0f, 0f);
-            rightPillar.transform.localScale = new Vector3(3.2f, 6.0f, 3.6f);
+            rightPillar.transform.localPosition = new Vector3(spanHalfWidth, 2.0f, 0f);
+            rightPillar.transform.localScale = new Vector3(3.2f, 8.0f, 3.6f);
             rightPillar.GetComponent<MeshRenderer>().sharedMaterial = stoneMat;
         }
     }
 
     /// <summary>
-    /// Landmark A: 2-Story Fortified Sniper Watchtower on the Eastern Ridge with a walkable boarding ramp,
-    /// ground-floor tactical room, elevated 4.2m sniper deck, crenellated battlements, and overhead canopy.
+    /// Landmark A: 2-Story Fortified Sniper Watchtower on the Eastern Valley Floor with a walkable boarding ramp,
+    /// ground-floor tactical room, elevated 4.2m sniper deck, crenellated battlements, and 7m-deep foundations.
     /// </summary>
     private void BuildEasternWatchtowerOutpost(
         Transform parent, Vector3 worldPos, Vector3 arenaCenter,
         Material alloyMat, Material deckMat, Material stoneMat, Material glowMat)
     {
-        float groundY = SampleDesertGroundY(worldPos.x, worldPos.z);
-        worldPos.y = groundY;
+        Vector3 initToCenter = (arenaCenter - worldPos);
+        initToCenter.y = 0f;
+        if (initToCenter.sqrMagnitude < 0.01f) initToCenter = Vector3.left;
+        Quaternion initRot = Quaternion.LookRotation(initToCenter.normalized);
+
+        worldPos = FindFlatValleyFloorSpot(worldPos, 6.2f, 6.2f, initRot, 18f, 18f, out float minY, out float maxY, out float frontY);
+        worldPos.y = Mathf.Clamp(maxY + 0.10f, frontY + 0.12f, frontY + 0.75f);
 
         GameObject towerRoot = new GameObject("East_Ridge_Sniper_Watchtower");
         towerRoot.transform.SetParent(parent, true);
@@ -1675,8 +2282,23 @@ public class OasisWorldExpander : MonoBehaviour
         float deckHeight = 4.2f;
         float roofHeight = 8.0f;
 
-        // 1. Deep Ground Foundation Slab (levels the tower cleanly on the eastern dune slope)
-        CreateBoxPart(towerRoot.transform, "Watchtower_Foundation", new Vector3(0f, -1.1f, 0f), new Vector3(deckWidth + 1.2f, 2.4f, deckDepth + 1.2f), stoneMat);
+        // 1. Deep 7.0m Ground Foundation Slab + Ground Floor Walkable Deck + 4-Way Smooth Perimeter Approach Ramps
+        CreateBoxPart(towerRoot.transform, "Watchtower_Foundation", new Vector3(0f, -3.45f, 0f), new Vector3(deckWidth + 1.4f, 7.0f, deckDepth + 1.4f), stoneMat);
+        CreateBoxPart(towerRoot.transform, "Watchtower_Ground_Deck", new Vector3(0f, -0.20f, 0f), new Vector3(deckWidth + 0.6f, 0.50f, deckDepth + 0.6f), deckMat);
+
+        // 4-Way Smooth Approach Ramps so players and AI never get caught against foundation ledges from any direction
+        float rampW = deckWidth + 0.6f;
+        GameObject frontRamp = CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Front", new Vector3(0f, -0.35f, deckDepth * 0.5f + 2.2f), new Vector3(rampW, 0.45f, 4.8f), deckMat);
+        frontRamp.transform.localRotation = Quaternion.Euler(12f, 0f, 0f);
+
+        GameObject backRamp = CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Back", new Vector3(0f, -0.35f, -(deckDepth * 0.5f + 2.2f)), new Vector3(rampW, 0.45f, 4.8f), deckMat);
+        backRamp.transform.localRotation = Quaternion.Euler(-12f, 0f, 0f);
+
+        GameObject leftRamp = CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Left", new Vector3(-(deckWidth * 0.5f + 2.2f), -0.35f, 0f), new Vector3(4.8f, 0.45f, deckDepth + 0.6f), deckMat);
+        leftRamp.transform.localRotation = Quaternion.Euler(0f, 0f, -12f);
+
+        GameObject rightRamp = CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Right", new Vector3(deckWidth * 0.5f + 2.2f, -0.35f, 0f), new Vector3(4.8f, 0.45f, deckDepth + 0.6f), deckMat);
+        rightRamp.transform.localRotation = Quaternion.Euler(0f, 0f, 12f);
 
         // 2. 4 Heavy Corner Support Columns extending up to the 8m canopy roof
         float colOff = deckWidth * 0.5f - 0.45f;
@@ -1693,13 +2315,14 @@ public class OasisWorldExpander : MonoBehaviour
         // 4. Second-Story Walkable Sniper Deck Floor (Y = 4.2m)
         CreateBoxPart(towerRoot.transform, "Upper_Sniper_Deck", new Vector3(0f, deckHeight, 0f), new Vector3(deckWidth + 0.6f, 0.4f, deckDepth + 0.6f), deckMat);
 
-        // 5. Wide Walkable Boarding Ramp on the Right Side (+X) leading from the sand up to the 4.2m Sniper Deck
-        // Ramp rises 4.4m over a 10.5m horizontal run (~22.7 deg slope, well within CharacterController's 45-deg slopeLimit!)
-        GameObject rampObj = CreateBoxPart(towerRoot.transform, "Watchtower_Access_Ramp", new Vector3(deckWidth * 0.5f + 1.5f, deckHeight * 0.5f - 0.1f, -1.2f), new Vector3(2.8f, 0.35f, 11.8f), deckMat);
+        // 5. Wide Walkable Boarding Ramp on the Right Side (+X) + Deep Sandstone Support Wall
+        GameObject rampObj = CreateBoxPart(towerRoot.transform, "Watchtower_Access_Ramp", new Vector3(deckWidth * 0.5f + 1.5f, deckHeight * 0.5f - 0.35f, -1.5f), new Vector3(2.8f, 0.40f, 13.4f), deckMat);
         rampObj.transform.localRotation = Quaternion.Euler(-22.5f, 0f, 0f);
+        CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Support_Wall", new Vector3(deckWidth * 0.5f + 1.5f, -1.6f, 0.2f), new Vector3(2.8f, 5.2f, 10.6f), stoneMat);
 
-        // Upper Landing Bridge connecting the top of the ramp into the sniper deck
+        // Upper Landing Bridge & Support Pillar connecting the top of the ramp into the sniper deck
         CreateBoxPart(towerRoot.transform, "Watchtower_Ramp_Landing", new Vector3(deckWidth * 0.5f + 1.5f, deckHeight, deckDepth * 0.5f - 0.8f), new Vector3(3.0f, 0.4f, 2.8f), deckMat);
+        CreateBoxPart(towerRoot.transform, "Watchtower_Landing_Pillar", new Vector3(deckWidth * 0.5f + 1.5f, deckHeight * 0.5f - 1.5f, deckDepth * 0.5f - 0.8f), new Vector3(2.6f, deckHeight + 3.0f, 2.6f), stoneMat);
 
         // 6. Crenellated Sniper Battlements around the 2nd-story deck (leaving entry open at the ramp landing)
         float parapetY = deckHeight + 0.65f;
@@ -1716,15 +2339,20 @@ public class OasisWorldExpander : MonoBehaviour
     }
 
     /// <summary>
-    /// Landmark B: Twin Fortified Bastions connected by a 16m Elevated Walkable Skybridge on the Western Dunes,
-    /// with two gentle walkable access ramps so players can fight both underneath and across the top bridge.
+    /// Landmark B: Twin Fortified Bastions connected by a 16m Elevated Walkable Skybridge on the Western Valley Floor,
+    /// with two properly angled and grounded access ramps so players can fight both underneath and across the top bridge.
     /// </summary>
     private void BuildWesternSkybridgeCompound(
         Transform parent, Vector3 worldPos, Vector3 arenaCenter,
         Material alloyMat, Material deckMat, Material stoneMat, Material glowMat)
     {
-        float groundY = SampleDesertGroundY(worldPos.x, worldPos.z);
-        worldPos.y = groundY;
+        Vector3 initToCenter = (arenaCenter - worldPos);
+        initToCenter.y = 0f;
+        if (initToCenter.sqrMagnitude < 0.01f) initToCenter = Vector3.right;
+        Quaternion initRot = Quaternion.LookRotation(initToCenter.normalized);
+
+        worldPos = FindFlatValleyFloorSpot(worldPos, 6.0f, 11.0f, initRot, 18f, 18f, out float minY, out float maxY, out float frontY);
+        worldPos.y = Mathf.Clamp(maxY + 0.10f, frontY + 0.12f, frontY + 0.85f);
 
         GameObject compoundRoot = new GameObject("West_Dune_Skybridge_Compound");
         compoundRoot.transform.SetParent(parent, true);
@@ -1743,8 +2371,8 @@ public class OasisWorldExpander : MonoBehaviour
         for (int b = 0; b < bastionZs.Length; b++)
         {
             float bz = bastionZs[b];
-            // Deep foundation & ground cover pillars
-            CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Foundation", new Vector3(0f, -1.2f, bz), new Vector3(7.4f, 2.4f, 7.4f), stoneMat);
+            // Deep 7.0m foundation & ground cover pillars
+            CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Foundation", new Vector3(0f, -3.45f, bz), new Vector3(7.6f, 7.0f, 7.6f), stoneMat);
             CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Pillar_L", new Vector3(-2.8f, bridgeHeight * 0.5f, bz), new Vector3(1.1f, bridgeHeight, 6.4f), stoneMat);
             CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Pillar_R", new Vector3( 2.8f, bridgeHeight * 0.5f, bz), new Vector3(1.1f, bridgeHeight, 6.4f), stoneMat);
 
@@ -1755,7 +2383,7 @@ public class OasisWorldExpander : MonoBehaviour
             CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_FrontWall", new Vector3(3.4f, bridgeHeight + 0.65f, bz), new Vector3(0.35f, 1.1f, 6.8f), alloyMat);
 
             // Glowing Beacon Pylon on outer corner
-            GameObject pylon = CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Pylon", new Vector3(-3.2f, bridgeHeight + 1.8f, bz + (b == 0 ? -3.2f : 3.2f)), new Vector3(0.4f, 3.2f, 0.4f), alloyMat);
+            CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Pylon", new Vector3(-3.2f, bridgeHeight + 1.8f, bz + (b == 0 ? -3.2f : 3.2f)), new Vector3(0.4f, 3.2f, 0.4f), alloyMat);
             GameObject glow = CreateBoxPart(compoundRoot.transform, $"Bastion_{b}_Glow", new Vector3(-3.2f, bridgeHeight + 3.1f, bz + (b == 0 ? -3.2f : 3.2f)), new Vector3(0.5f, 0.5f, 0.5f), glowMat);
             Destroy(glow.GetComponent<Collider>());
         }
@@ -1765,24 +2393,31 @@ public class OasisWorldExpander : MonoBehaviour
         CreateBoxPart(compoundRoot.transform, "Skybridge_Parapet_East", new Vector3( 1.75f, bridgeHeight + 0.55f, 0f), new Vector3(0.3f, 0.95f, 13.0f), alloyMat);
         CreateBoxPart(compoundRoot.transform, "Skybridge_Parapet_West", new Vector3(-1.75f, bridgeHeight + 0.55f, 0f), new Vector3(0.3f, 0.95f, 13.0f), alloyMat);
 
-        // 3. Two Opposing Walkable Boarding Ramps on the West (back) side leading up to each Bastion
-        GameObject rampSouth = CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_South", new Vector3(-5.2f, bridgeHeight * 0.5f - 0.1f, -bastionSpanZ), new Vector3(10.8f, 0.35f, 2.8f), deckMat);
-        rampSouth.transform.localRotation = Quaternion.Euler(0f, 0f, -21.5f);
+        // 3. Two Walkable Boarding Ramps on the West (-X) side leading from the desert floor up to each Bastion (+21.5 deg Z-pitch!)
+        GameObject rampSouth = CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_South", new Vector3(-8.4f, bridgeHeight * 0.5f - 0.35f, -bastionSpanZ), new Vector3(12.2f, 0.40f, 2.8f), deckMat);
+        rampSouth.transform.localRotation = Quaternion.Euler(0f, 0f, 21.5f);
+        CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_Support_South", new Vector3(-7.6f, -1.6f, -bastionSpanZ), new Vector3(9.8f, 5.2f, 2.8f), stoneMat);
 
-        GameObject rampNorth = CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_North", new Vector3(-5.2f, bridgeHeight * 0.5f - 0.1f,  bastionSpanZ), new Vector3(10.8f, 0.35f, 2.8f), deckMat);
-        rampNorth.transform.localRotation = Quaternion.Euler(0f, 0f, -21.5f);
+        GameObject rampNorth = CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_North", new Vector3(-8.4f, bridgeHeight * 0.5f - 0.35f,  bastionSpanZ), new Vector3(12.2f, 0.40f, 2.8f), deckMat);
+        rampNorth.transform.localRotation = Quaternion.Euler(0f, 0f, 21.5f);
+        CreateBoxPart(compoundRoot.transform, "Skybridge_Ramp_Support_North", new Vector3(-7.6f, -1.6f,  bastionSpanZ), new Vector3(9.8f, 5.2f, 2.8f), stoneMat);
     }
 
     /// <summary>
     /// Landmark C: Southern Canyon Ancient-Sci-Fi Citadel & Colonnade Overlook with a wide central ramp,
-    /// 6 sandstone columns with overhead architraves, and glowing monolith crystals.
+    /// 6 sandstone columns with overhead architraves, glowing monolith crystals, and 7.5m-deep foundations.
     /// </summary>
     private void BuildSouthernCitadelRuins(
         Transform parent, Vector3 worldPos, Vector3 arenaCenter,
         Material stoneMat, Material darkStoneMat, Material alloyMat, Material glowMat)
     {
-        float groundY = SampleDesertGroundY(worldPos.x, worldPos.z);
-        worldPos.y = groundY;
+        Vector3 initToCenter = (arenaCenter - worldPos);
+        initToCenter.y = 0f;
+        if (initToCenter.sqrMagnitude < 0.01f) initToCenter = Vector3.forward;
+        Quaternion initRot = Quaternion.LookRotation(initToCenter.normalized);
+
+        worldPos = FindFlatValleyFloorSpot(worldPos, 8.0f, 6.5f, initRot, 18f, 18f, out float minY, out float maxY, out float frontY);
+        worldPos.y = Mathf.Clamp(maxY + 0.10f, frontY + 0.12f, frontY + 0.85f);
 
         GameObject citadelRoot = new GameObject("South_Canyon_Citadel_Overlook");
         citadelRoot.transform.SetParent(parent, true);
@@ -1797,13 +2432,14 @@ public class OasisWorldExpander : MonoBehaviour
         float terraceWidth = 16.0f;
         float terraceDepth = 10.0f;
 
-        // 1. Solid Tiered Sandstone Terrace Platform
-        CreateBoxPart(citadelRoot.transform, "Citadel_Lower_Tier", new Vector3(0f, (terraceHeight * 0.5f) - 0.8f, 0f), new Vector3(terraceWidth + 2.4f, terraceHeight + 1.6f, terraceDepth + 2.4f), darkStoneMat);
+        // 1. Solid Tiered Sandstone Terrace Platform with a 7.5m-deep foundation
+        CreateBoxPart(citadelRoot.transform, "Citadel_Lower_Tier", new Vector3(0f, -0.35f, 0f), new Vector3(terraceWidth + 2.4f, 7.5f, terraceDepth + 2.4f), darkStoneMat);
         CreateBoxPart(citadelRoot.transform, "Citadel_Upper_Deck", new Vector3(0f, terraceHeight, 0f), new Vector3(terraceWidth, 0.4f, terraceDepth), stoneMat);
 
-        // 2. Wide Central Walkable Grand Ramp facing the Oasis Pond
-        GameObject grandRamp = CreateBoxPart(citadelRoot.transform, "Citadel_Grand_Ramp", new Vector3(0f, terraceHeight * 0.5f - 0.15f, terraceDepth * 0.5f + 4.2f), new Vector3(4.8f, 0.4f, 10.2f), stoneMat);
+        // 2. Wide Central Walkable Grand Ramp facing the Oasis Pond + Deep Ramp Support Base
+        GameObject grandRamp = CreateBoxPart(citadelRoot.transform, "Citadel_Grand_Ramp", new Vector3(0f, terraceHeight * 0.5f - 0.35f, terraceDepth * 0.5f + 4.8f), new Vector3(4.8f, 0.45f, 11.8f), stoneMat);
         grandRamp.transform.localRotation = Quaternion.Euler(21.0f, 0f, 0f);
+        CreateBoxPart(citadelRoot.transform, "Citadel_Ramp_Support_Base", new Vector3(0f, -1.6f, terraceDepth * 0.5f + 4.2f), new Vector3(4.8f, 5.2f, 9.6f), darkStoneMat);
 
         // 3. Forward Crenellated Battlements flanking the Grand Ramp
         CreateBoxPart(citadelRoot.transform, "Citadel_FrontWall_L", new Vector3(-5.2f, terraceHeight + 0.65f, terraceDepth * 0.5f - 0.3f), new Vector3(4.8f, 1.15f, 0.6f), alloyMat);
@@ -1831,20 +2467,21 @@ public class OasisWorldExpander : MonoBehaviour
         Transform parent, int index, Vector3 worldPos, Vector3 arenaCenter,
         Material alloyMat, Material crateMat, Material stoneMat, Material glowMat)
     {
-        float groundY = SampleDesertGroundY(worldPos.x, worldPos.z);
-        worldPos.y = groundY;
+        Vector3 toCenter = (arenaCenter - worldPos);
+        toCenter.y = 0f;
+        if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
+        Quaternion stationRot = Quaternion.LookRotation(toCenter.normalized) * Quaternion.Euler(0f, (index % 2 == 0) ? 18f : -18f, 0f);
+
+        worldPos = FindFlatValleyFloorSpot(worldPos, 2.8f, 2.2f, stationRot, 8f, 10f, out float minY, out float maxY, out float frontY);
+        worldPos.y = Mathf.Clamp(maxY, minY, minY + 0.45f);
 
         GameObject stationRoot = new GameObject($"Tactical_Cover_Station_{index}");
         stationRoot.transform.SetParent(parent, true);
         stationRoot.transform.position = worldPos;
+        stationRoot.transform.rotation = stationRot;
 
-        Vector3 toCenter = (arenaCenter - worldPos);
-        toCenter.y = 0f;
-        if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
-        stationRoot.transform.rotation = Quaternion.LookRotation(toCenter.normalized) * Quaternion.Euler(0f, (index % 2 == 0) ? 18f : -18f, 0f);
-
-        // Level foundation pad embedded into the dune slope
-        CreateBoxPart(stationRoot.transform, "Cover_Base_Pad", new Vector3(0f, -0.45f, 0f), new Vector3(5.6f, 1.1f, 4.2f), stoneMat);
+        // Deep 4.4m foundation pad embedded into the dune so no corner ever floats
+        CreateBoxPart(stationRoot.transform, "Cover_Base_Pad", new Vector3(0f, -2.10f, 0f), new Vector3(5.6f, 4.4f, 4.2f), stoneMat);
 
         // Angled Alloy Blast Shield Barricade (waist-to-chest height for shooting over/around)
         CreateBoxPart(stationRoot.transform, "Blast_Shield_Center", new Vector3(0f, 0.75f, 1.2f), new Vector3(3.4f, 1.35f, 0.4f), alloyMat);

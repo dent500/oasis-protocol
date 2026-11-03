@@ -32,10 +32,26 @@ namespace StarterAssets
         public float JumpTimeout = 0.1f;
         [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
         public float FallTimeout = 0.15f;
-        [Header("Mech Thruster Jump Boost")]
-        public float ThrusterBoostForce = 10.5f;
-        public float ThrusterCooldown = 3.5f;
-        public float thrusterCooldownRemaining { get; private set; } = 0f;
+        [Header("Mech Jetpack System")]
+        [Tooltip("Maximum jetpack fuel capacity in seconds of sustained thrust")]
+        public float JetpackMaxFuel = 2.4f;
+        public float JetpackFuelRemaining { get; private set; } = 2.4f;
+        [Tooltip("Upward ascent velocity while jetpack is actively firing")]
+        public float JetpackClimbSpeed = 5.2f;
+        [Tooltip("Fuel recharge rate per second when boots are on the ground")]
+        public float JetpackRechargeRate = 1.35f;
+        public bool IsJetpackActive => _isJetpackActive;
+
+        // Legacy compatibility properties
+        public float ThrusterCooldown => JetpackMaxFuel;
+        public float thrusterCooldownRemaining => (JetpackMaxFuel - JetpackFuelRemaining);
+        public bool IsThrusterBurning => _isJetpackActive;
+        public float ThrusterBurnRemaining => JetpackFuelRemaining;
+        public float ThrusterMaxBurnTime => JetpackMaxFuel;
+
+        private bool _isJetpackActive = false;
+        private float _lastJetpackAudioTime = 0f;
+        private float _lastJetpackVFXTime = 0f;
 
         [Header("Water & Swimming")]
         public bool isSwimming { get; private set; } = false;
@@ -135,6 +151,11 @@ namespace StarterAssets
         private void Start()
         {
             _controller = GetComponent<CharacterController>();
+            if (_controller != null)
+            {
+                _controller.stepOffset = 0.85f;
+                _controller.slopeLimit = 65f;
+            }
             _input = GetComponent<StarterAssetsInputs>();
 #if ENABLE_INPUT_SYSTEM
             _playerInput = GetComponent<PlayerInput>();
@@ -173,7 +194,11 @@ namespace StarterAssets
             {
                 return;
             }
-            if (thrusterCooldownRemaining > 0f) thrusterCooldownRemaining -= Time.deltaTime;
+            // Jetpack fuel recharge when boots are on ground
+            if (Grounded && JetpackFuelRemaining < JetpackMaxFuel)
+            {
+                JetpackFuelRemaining = Mathf.MoveTowards(JetpackFuelRemaining, JetpackMaxFuel, JetpackRechargeRate * Time.deltaTime);
+            }
 
             bool inWater = OasisWaterZone.IsInWater(transform.position);
             isSwimming = inWater;
@@ -195,8 +220,25 @@ namespace StarterAssets
             }
             else if (inWater)
             {
-                MoveSpeed = 3.2f;
-                SprintSpeed = 4.2f;
+                // In water: retain full agile combat speeds so wading/swimming feels fluid and uninhibited
+                if (OasisCombatMovement.Instance != null)
+                {
+                    OasisCombatMovement.Instance.SyncControllerSpeeds();
+                }
+                else
+                {
+                    MoveSpeed = 7.0f;
+                    SprintSpeed = 10.5f;
+                }
+            }
+            else if (OasisCombatMovement.Instance != null)
+            {
+                OasisCombatMovement.Instance.SyncControllerSpeeds();
+            }
+            else
+            {
+                MoveSpeed = 7.0f;
+                SprintSpeed = 10.5f;
             }
 
             GroundedCheck();
@@ -448,11 +490,15 @@ namespace StarterAssets
                     if (aSrc != null) aSrc.PlayOneShot(ProceduralAudio.GetWaterWadeClip(), 0.38f);
                 }
 
-                CollisionFlags flags = _controller.Move(inputDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
-                // If player hits a ceiling while jumping upward, cancel upward velocity immediately
+                Vector3 horizontalDisplacement = inputDirection.normalized * (_speed * Time.deltaTime);
+                Vector3 verticalDisplacement = new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime;
+
+                CollisionFlags flags = _controller.Move(horizontalDisplacement + verticalDisplacement);
+                // If player hits a ceiling while jumping or jetpacking upward, cancel upward velocity immediately
                 if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f)
                 {
                     _verticalVelocity = -1f;
+                    _isJetpackActive = false;
                 }
             }
         }
@@ -502,11 +548,27 @@ namespace StarterAssets
                 _verticalVelocity = Mathf.Clamp(_verticalVelocity, -3.0f, 3.5f);
                 Grounded = false;
                 _jumpTimeoutDelta = JumpTimeout;
+                _isJetpackActive = false;
                 return;
             }
 
+            bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
+
+            bool jumpHeld = !isDowned && (OasisKeybindManager.IsPressed(OasisAction.Jump) ||
+#if ENABLE_INPUT_SYSTEM
+                (Keyboard.current != null && Keyboard.current.spaceKey.isPressed) ||
+#endif
+                (_input != null && _input.jump));
+
+            bool jumpPressed = !isDowned && (OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
+#if ENABLE_INPUT_SYSTEM
+                (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+#endif
+                (_input != null && _input.jump && OasisKeybindManager.GetKey(OasisAction.Jump) == KeyCode.Space));
+
             if (Grounded)
             {
+                _isJetpackActive = false;
                 // reset the fall timeout timer
                 _fallTimeoutDelta = FallTimeout;
 
@@ -516,21 +578,14 @@ namespace StarterAssets
                     _verticalVelocity = -2f;
                 }
 
-                // Jump: check custom keybind or _input.jump trigger
-                bool isDowned = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
-                bool jumpPressed = !isDowned && (OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
-#if ENABLE_INPUT_SYSTEM
-                    (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
-#endif
-                    (_input != null && _input.jump && OasisKeybindManager.GetKey(OasisAction.Jump) == KeyCode.Space));
-
+                // Normal ground jump
                 if (jumpPressed && _jumpTimeoutDelta <= 0.0f)
                 {
                     float safeJumpHeight = Mathf.Clamp(JumpHeight, 0.5f, 2.5f);
                     // the square root of H * -2 * G = how much velocity needed to reach desired height
                     _verticalVelocity = Mathf.Sqrt(safeJumpHeight * -2f * Gravity);
                     Grounded = false;
-                _jumpTimeoutDelta = JumpTimeout;
+                    _jumpTimeoutDelta = JumpTimeout;
                     if (_input != null) _input.jump = false;
                 }
 
@@ -542,24 +597,37 @@ namespace StarterAssets
             }
             else
             {
-                // reset the jump timeout timer
-                bool isDownedAir = OasisShooterManager.Instance != null && OasisShooterManager.Instance.isPlayerDowned;
-                bool thrusterJumpPressed = !isDownedAir && (OasisKeybindManager.WasPressedThisFrame(OasisAction.Jump) ||
-#if ENABLE_INPUT_SYSTEM
-                    (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
-#endif
-                    (_input != null && _input.jump));
-
-                if (thrusterJumpPressed && thrusterCooldownRemaining <= 0f && _verticalVelocity < 6.0f)
+                // In air: Jetpack engages smoothly when holding Jump with remaining fuel
+                if (jumpHeld && JetpackFuelRemaining > 0.05f && !isDowned)
                 {
-                    thrusterCooldownRemaining = ThrusterCooldown;
-                    _verticalVelocity = ThrusterBoostForce;
-                    if (_input != null) _input.jump = false;
+                    _isJetpackActive = true;
+                    JetpackFuelRemaining = Mathf.Max(0f, JetpackFuelRemaining - Time.deltaTime);
 
-                    var aSrc = GetComponent<AudioSource>();
-                    if (aSrc != null) aSrc.PlayOneShot(ProceduralAudio.GetThrusterBoostClip(), 0.85f);
-                    BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.15f, -Vector3.up, false);
-                    OasisShooterManager.Instance?.ShowNotificationBanner("<color=#26D9FF>THRUSTER BOOST ENGAGED</color>", 1.5f);
+                    // Smooth upward lift: steadily accelerates upward to JetpackClimbSpeed (5.2 m/s)
+                    // If descending rapidly, applies strong counter-thrust braking (32m/s^2) to arrest fall
+                    float liftAccel = (_verticalVelocity < 0f) ? 32f : 18f;
+                    _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, JetpackClimbSpeed, liftAccel * Time.deltaTime);
+
+                    // Jetpack audio thrust and subtle exhaust particles
+                    if (Time.time - _lastJetpackAudioTime > 0.38f)
+                    {
+                        _lastJetpackAudioTime = Time.time;
+                        var aSrc = GetComponent<AudioSource>();
+                        if (aSrc != null)
+                        {
+                            aSrc.PlayOneShot(ProceduralAudio.GetThrusterBoostClip(), 0.35f);
+                        }
+                    }
+
+                    if (Time.time - _lastJetpackVFXTime > 0.12f)
+                    {
+                        _lastJetpackVFXTime = Time.time;
+                        BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.12f, -Vector3.up, false);
+                    }
+                }
+                else
+                {
+                    _isJetpackActive = false;
                 }
 
                 _jumpTimeoutDelta = JumpTimeout;
@@ -577,9 +645,12 @@ namespace StarterAssets
                 }
             }
 
-            // Always apply downward gravity every frame (clamp between -_terminalVelocity and +15m/s so upward velocity always decays back to ground)
-            _verticalVelocity += Gravity * Time.deltaTime;
-            _verticalVelocity = Mathf.Clamp(_verticalVelocity, -_terminalVelocity, 15.0f);
+            // Apply downward gravity whenever the jetpack is not actively providing upward thrust
+            if (!_isJetpackActive)
+            {
+                _verticalVelocity += Gravity * Time.deltaTime;
+                _verticalVelocity = Mathf.Clamp(_verticalVelocity, -_terminalVelocity, 15.0f);
+            }
         }
 
         private static float ClampAngle(float lfAngle, float lfMin, float lfMax)

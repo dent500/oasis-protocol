@@ -34,7 +34,7 @@ public class BlasterVFX : MonoBehaviour
     /// Draws a dual-layered plasma laser beam tracer (hot white core + colored outer plasma sheath)
     /// and triggers a 3D volumetric muzzle flash burst at the barrel.
     /// </summary>
-    public static void SpawnLaserBeam(Vector3 start, Vector3 end, Color color)
+    public static void SpawnLaserBeam(Vector3 start, Vector3 end, Color color, float outerWidth = 0.085f, float duration = 0.095f)
     {
         Vector3 dir = (end - start);
         if (dir.sqrMagnitude > 0.001f)
@@ -48,8 +48,8 @@ public class BlasterVFX : MonoBehaviour
         lr.material = OasisShaderHelper.CreateUnlitMaterial(color);
         lr.startColor = color;
         lr.endColor = new Color(color.r, color.g, color.b, 0.65f);
-        lr.startWidth = 0.085f;
-        lr.endWidth = 0.042f;
+        lr.startWidth = outerWidth;
+        lr.endWidth = outerWidth * 0.5f;
         lr.positionCount = 2;
         lr.SetPosition(0, start);
         lr.SetPosition(1, end);
@@ -64,18 +64,23 @@ public class BlasterVFX : MonoBehaviour
         coreLr.material = OasisShaderHelper.CreateUnlitMaterial(hotCore);
         coreLr.startColor = hotCore;
         coreLr.endColor = hotCore;
-        coreLr.startWidth = 0.032f;
-        coreLr.endWidth = 0.016f;
+        coreLr.startWidth = outerWidth * 0.38f;
+        coreLr.endWidth = outerWidth * 0.19f;
         coreLr.positionCount = 2;
         coreLr.SetPosition(0, start);
         coreLr.SetPosition(1, end);
         coreLr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         coreLr.receiveShadows = false;
 
-        BlasterVFXRunner.Instance.StartCoroutine(FadeAndDestroyDualBeam(beamObj, lr, coreLr, 0.095f));
+        BlasterVFXRunner.Instance.StartCoroutine(FadeAndDestroyDualBeam(beamObj, lr, coreLr, duration, outerWidth));
     }
 
-    private static IEnumerator FadeAndDestroyDualBeam(GameObject obj, LineRenderer outerLr, LineRenderer coreLr, float duration)
+    public static void SpawnBombExplosion(Vector3 pos, float radius = 5f)
+    {
+        SpawnExplosion(pos);
+    }
+
+    private static IEnumerator FadeAndDestroyDualBeam(GameObject obj, LineRenderer outerLr, LineRenderer coreLr, float duration, float outerWidth = 0.085f)
     {
         float elapsed = 0f;
         Color initialOuter = outerLr != null ? outerLr.startColor : Color.cyan;
@@ -89,15 +94,15 @@ public class BlasterVFX : MonoBehaviour
             {
                 outerLr.startColor = new Color(initialOuter.r, initialOuter.g, initialOuter.b, t);
                 outerLr.endColor = new Color(initialOuter.r, initialOuter.g, initialOuter.b, t * 0.7f);
-                outerLr.startWidth = 0.085f * t;
-                outerLr.endWidth = 0.042f * t;
+                outerLr.startWidth = outerWidth * t;
+                outerLr.endWidth = (outerWidth * 0.5f) * t;
             }
             if (coreLr != null)
             {
                 coreLr.startColor = new Color(initialCore.r, initialCore.g, initialCore.b, t);
                 coreLr.endColor = new Color(initialCore.r, initialCore.g, initialCore.b, t);
-                coreLr.startWidth = 0.032f * t;
-                coreLr.endWidth = 0.016f * t;
+                coreLr.startWidth = (outerWidth * 0.38f) * t;
+                coreLr.endWidth = (outerWidth * 0.19f) * t;
             }
             yield return null;
         }

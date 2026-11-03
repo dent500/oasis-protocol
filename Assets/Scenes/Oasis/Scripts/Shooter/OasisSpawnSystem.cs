@@ -71,6 +71,19 @@ public class OasisSpawnSystem : MonoBehaviour
                 n.IndexOf("Bunker", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("Pillar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("Perimeter", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Wall", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Baffle", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Lintel", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Parapet", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Upper_Obs_Deck", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Dish", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Mast", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Beacon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Palm", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Shrub", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Arch", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Buttress", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("AI_", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                 n.IndexOf("Bot_", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -79,12 +92,51 @@ public class OasisSpawnSystem : MonoBehaviour
             return hit.point.y;
         }
 
+        if (OasisWorldExpander.Instance != null &&
+            OasisWorldExpander.Instance.TrySampleAuthenticTerrainY(x, z, out float authenticY))
+        {
+            return authenticY;
+        }
+
         // If fallback is below the bedrock catch plane or in the sky, clamp to authentic canyon sand level
-        if (fallbackY < -7.0f || fallbackY > 15.0f)
+        if (fallbackY < -6.5f || fallbackY > 12.0f)
         {
             return -2.2f;
         }
         return fallbackY;
+    }
+
+    /// <summary>
+    /// Samples floor height strictly inside an undercover Hangar Hideout (starting below the 4.8m roof)
+    /// so overhangs, palm fronds, or rooftop structures above the hangar can never intercept the raycast.
+    /// </summary>
+    private float SampleHangarInteriorFloorY(Vector3 slotPos)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(new Vector3(slotPos.x, slotPos.y + 2.2f, slotPos.z), Vector3.down, 5.5f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (var hit in hits)
+        {
+            if (hit.collider == null || hit.collider.isTrigger) continue;
+            string n = hit.collider.gameObject.name;
+            if (n.IndexOf("HangarFloor", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return hit.point.y;
+            }
+        }
+        foreach (var hit in hits)
+        {
+            if (hit.collider == null || hit.collider.isTrigger) continue;
+            if (hit.collider.GetComponentInParent<CharacterController>() != null) continue;
+            if (hit.collider.GetComponentInParent<OasisCombatAI>() != null) continue;
+            if (hit.collider.CompareTag("Player")) continue;
+            string n = hit.collider.gameObject.name;
+            if (n.IndexOf("HangarFoundation", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                n.IndexOf("Terrain_01", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return hit.point.y;
+            }
+        }
+        return slotPos.y;
     }
 
     public enum SpawnSector
@@ -96,6 +148,79 @@ public class OasisSpawnSystem : MonoBehaviour
         OasisCore = 4
     }
 
+    /// <summary>
+    /// World coordinates of the 8 Enclosed Undercover Sci-Fi Hangar Hideouts placed around the
+    /// expanded outer valley floor of Terrain_01 (54m - 74m from center, NEVER in the middle of the map,
+    /// and 100% inside the flat walkable desert basin lined by the perimeter rock walls).
+    /// </summary>
+    public static readonly Vector3[] UndercoverHangarLocations = new Vector3[]
+    {
+        new Vector3( 16f, 0f,  -94f), // Hangar 0: South Canyon Hangar Outpost
+        new Vector3(  2f, 0f, -214f), // Hangar 1: North Dune Hangar Complex
+        new Vector3(-58f, 0f, -150f), // Hangar 2: West Ridge Hangar Bastion
+        new Vector3( 64f, 0f, -150f), // Hangar 3: East Gorge Hangar Bastion
+        new Vector3(-44f, 0f, -104f), // Hangar 4: South-West Cliff Hangar Bay
+        new Vector3( 50f, 0f, -106f), // Hangar 5: South-East Cliff Hangar Bay
+        new Vector3(-48f, 0f, -198f), // Hangar 6: North-West Basin Hangar Bay
+        new Vector3( 52f, 0f, -198f)  // Hangar 7: North-East Basin Hangar Bay
+    };
+
+    private readonly List<Vector3> _registeredUndercoverSpots = new List<Vector3>();
+    private readonly List<Quaternion> _registeredUndercoverRotations = new List<Quaternion>();
+    private readonly List<int> _registeredSpotHangarIndex = new List<int>();
+    private int[] _teamInitialHangarIndex = new int[] { 0, 1, 2, 3 };
+
+    public void ClearRegisteredHangarSpawns()
+    {
+        _registeredUndercoverSpots.Clear();
+        _registeredUndercoverRotations.Clear();
+        _registeredSpotHangarIndex.Clear();
+    }
+
+    public void RegisterHangarInteriorSpawn(int hangarIndex, Vector3 worldPos, Quaternion worldRot)
+    {
+        _registeredUndercoverSpots.Add(worldPos);
+        _registeredUndercoverRotations.Add(worldRot);
+        _registeredSpotHangarIndex.Add(hangarIndex);
+    }
+
+    /// <summary>
+    /// Rebuilds all registered undercover hangar interior spawn slots directly from active
+    /// Undercover_Hangar_Hideout transforms in the scene so manual positioning/rotation in the Map Designer
+    /// is immediately reflected in player and bot spawning.
+    /// </summary>
+    public void RebuildHangarSpawnsFromScene()
+    {
+        ClearRegisteredHangarSpawns();
+        Vector3[] localSlots = new Vector3[]
+        {
+            new Vector3(-3.2f, 0.22f, -1.8f),
+            new Vector3( 3.2f, 0.22f, -1.8f),
+            new Vector3(-2.0f, 0.22f, -2.6f),
+            new Vector3( 2.0f, 0.22f, -2.6f)
+        };
+
+        GameObject landmarksRoot = GameObject.Find("Oasis_Expanded_World_Landmarks");
+        if (landmarksRoot != null)
+        {
+            int hCounter = 0;
+            for (int c = 0; c < landmarksRoot.transform.childCount; c++)
+            {
+                Transform child = landmarksRoot.transform.GetChild(c);
+                if (child == null || !child.gameObject.activeInHierarchy) continue;
+                if (child.name.IndexOf("Undercover_Hangar_Hideout", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    for (int s = 0; s < localSlots.Length; s++)
+                    {
+                        Vector3 slotWorld = child.TransformPoint(localSlots[s]);
+                        RegisterHangarInteriorSpawn(hCounter, slotWorld, child.rotation);
+                    }
+                    hCounter++;
+                }
+            }
+        }
+    }
+
     [Header("Active Matchup Sectors")]
     public SpawnSector alphaSector = SpawnSector.SouthCanyonPass;
     public SpawnSector bravoSector = SpawnSector.NorthDunes;
@@ -103,10 +228,10 @@ public class OasisSpawnSystem : MonoBehaviour
     public SpawnSector deltaSector = SpawnSector.EastGorge;
     public SpawnSector[] teamSectors = new SpawnSector[]
     {
-        SpawnSector.SouthCanyonPass, // Team 0: Alpha (Blue) - South Base
-        SpawnSector.NorthDunes,       // Team 1: Bravo (Red) - North Base
-        SpawnSector.WestOutpost,      // Team 2: Charlie (Green) - West Base
-        SpawnSector.EastGorge         // Team 3: Delta (Amber) - East Base
+        SpawnSector.SouthCanyonPass, // Team 0: Alpha (Blue)
+        SpawnSector.NorthDunes,      // Team 1: Bravo (Red)
+        SpawnSector.WestOutpost,     // Team 2: Charlie (Green)
+        SpawnSector.EastGorge        // Team 3: Delta (Amber)
     };
 
     public SpawnSector GetTeamSector(int teamId)
@@ -127,8 +252,8 @@ public class OasisSpawnSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Randomly assigns distinct tactical sectors to all active teams at match start.
-    /// Eliminates static, predictable base camping across multiple matches.
+    /// Randomly assigns distinct undercover Hangar Hideouts across the 8 perimeter hangars at match start.
+    /// Zero center spawns; every spawn is inside an enclosed undercover hangar bay.
     /// </summary>
     public void PickRandomMatchup()
     {
@@ -145,7 +270,6 @@ public class OasisSpawnSystem : MonoBehaviour
             SpawnSector.EastGorge
         };
 
-        // Fisher-Yates shuffle to randomly assign base sectors
         for (int i = pool.Count - 1; i > 0; i--)
         {
             int rnd = Random.Range(0, i + 1);
@@ -159,24 +283,34 @@ public class OasisSpawnSystem : MonoBehaviour
             teamSectors[t] = pool[t];
         }
 
+        // Also shuffle the 8 undercover Hangar Hideouts for initial team deployment
+        List<int> hangarPool = new List<int> { 0, 1, 2, 3, 4, 5, 6, 7 };
+        for (int i = hangarPool.Count - 1; i > 0; i--)
+        {
+            int rnd = Random.Range(0, i + 1);
+            int tmp = hangarPool[i];
+            hangarPool[i] = hangarPool[rnd];
+            hangarPool[rnd] = tmp;
+        }
+        _teamInitialHangarIndex = new int[] { hangarPool[0], hangarPool[1], hangarPool[2], hangarPool[3] };
+
         alphaSector = teamSectors[0];
         bravoSector = teamSectors[1];
         charlieSector = teamSectors[2];
         deltaSector = teamSectors[3];
 
-        Debug.Log($"<color=#26D9FF>[OasisSpawnSystem]</color> Randomized Matchup Bases: Alpha [{GetSectorDisplayName(alphaSector)}], Bravo [{GetSectorDisplayName(bravoSector)}], Charlie [{GetSectorDisplayName(charlieSector)}], Delta [{GetSectorDisplayName(deltaSector)}]");
+        Debug.Log($"<color=#26D9FF>[OasisSpawnSystem]</color> Randomized Undercover Hangar Matchup: Alpha [Hangar {_teamInitialHangarIndex[0]}], Bravo [Hangar {_teamInitialHangarIndex[1]}], Charlie [Hangar {_teamInitialHangarIndex[2]}], Delta [Hangar {_teamInitialHangarIndex[3]}]");
     }
 
     public static string GetSectorDisplayName(SpawnSector sector)
     {
         switch (sector)
         {
-            case SpawnSector.NorthDunes: return "NORTH DUNES";
-            case SpawnSector.SouthCanyonPass: return "SOUTH CANYON PASS";
-            case SpawnSector.WestOutpost: return "WEST OUTPOST";
-            case SpawnSector.EastGorge: return "EAST GORGE";
-            case SpawnSector.OasisCore: return "OASIS CORE";
-            default: return "CANYON";
+            case SpawnSector.NorthDunes: return "NORTH DUNE HANGAR";
+            case SpawnSector.SouthCanyonPass: return "SOUTH CANYON HANGAR";
+            case SpawnSector.WestOutpost: return "WEST RIDGE HANGAR";
+            case SpawnSector.EastGorge: return "EAST GORGE HANGAR";
+            default: return "PERIMETER HANGAR";
         }
     }
 
@@ -184,115 +318,89 @@ public class OasisSpawnSystem : MonoBehaviour
     {
         switch (sector)
         {
-            case SpawnSector.SouthCanyonPass: return new Vector3(0f, 0f, -124f);
-            case SpawnSector.NorthDunes: return new Vector3(0f, 0f, -180f);
-            case SpawnSector.WestOutpost: return new Vector3(-38f, 0f, -150f);
-            case SpawnSector.EastGorge: return new Vector3(38f, 0f, -150f);
-            case SpawnSector.OasisCore: return new Vector3(0f, 0f, -150f);
-            default: return new Vector3(0f, 0f, -150f);
+            case SpawnSector.SouthCanyonPass: return UndercoverHangarLocations[0];
+            case SpawnSector.NorthDunes: return UndercoverHangarLocations[1];
+            case SpawnSector.WestOutpost: return UndercoverHangarLocations[2];
+            case SpawnSector.EastGorge: return UndercoverHangarLocations[3];
+            default: return UndercoverHangarLocations[0];
         }
     }
 
     /// <summary>
-    /// Neutral and perimeter flank rally nodes used for anti-spawn-camping fallbacks
-    /// when an entire team base is being swarmed by enemy campers.
+    /// Computes the 4 sheltered interior bay positions inside a given Hangar Hideout (0..7).
+    /// Always undercover beneath the solid hangar roof and behind the front blast shield.
     /// </summary>
-    public static readonly Vector3[] TacticalFlankSpawns = new Vector3[]
+    private Vector3[] ComputeHangarInteriorBaySlots(int hangarIdx)
     {
-        new Vector3(-26f, 0f, -136f), // South-West Flank Terrace
-        new Vector3( 26f, 0f, -136f), // South-East Flank Terrace
-        new Vector3(-26f, 0f, -164f), // North-West Dune Crest
-        new Vector3( 26f, 0f, -164f), // North-East Dune Crest
-        new Vector3(-34f, 0f, -148f), // Mid-West Canyon Defilade
-        new Vector3( 34f, 0f, -148f)  // Mid-East Canyon Defilade
-    };
+        hangarIdx = Mathf.Clamp(hangarIdx, 0, UndercoverHangarLocations.Length - 1);
+        Vector3 hangarCenter = UndercoverHangarLocations[hangarIdx];
+        Vector3 arenaCenter = GetPlayableCenter();
+        Vector3 toCenter = (arenaCenter - hangarCenter);
+        toCenter.y = 0f;
+        if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
+        Quaternion rot = Quaternion.LookRotation(toCenter.normalized);
+
+        float gy = SampleGroundY(hangarCenter.x, hangarCenter.z, arenaCenter.y);
+        Vector3 basePos = new Vector3(hangarCenter.x, gy + 0.18f, hangarCenter.z);
+
+        // 4 interior undercover slots aligned with the left and right exit lanes
+        return new Vector3[]
+        {
+            basePos + rot * new Vector3(-3.2f, 0f, -2.0f),
+            basePos + rot * new Vector3( 3.2f, 0f, -2.0f),
+            basePos + rot * new Vector3(-2.1f, 0f, -2.8f),
+            basePos + rot * new Vector3( 2.1f, 0f, -2.8f)
+        };
+    }
 
     public Vector3[] GetSectorSpawnOffsets(SpawnSector sector)
     {
+        int hIdx = 0;
         switch (sector)
         {
-            case SpawnSector.SouthCanyonPass:
-                return new Vector3[]
-                {
-                    new Vector3(-16f, 0f, -121f),
-                    new Vector3( -5f, 0f, -125f),
-                    new Vector3(  5f, 0f, -125f),
-                    new Vector3( 16f, 0f, -121f),
-                    new Vector3( -9f, 0f, -115f),
-                    new Vector3(  9f, 0f, -115f),
-                    new Vector3(-22f, 0f, -126f),
-                    new Vector3( 22f, 0f, -126f)
-                };
-            case SpawnSector.NorthDunes:
-                return new Vector3[]
-                {
-                    new Vector3(-14f, 0f, -177f),
-                    new Vector3( -5f, 0f, -175f),
-                    new Vector3(  5f, 0f, -175f),
-                    new Vector3( 14f, 0f, -177f),
-                    new Vector3( -9f, 0f, -183f),
-                    new Vector3(  9f, 0f, -183f),
-                    new Vector3(-20f, 0f, -172f),
-                    new Vector3( 20f, 0f, -172f)
-                };
-            case SpawnSector.WestOutpost:
-                return new Vector3[]
-                {
-                    new Vector3(-44f, 0f, -142f),
-                    new Vector3(-48f, 0f, -150f),
-                    new Vector3(-45f, 0f, -158f),
-                    new Vector3(-41f, 0f, -150f),
-                    new Vector3(-46f, 0f, -137f),
-                    new Vector3(-46f, 0f, -163f),
-                    new Vector3(-36f, 0f, -144f),
-                    new Vector3(-36f, 0f, -156f)
-                };
-            case SpawnSector.EastGorge:
-                return new Vector3[]
-                {
-                    new Vector3( 44f, 0f, -142f),
-                    new Vector3( 48f, 0f, -150f),
-                    new Vector3( 45f, 0f, -158f),
-                    new Vector3( 41f, 0f, -150f),
-                    new Vector3( 46f, 0f, -137f),
-                    new Vector3( 46f, 0f, -163f),
-                    new Vector3( 36f, 0f, -144f),
-                    new Vector3( 36f, 0f, -156f)
-                };
-            case SpawnSector.OasisCore:
-            default:
-                return new Vector3[]
-                {
-                    new Vector3(-12f, 0f, -145f),
-                    new Vector3( 12f, 0f, -145f),
-                    new Vector3(-12f, 0f, -155f),
-                    new Vector3( 12f, 0f, -155f),
-                    new Vector3(-24f, 0f, -150f),
-                    new Vector3( 24f, 0f, -150f),
-                    new Vector3(  0f, 0f, -138f),
-                    new Vector3(  0f, 0f, -162f)
-                };
+            case SpawnSector.SouthCanyonPass: hIdx = 0; break;
+            case SpawnSector.NorthDunes: hIdx = 1; break;
+            case SpawnSector.WestOutpost: hIdx = 2; break;
+            case SpawnSector.EastGorge: hIdx = 3; break;
+            default: hIdx = Random.Range(0, UndercoverHangarLocations.Length); break;
         }
+        return ComputeHangarInteriorBaySlots(hIdx);
     }
 
     /// <summary>
-    /// Intelligently finds a randomized, tactically safe spawn location for a combatant.
-    /// Evaluates distance to active enemies: eliminates or penalizes any spawn point where enemies
-    /// are closer than 18m (spawn-camping distance). If the base sector is completely overrun,
-    /// automatically selects an alternate tactical flank position.
+    /// Intelligently selects a RANDOMIZED undercover Hangar Hideout spawn point on every spawn/respawn.
+    /// Evaluates all 8 perimeter Hangar Hideouts against active enemy positions (AI bots, remote players, and local player),
+    /// rejecting any hangar where enemies are within 35m and picking randomly among safe undercover hangars
+    /// so opponents can NEVER predict or camp where a player or bot will respawn.
     /// </summary>
     public Vector3 GetTacticalSafeSpawnPosition(int teamId, Transform combatant = null)
     {
-        SpawnSector baseSector = GetTeamSector(teamId);
-        Vector3[] baseSpawns = GetSectorSpawnOffsets(baseSector);
+        GetTacticalSafeSpawnTransform(teamId, combatant, out Vector3 spawnPos, out _);
+        return spawnPos;
+    }
 
-        // Collect all active enemy positions (bots + player)
+    public void GetTacticalSafeSpawnTransform(int teamId, Transform combatant, out Vector3 spawnPos, out Quaternion spawnRot)
+    {
+        // Collect all active living enemy positions (AI bots + remote real players + local player)
         List<Vector3> enemyPositions = new List<Vector3>();
         foreach (var bot in OasisCombatAI.ActiveBots)
         {
             if (bot != null && bot.teamId != teamId && !bot.isDead && bot.gameObject.activeInHierarchy)
             {
                 enemyPositions.Add(bot.transform.position);
+            }
+        }
+
+        if (OasisNetworkManager.Instance != null)
+        {
+            var remotes = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+            for (int r = 0; r < remotes.Count; r++)
+            {
+                var rp = remotes[r];
+                if (rp != null && rp.rootObject != null && !rp.isDead && rp.teamId != teamId)
+                {
+                    enemyPositions.Add(rp.rootObject.transform.position);
+                }
             }
         }
 
@@ -306,77 +414,104 @@ public class OasisSpawnSystem : MonoBehaviour
             }
         }
 
-        // Build list of candidate positions: base spawns first, flank spawns second
-        List<Vector3> candidates = new List<Vector3>(baseSpawns);
-        candidates.AddRange(TacticalFlankSpawns);
-
-        // If no enemies in play yet (e.g. initial launch), pick randomly from base spawns with slight lateral jitter
-        if (enemyPositions.Count == 0)
+        // Build candidate list from registered undercover Hangar Hideouts (or compute directly if not yet registered)
+        List<Vector3> candidatePositions = new List<Vector3>();
+        List<Quaternion> candidateRotations = new List<Quaternion>();
+        if (_registeredUndercoverSpots.Count > 0)
         {
-            Vector3 raw = baseSpawns[Random.Range(0, baseSpawns.Length)];
-            float jx = Random.Range(-2.0f, 2.0f);
-            float jz = Random.Range(-2.0f, 2.0f);
-            float gy = SampleGroundY(raw.x + jx, raw.z + jz, GetPlayableCenter().y);
-            return new Vector3(raw.x + jx, gy + 0.08f, raw.z + jz);
+            candidatePositions.AddRange(_registeredUndercoverSpots);
+            candidateRotations.AddRange(_registeredUndercoverRotations);
+        }
+        else
+        {
+            Vector3 arenaCenter = GetPlayableCenter();
+            for (int h = 0; h < UndercoverHangarLocations.Length; h++)
+            {
+                Vector3[] slots = ComputeHangarInteriorBaySlots(h);
+                Vector3 toC = (arenaCenter - UndercoverHangarLocations[h]);
+                toC.y = 0f;
+                Quaternion rot = (toC.sqrMagnitude > 0.01f) ? Quaternion.LookRotation(toC.normalized) : Quaternion.identity;
+                for (int s = 0; s < slots.Length; s++)
+                {
+                    candidatePositions.Add(slots[s]);
+                    candidateRotations.Add(rot);
+                }
+            }
         }
 
-        Vector3 bestPos = baseSpawns[Random.Range(0, baseSpawns.Length)];
-        float bestScore = -99999f;
+        // Filter candidates that have no enemy within 35m (strict anti-spawn-camp buffer)
+        List<int> safeIndices = new List<int>();
+        int furthestIdx = Random.Range(0, candidatePositions.Count);
+        float furthestEnemyDist = -1f;
 
-        for (int i = 0; i < candidates.Count; i++)
+        for (int i = 0; i < candidatePositions.Count; i++)
         {
-            Vector3 c = candidates[i];
+            Vector3 c = candidatePositions[i];
             float minEnemyDist = float.MaxValue;
             for (int e = 0; e < enemyPositions.Count; e++)
             {
-                float d = Vector3.Distance(new Vector3(c.x, 0f, c.z), new Vector3(enemyPositions[e].x, 0f, enemyPositions[e].z));
+                float d = Vector2.Distance(new Vector2(c.x, c.z), new Vector2(enemyPositions[e].x, enemyPositions[e].z));
                 if (d < minEnemyDist) minEnemyDist = d;
             }
 
-            // Anti-camp scoring: heavily penalize points where enemies are within 16m
-            float score = minEnemyDist;
-            if (minEnemyDist < 16f)
+            if (minEnemyDist > furthestEnemyDist)
             {
-                score -= 1000f; // Strongly avoid camped points
-            }
-            else if (i < baseSpawns.Length)
-            {
-                // Mild preference for home base nodes when safe
-                score += 8f;
+                furthestEnemyDist = minEnemyDist;
+                furthestIdx = i;
             }
 
-            // Add small random noise to prevent deterministic identical picks
-            score += Random.Range(0f, 6f);
-
-            if (score > bestScore)
+            if (minEnemyDist >= 35f)
             {
-                bestScore = score;
-                bestPos = c;
+                safeIndices.Add(i);
             }
         }
 
-        // Apply randomized lateral dispersion (+/- 2.0m)
-        float jitterX = Random.Range(-2.0f, 2.0f);
-        float jitterZ = Random.Range(-2.0f, 2.0f);
-        float spawnX = bestPos.x + jitterX;
-        float spawnZ = bestPos.z + jitterZ;
-        float groundY = SampleGroundY(spawnX, spawnZ, GetPlayableCenter().y);
+        // Pick completely at random among all safe undercover hangar bays so spawns are unpredictable!
+        int chosenIdx = (safeIndices.Count > 0)
+            ? safeIndices[Random.Range(0, safeIndices.Count)]
+            : furthestIdx;
 
-        return new Vector3(spawnX, groundY + 0.08f, spawnZ);
+        Vector3 chosenPos = candidatePositions[chosenIdx];
+        spawnRot = (chosenIdx >= 0 && chosenIdx < candidateRotations.Count) ? candidateRotations[chosenIdx] : Quaternion.identity;
+
+        float groundY = (_registeredUndercoverSpots.Count > 0)
+            ? SampleHangarInteriorFloorY(chosenPos)
+            : SampleGroundY(chosenPos.x, chosenPos.z, chosenPos.y);
+        spawnPos = new Vector3(chosenPos.x, groundY + 0.12f, chosenPos.z);
     }
 
     /// <summary>
-    /// Gets a grounded spawn position tailored strictly for the designated team ID's base sector.
+    /// Gets an initial grounded undercover spawn position inside the team's assigned randomized Hangar Hideout.
     /// </summary>
     public Vector3 GetTeamSpawnPosition(int teamId, int squadSlot)
     {
-        SpawnSector targetSector = GetTeamSector(teamId);
-        Vector3[] sectorSpawns = GetSectorSpawnOffsets(targetSector);
-        int idx = Mathf.Abs(squadSlot) % sectorSpawns.Length;
-        Vector3 chosen = sectorSpawns[idx];
-        float fallbackY = GetPlayableCenter().y;
-        float gy = SampleGroundY(chosen.x, chosen.z, fallbackY);
-        return new Vector3(chosen.x, gy + 0.08f, chosen.z);
+        int clampedTeam = Mathf.Clamp(teamId, 0, 3);
+        int hangarIdx = (_teamInitialHangarIndex != null && clampedTeam < _teamInitialHangarIndex.Length)
+            ? _teamInitialHangarIndex[clampedTeam]
+            : (clampedTeam % UndercoverHangarLocations.Length);
+
+        if (_registeredUndercoverSpots.Count > 0)
+        {
+            List<Vector3> teamHangarSlots = new List<Vector3>();
+            for (int i = 0; i < _registeredUndercoverSpots.Count; i++)
+            {
+                if (_registeredSpotHangarIndex[i] == hangarIdx)
+                {
+                    teamHangarSlots.Add(_registeredUndercoverSpots[i]);
+                }
+            }
+            if (teamHangarSlots.Count > 0)
+            {
+                Vector3 slotPos = teamHangarSlots[Mathf.Abs(squadSlot) % teamHangarSlots.Count];
+                float gy = SampleHangarInteriorFloorY(slotPos);
+                return new Vector3(slotPos.x, gy + 0.12f, slotPos.z);
+            }
+        }
+
+        Vector3[] slots = ComputeHangarInteriorBaySlots(hangarIdx);
+        Vector3 chosen = slots[Mathf.Abs(squadSlot) % slots.Length];
+        float groundY = SampleGroundY(chosen.x, chosen.z, chosen.y);
+        return new Vector3(chosen.x, groundY + 0.12f, chosen.z);
     }
 
     /// <summary>
@@ -404,22 +539,14 @@ public class OasisSpawnSystem : MonoBehaviour
     {
         if (combatant == null) return;
 
-        // Use smart tactical safe spawn to eliminate spawn camping
-        Vector3 spawnPos = GetTacticalSafeSpawnPosition(teamId, combatant);
+        // Use smart tactical safe spawn to eliminate spawn camping and face directly out the hangar exit portal
+        GetTacticalSafeSpawnTransform(teamId, combatant, out Vector3 spawnPos, out Quaternion spawnRot);
 
         var cc = combatant.GetComponent<CharacterController>();
         if (cc != null) cc.enabled = false;
 
         combatant.position = spawnPos;
-
-        // Face inward toward the arena center (0, 0, -150)
-        Vector3 arenaCenter = new Vector3(0f, spawnPos.y, -150f);
-        Vector3 toCenter = (arenaCenter - spawnPos);
-        toCenter.y = 0f;
-        if (toCenter.sqrMagnitude > 0.1f)
-        {
-            combatant.rotation = Quaternion.LookRotation(toCenter.normalized);
-        }
+        combatant.rotation = spawnRot;
 
         // Apply Spawn Shield Protection Grace Period (2.5 seconds)
         var botAI = combatant.GetComponent<OasisCombatAI>();

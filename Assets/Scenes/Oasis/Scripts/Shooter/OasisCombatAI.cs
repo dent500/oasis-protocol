@@ -59,11 +59,67 @@ public class OasisCombatAI : MonoBehaviour
     private float _nextFireTime = 0f;
     private float _burstTimer = 0f;
     private float _losLostTimer = 0f;
+    private float _losLockOnTimer = 0f;
+    private bool _hasLockedOnTarget = false;
     private int _burstShotsRemaining = 0;
     private float _strafeDir = 1f;
     private float _verticalVelocity = 0f;
     private bool _isDead = false;
     public bool isDead => _isDead;
+
+    // Base Archetype Stats & Difficulty Scaling
+    private float _baseMaxHealth = 100f;
+    private float _baseMaxShield = 60f;
+    private float _baseDamagePerShot = 17f;
+    private float _burstPauseMultiplier = 1.0f;
+    private float _spreadMultiplier = 1.0f;
+
+    public const string PREF_AI_DIFFICULTY = "OasisAIDifficulty";
+
+    /// <summary>
+    /// Active AI Difficulty Mode:
+    /// 0 = RECRUIT (Generous LoS delay 0.80s-1.20s, wider spread, standard HP)
+    /// 1 = TACTICAL (Default: Minor LoS delay 0.45s-0.72s before opening fire, standard HP)
+    /// 2 = ELITE (Hard: Instantaneous LoS snap reaction 0.06s-0.14s, +50% Max HP & +50% Shields)
+    /// </summary>
+    public static int CurrentDifficulty => Mathf.Clamp(PlayerPrefs.GetInt(PREF_AI_DIFFICULTY, 1), 0, 2);
+
+    public static string GetDifficultyName(int diff)
+    {
+        switch (Mathf.Clamp(diff, 0, 2))
+        {
+            case 0: return "RECRUIT (EASY)";
+            case 2: return "ELITE (HARD)";
+            case 1:
+            default: return "TACTICAL (NORMAL)";
+        }
+    }
+
+    public static string GetDifficultyShortLabel(int diff)
+    {
+        switch (Mathf.Clamp(diff, 0, 2))
+        {
+            case 0: return "RECRUIT (HIGH DELAY)";
+            case 2: return "ELITE (INSTANT + HP)";
+            case 1:
+            default: return "TACTICAL (LoS DELAY)";
+        }
+    }
+
+    public static void SetDifficultyMode(int diff)
+    {
+        int clamped = Mathf.Clamp(diff, 0, 2);
+        PlayerPrefs.SetInt(PREF_AI_DIFFICULTY, clamped);
+        PlayerPrefs.Save();
+
+        for (int i = 0; i < ActiveBots.Count; i++)
+        {
+            if (ActiveBots[i] != null)
+            {
+                ActiveBots[i].ApplyDifficultyScaling(false);
+            }
+        }
+    }
 
     // Shield Regeneration
     private float _shieldRegenDelayTimer = 0f;
@@ -136,7 +192,7 @@ public class OasisCombatAI : MonoBehaviour
         _characterController.height = 1.85f;
         _characterController.radius = 0.52f;
         _characterController.center = new Vector3(0f, 0.92f, 0f);
-        _characterController.stepOffset = 0.65f;
+        _characterController.stepOffset = 0.85f;
         _characterController.slopeLimit = 65f;
         _characterController.skinWidth = 0.05f;
         _characterController.minMoveDistance = 0f;
@@ -162,49 +218,152 @@ public class OasisCombatAI : MonoBehaviour
     {
         switch (operativeClassId)
         {
-            case "heavy_warrior":
+            case "heavy_warrior": // Heavy Pulse Autocannon
                 maxHealth = 100f;
-                maxShield = 75f;
-                moveSpeed = 4.10f;
-                damagePerShot = 19f;
-                attackRange = 36f;
+                maxShield = 85f;
+                moveSpeed = 4.30f;
+                damagePerShot = 18f;
+                attackRange = 70f;
+                maxAmmo = 40;
                 break;
 
-            case "combat_medic":
-                maxHealth = 100f;
-                maxShield = 60f;
-                moveSpeed = 4.70f;
-                damagePerShot = 17f;
-                attackRange = 36f;
-                break;
-
-            case "cyborg_specops":
-            case "cyber_outlaw":
-                maxHealth = 100f;
-                maxShield = 50f;
-                moveSpeed = 4.95f;
-                damagePerShot = 17f;
-                attackRange = 38f;
-                break;
-
-            case "unit07_android":
+            case "desert_commando": // 3-Round Burst Battle Rifle
                 maxHealth = 100f;
                 maxShield = 65f;
-                moveSpeed = 4.40f;
+                moveSpeed = 4.65f;
                 damagePerShot = 17f;
-                attackRange = 42f;
+                attackRange = 78f;
+                maxAmmo = 30;
                 break;
 
-            case "wasteland_nomad":
-            case "desert_commando":
+            case "cyborg_specops": // Continuous Phase Laser
+                maxHealth = 100f;
+                maxShield = 50f;
+                moveSpeed = 5.05f;
+                damagePerShot = 11f;
+                attackRange = 66f;
+                maxAmmo = 48;
+                break;
+
+            case "unit07_android": // Twin-Core Phase Laser
+                maxHealth = 100f;
+                maxShield = 70f;
+                moveSpeed = 4.55f;
+                damagePerShot = 11f;
+                attackRange = 72f;
+                maxAmmo = 52;
+                break;
+
+            case "wasteland_nomad": // Long-Range Scout Marksman
+                maxHealth = 100f;
+                maxShield = 55f;
+                moveSpeed = 4.75f;
+                damagePerShot = 28f;
+                attackRange = 95f;
+                maxAmmo = 20;
+                break;
+
+            case "combat_medic": // Tactical Defense Carbine
+                maxHealth = 100f;
+                maxShield = 60f;
+                moveSpeed = 4.85f;
+                damagePerShot = 15f;
+                attackRange = 68f;
+                maxAmmo = 32;
+                break;
+
+            case "cyber_outlaw": // Heavy Plasma Hand Cannon
             default:
                 maxHealth = 100f;
                 maxShield = 55f;
-                moveSpeed = 4.50f;
-                damagePerShot = 17f;
-                attackRange = 40f;
+                moveSpeed = 4.95f;
+                damagePerShot = 30f;
+                attackRange = 70f;
+                maxAmmo = 12;
                 break;
         }
+        _baseMaxHealth = maxHealth;
+        _baseMaxShield = maxShield;
+        _baseDamagePerShot = damagePerShot;
+        currentAmmo = maxAmmo;
+        ApplyDifficultyScaling(true);
+    }
+
+    public void ApplyDifficultyScaling(bool resetVitals)
+    {
+        float hpPct = maxHealth > 0.01f ? Mathf.Clamp01(currentHealth / maxHealth) : 1f;
+        float shPct = maxShield > 0.01f ? Mathf.Clamp01(currentShield / maxShield) : 1f;
+
+        int diff = CurrentDifficulty;
+        if (diff == 0)
+        {
+            // RECRUIT (Easy): Generous LoS reaction delay, wider spread, longer burst pause, reduced bot damage
+            maxHealth = _baseMaxHealth;
+            maxShield = _baseMaxShield * 0.85f;
+            damagePerShot = _baseDamagePerShot * 0.78f;
+            _burstPauseMultiplier = 1.55f;
+            _spreadMultiplier = 1.48f;
+        }
+        else if (diff == 2)
+        {
+            // ELITE (Hard): Instantaneous LoS snap reaction as before + 50% more Health & Shields
+            maxHealth = _baseMaxHealth * 1.50f;
+            maxShield = _baseMaxShield * 1.50f;
+            damagePerShot = _baseDamagePerShot * 1.05f;
+            _burstPauseMultiplier = 0.90f;
+            _spreadMultiplier = 0.92f;
+        }
+        else
+        {
+            // TACTICAL (Normal - Default): Minor LoS reaction delay before opening fire, balanced spread & pause
+            maxHealth = _baseMaxHealth;
+            maxShield = _baseMaxShield;
+            damagePerShot = _baseDamagePerShot * 0.90f;
+            _burstPauseMultiplier = 1.25f;
+            _spreadMultiplier = 1.22f;
+        }
+
+        if (resetVitals)
+        {
+            currentHealth = maxHealth;
+            currentShield = maxShield;
+        }
+        else
+        {
+            currentHealth = Mathf.Clamp(hpPct * maxHealth, 1f, maxHealth);
+            currentShield = Mathf.Clamp(shPct * maxShield, 0f, maxShield);
+        }
+
+        if (_overheadHealthSlider != null)
+        {
+            _overheadHealthSlider.maxValue = maxHealth;
+            _overheadHealthSlider.value = currentHealth;
+        }
+        if (_overheadShieldSlider != null)
+        {
+            _overheadShieldSlider.maxValue = maxShield;
+            _overheadShieldSlider.value = currentShield;
+        }
+    }
+
+    private float GetLosReactionDelay(Transform target)
+    {
+        int diff = CurrentDifficulty;
+        Transform localPlayer = OasisPlayerHelper.FindPlayerTransform();
+        bool isTargetingHumanPlayer = localPlayer != null && target != null && (target == localPlayer || target.IsChildOf(localPlayer));
+
+        if (diff == 0)
+        {
+            // RECRUIT: Generous LoS acquisition delay (0.85s - 1.20s against player)
+            return isTargetingHumanPlayer ? Random.Range(0.85f, 1.20f) : Random.Range(0.65f, 0.95f);
+        }
+        if (diff == 2)
+        {
+            // ELITE: Instantaneous snap reaction on LoS (0.06s - 0.14s)
+            return Random.Range(0.06f, 0.14f);
+        }
+        // TACTICAL (Default): Natural minor LoS reaction delay (0.48s - 0.75s against player) so bots don't instant-shoot on frame 1 of LoS
+        return isTargetingHumanPlayer ? Random.Range(0.48f, 0.75f) : Random.Range(0.35f, 0.58f);
     }
 
     public void InitializeBot(int team, string name, string classId, Texture2D skinTex, Color skinAccent, int assignedSlot = 0)
@@ -836,8 +995,11 @@ public class OasisCombatAI : MonoBehaviour
             _currentTarget = FindBestEnemyTarget();
             if (_currentTarget != null && _currentTarget != prev)
             {
-                // Fast, snappy reaction time before firing at newly acquired enemy
-                _nextFireTime = Time.time + Random.Range(0.10f, 0.22f);
+                // Difficulty-scaled LoS reaction delay before firing at newly acquired enemy
+                _hasLockedOnTarget = false;
+                _losLockOnTimer = GetLosReactionDelay(_currentTarget);
+                _burstShotsRemaining = 0;
+                _nextFireTime = Time.time + _losLockOnTimer;
             }
         }
 
@@ -1040,8 +1202,8 @@ public class OasisCombatAI : MonoBehaviour
             ? OasisSpawnSystem.Instance.GetPlayableCenter() 
             : new Vector3(0f, -2.0f, -112.0f);
         Vector3 arenaCenter = anchor + new Vector3(0f, 0f, -34f);
-        float softBoundary = 42f;
-        float hardBoundary = 56f;
+        float softBoundary = 135f;
+        float hardBoundary = 152f;
 
         // Void catch / ground safeguard: trigger if bot falls below bedrock safety floor (Y < -12m)
         if (transform.position.y < (anchor.y - 12.0f) || transform.position.y < -12.0f)
@@ -1065,11 +1227,10 @@ public class OasisCombatAI : MonoBehaviour
 
         bool inWater = OasisWaterZone.IsInWater(transform.position);
 
-        // Water No-Fire Zone Steering & Swimming: if bot wades into the water pond, steer it back out toward dry land
+        // Water No-Fire Zone Steering & Swimming: if bot wades into the water pond, steer it gently back out toward dry land without slowing down
         if (inWater)
         {
-            boundaryPush += OasisWaterZone.GetPushOutDirection(transform.position) * 8.5f;
-            _intendedMoveSpeed = Mathf.Min(_intendedMoveSpeed, 3.2f);
+            boundaryPush += OasisWaterZone.GetPushOutDirection(transform.position) * 6.5f;
         }
 
         if (deltaFromArena.magnitude > hardBoundary)
@@ -1444,47 +1605,59 @@ public class OasisCombatAI : MonoBehaviour
         // Update Directional Combat, Strafe, Shoot & Reload Animation States
         if (_animator != null)
         {
-            _animator.speed = 1.0f;
-            if (isReloading && horizontalSpeed < 2.2f)
+            if (_characterController != null && !_characterController.isGrounded)
             {
-                _animator.Play("Reload");
-            }
-            else if (horizontalSpeed > 0.25f)
-            {
-                Vector3 localVel = transform.InverseTransformDirection(moveVelocity);
-                if (_currentTarget != null)
+                // In mid-air: legs must not pedal/cycle in thin air
+                _animator.speed = 0f;
+                if (!_animator.GetCurrentAnimatorStateInfo(0).IsName("Jump"))
                 {
-                    if (Mathf.Abs(localVel.x) > Mathf.Abs(localVel.z) * 0.85f)
-                    {
-                        _animator.Play(localVel.x < 0f ? "WalkLeft_Shoot_AR" : "WalkRight_Shoot_AR");
-                    }
-                    else if (localVel.z < -0.35f)
-                    {
-                        _animator.Play("WalkBack_Shoot_AR");
-                    }
-                    else if (horizontalSpeed > 4.2f)
-                    {
-                        _animator.Play("Run_gunMiddle_AR");
-                    }
-                    else
-                    {
-                        _animator.Play("WalkFront_Shoot_AR");
-                    }
-                }
-                else
-                {
-                    _animator.Play(horizontalSpeed > 4.0f ? "Run_guard_AR" : "WalkFront_Shoot_AR");
+                    _animator.Play("Jump", 0, 0.42f);
                 }
             }
             else
             {
-                if (_shootPoseTimer > 0f || _burstShotsRemaining > 0)
+                _animator.speed = 1.0f;
+                if (isReloading && horizontalSpeed < 2.2f)
                 {
-                    _animator.Play("Shoot_BurstShot_AR");
+                    _animator.Play("Reload");
+                }
+                else if (horizontalSpeed > 0.25f)
+                {
+                    Vector3 localVel = transform.InverseTransformDirection(moveVelocity);
+                    if (_currentTarget != null)
+                    {
+                        if (Mathf.Abs(localVel.x) > Mathf.Abs(localVel.z) * 0.85f)
+                        {
+                            _animator.Play(localVel.x < 0f ? "WalkLeft_Shoot_AR" : "WalkRight_Shoot_AR");
+                        }
+                        else if (localVel.z < -0.35f)
+                        {
+                            _animator.Play("WalkBack_Shoot_AR");
+                        }
+                        else if (horizontalSpeed > 4.2f)
+                        {
+                            _animator.Play("Run_gunMiddle_AR");
+                        }
+                        else
+                        {
+                            _animator.Play("WalkFront_Shoot_AR");
+                        }
+                    }
+                    else
+                    {
+                        _animator.Play(horizontalSpeed > 4.0f ? "Run_guard_AR" : "WalkFront_Shoot_AR");
+                    }
                 }
                 else
                 {
-                    _animator.Play("Idle_Shoot_Ar");
+                    if (_shootPoseTimer > 0f || _burstShotsRemaining > 0)
+                    {
+                        _animator.Play("Shoot_BurstShot_AR");
+                    }
+                    else
+                    {
+                        _animator.Play("Idle_Shoot_Ar");
+                    }
                 }
             }
         }
@@ -1514,43 +1687,104 @@ public class OasisCombatAI : MonoBehaviour
 
         if (dist > attackRange + 6f) return;
 
-        // Line of Sight Verification with 0.35s grace memory so brief environmental clips don't stall firing
+        // Line of Sight Verification & Difficulty-Scaled LoS Reaction Delay
         if (!HasClearLineOfSight(_currentTarget))
         {
             _losLostTimer += Time.deltaTime;
-            if (_losLostTimer > 0.35f)
+            if (_losLostTimer > 0.32f)
             {
                 _burstShotsRemaining = 0;
+                _hasLockedOnTarget = false;
                 return;
             }
         }
         else
         {
             _losLostTimer = 0f;
+            if (!_hasLockedOnTarget)
+            {
+                _hasLockedOnTarget = true;
+                _burstShotsRemaining = 0;
+                _losLockOnTimer = GetLosReactionDelay(_currentTarget);
+                _nextFireTime = Mathf.Max(_nextFireTime, Time.time + _losLockOnTimer);
+            }
         }
 
-        // Handle active burst fire sequence with responsive cycle time (0.12s per bolt)
+        // Wait for LoS acquisition delay to elapse before firing first shot after gaining LoS
+        if (_losLockOnTimer > 0f)
+        {
+            _losLockOnTimer -= Time.deltaTime;
+            return;
+        }
+
+        // Handle active burst fire sequence with class-authentic cycle cadence
         if (_burstShotsRemaining > 0)
         {
             _burstTimer -= Time.deltaTime;
             if (_burstTimer <= 0f)
             {
-                _burstTimer = 0.12f;
+                switch (operativeClassId)
+                {
+                    case "desert_commando": // 3-Round Burst Battle Rifle
+                        _burstTimer = 0.062f;
+                        break;
+                    case "cyborg_specops":
+                    case "unit07_android": // Continuous Phase Laser stream ticks
+                        _burstTimer = 0.075f;
+                        break;
+                    case "wasteland_nomad": // Long-Range Scout Marksman
+                        _burstTimer = 0.30f;
+                        break;
+                    case "cyber_outlaw": // Heavy Plasma Hand Cannon
+                        _burstTimer = 0.25f;
+                        break;
+                    case "combat_medic": // Tactical Defense Carbine
+                        _burstTimer = 0.11f;
+                        break;
+                    case "heavy_warrior": // Heavy Pulse Autocannon
+                    default:
+                        _burstTimer = 0.13f;
+                        break;
+                }
                 _burstShotsRemaining--;
                 ExecuteSingleBlasterShot();
             }
             return;
         }
 
-        // Trigger next burst fire (short tactical pauses 0.45s - 0.85s instead of sluggish 2+ seconds)
+        // Trigger next burst fire with class-specific burst count and difficulty-scaled pause interval
         if (Time.time >= _nextFireTime)
         {
-            float burstDelay = (operativeClassId == "cyborg_specops" || operativeClassId == "cyber_outlaw")
-                ? Random.Range(0.35f, 0.60f)
-                : Random.Range(0.45f, 0.85f);
-            _nextFireTime = Time.time + burstDelay;
-            _burstShotsRemaining = (operativeClassId == "heavy_warrior") ? Random.Range(4, 7) : Random.Range(3, 6);
-            _burstTimer = 0.03f;
+            switch (operativeClassId)
+            {
+                case "desert_commando": // Strict 3-round battle rifle burst
+                    _nextFireTime = Time.time + Random.Range(0.45f, 0.72f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = 3;
+                    break;
+                case "cyborg_specops":
+                case "unit07_android": // Continuous Phase Laser stream
+                    _nextFireTime = Time.time + Random.Range(0.40f, 0.65f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = Random.Range(7, 11);
+                    break;
+                case "wasteland_nomad": // Marksman precision 1-2 shots
+                    _nextFireTime = Time.time + Random.Range(0.50f, 0.80f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = Random.Range(1, 3);
+                    break;
+                case "cyber_outlaw": // Heavy Hand Cannon 2-3 slugs
+                    _nextFireTime = Time.time + Random.Range(0.45f, 0.75f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = Random.Range(2, 4);
+                    break;
+                case "heavy_warrior": // Suppressive Autocannon 6-9 rounds
+                    _nextFireTime = Time.time + Random.Range(0.50f, 0.85f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = Random.Range(6, 10);
+                    break;
+                case "combat_medic": // Defense Carbine 4-6 rounds
+                default:
+                    _nextFireTime = Time.time + Random.Range(0.42f, 0.72f) * _burstPauseMultiplier;
+                    _burstShotsRemaining = Random.Range(4, 7);
+                    break;
+            }
+            _burstTimer = 0.02f;
         }
     }
 
@@ -1616,28 +1850,30 @@ public class OasisCombatAI : MonoBehaviour
         {
             float targetDist = Vector3.Distance(muzzle, _currentTarget.position);
             Vector3 targetCenter = _currentTarget.position + Vector3.up * 1.15f;
-            // Realistic, balanced distance-scaled spread: tight at close range, natural cone at distance
-            float spreadRadius = Mathf.Clamp(targetDist * 0.030f, 0.16f, 0.78f);
+            float spreadScale = ((operativeClassId == "wasteland_nomad") ? 0.018f :
+                                 (operativeClassId == "desert_commando") ? 0.022f : 0.028f) * _spreadMultiplier;
+            float spreadRadius = Mathf.Clamp(targetDist * spreadScale, 0.14f * _spreadMultiplier, 0.88f * _spreadMultiplier);
             aimPoint = targetCenter + (Random.insideUnitSphere * spreadRadius);
         }
         else
         {
-            aimPoint = muzzle + transform.forward * 20f;
+            aimPoint = muzzle + transform.forward * 25f;
         }
 
         Vector3 fireDir = (aimPoint - muzzle).normalized;
 
-        // Audio: soft 3D audio shot
+        // Audio: authentic 3D weapon sound per operative class
         if (_audioSource != null)
         {
-            _audioSource.PlayOneShot(ProceduralAudio.GetBlasterShotClip(), 0.18f);
+            _audioSource.PlayOneShot(ProceduralAudio.GetWeaponShotClipForClass(operativeClassId), 0.24f);
         }
 
+        float maxRayDist = Mathf.Max(85f, attackRange + 15f);
         // Raycast against scene (filter out triggers, shooter, friendly teammates, and already-downed operatives)
-        RaycastHit[] hits = Physics.RaycastAll(muzzle, fireDir, 60f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        RaycastHit[] hits = Physics.RaycastAll(muzzle, fireDir, maxRayDist, Physics.AllLayers, QueryTriggerInteraction.Ignore);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
-        Vector3 laserEnd = muzzle + fireDir * 60f;
+        Vector3 laserEnd = muzzle + fireDir * maxRayDist;
         int localPlayerTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
         Transform localPlayerTrans = OasisPlayerHelper.FindPlayerTransform();
 
@@ -1711,8 +1947,46 @@ public class OasisCombatAI : MonoBehaviour
         // Firing weapon drops spawn protection immediately so bots cannot abuse invulnerability while shooting
         _reviveGraceShieldTimer = 0f;
 
-        // Colored laser beam using tactical color (blue for ally, red for enemy)
-        BlasterVFX.SpawnLaserBeam(muzzle, laserEnd, GetTacticalColor());
+        // Class-authentic weapon tracer color, width, and duration blended with tactical ally/enemy tint
+        Color tacCol = GetTacticalColor();
+        Color classCol = tacCol;
+        float beamWidth = 0.085f;
+        float beamDuration = 0.095f;
+        switch (operativeClassId)
+        {
+            case "heavy_warrior": // Heavy Pulse Autocannon
+                classCol = Color.Lerp(new Color(1.0f, 0.45f, 0.12f), tacCol, 0.35f);
+                beamWidth = 0.13f;
+                beamDuration = 0.11f;
+                break;
+            case "desert_commando": // 3-Round Burst Battle Rifle
+                classCol = Color.Lerp(new Color(1.0f, 0.76f, 0.20f), tacCol, 0.35f);
+                beamWidth = 0.085f;
+                beamDuration = 0.085f;
+                break;
+            case "cyborg_specops":
+            case "unit07_android": // Continuous Phase Laser
+                classCol = Color.Lerp(new Color(0.20f, 0.96f, 1.0f), tacCol, 0.40f);
+                beamWidth = 0.105f;
+                beamDuration = 0.095f;
+                break;
+            case "wasteland_nomad": // Long-Range Scout Marksman
+                classCol = Color.Lerp(new Color(0.45f, 0.98f, 1.0f), tacCol, 0.30f);
+                beamWidth = 0.095f;
+                beamDuration = 0.14f;
+                break;
+            case "combat_medic": // Tactical Defense Carbine
+                classCol = Color.Lerp(new Color(0.22f, 0.98f, 0.55f), tacCol, 0.35f);
+                beamWidth = 0.075f;
+                beamDuration = 0.085f;
+                break;
+            case "cyber_outlaw": // Heavy Plasma Hand Cannon
+                classCol = Color.Lerp(new Color(0.95f, 0.32f, 0.98f), tacCol, 0.35f);
+                beamWidth = 0.115f;
+                beamDuration = 0.12f;
+                break;
+        }
+        BlasterVFX.SpawnLaserBeam(muzzle, laserEnd, classCol, beamWidth, beamDuration);
     }
 
     /// <summary>
@@ -1776,8 +2050,14 @@ public class OasisCombatAI : MonoBehaviour
                 {
                     if (b != null && b.GetHashCode() == attackerId && !b.isDead && !b.isDowned)
                     {
-                        _currentTarget = b.transform;
-                        _nextFireTime = Mathf.Min(_nextFireTime, Time.time + 0.12f);
+                        if (_currentTarget != b.transform)
+                        {
+                            _currentTarget = b.transform;
+                            _hasLockedOnTarget = false;
+                            _losLockOnTimer = GetLosReactionDelay(_currentTarget) * 0.65f;
+                        }
+                        float retDelay = CurrentDifficulty == 2 ? 0.10f : (CurrentDifficulty == 0 ? 0.55f : 0.32f);
+                        _nextFireTime = Mathf.Min(_nextFireTime, Time.time + retDelay);
                         break;
                     }
                 }
@@ -2071,6 +2351,7 @@ public class OasisCombatAI : MonoBehaviour
             _visualRoot.gameObject.SetActive(true);
         }
 
+        ApplyDifficultyScaling(true);
         currentHealth = maxHealth;
         currentShield = maxShield;
         currentAmmo = maxAmmo;
@@ -2080,6 +2361,8 @@ public class OasisCombatAI : MonoBehaviour
         downedTimer = 10f;
         reviveProgress = 0f;
         _shieldRegenDelayTimer = 0f;
+        _hasLockedOnTarget = false;
+        _losLockOnTimer = GetLosReactionDelay(_currentTarget);
 
         if (_characterController != null) _characterController.enabled = true;
         if (_overheadCanvasObj != null)

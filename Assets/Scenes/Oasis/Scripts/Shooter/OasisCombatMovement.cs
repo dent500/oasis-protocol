@@ -67,6 +67,10 @@ public class OasisCombatMovement : MonoBehaviour
     public float cloakTimeRemaining = 0f;
     public float scanReconTimeRemaining = 0f;
     public float medicFieldTimeRemaining = 0f;
+    public float aegisTimeRemaining = 0f;
+    public float empOverdriveTimeRemaining = 0f;
+    public float deadshotTimeRemaining = 0f;
+    public float classMobilityMultiplier = 1.0f;
     public Vector3 medicFieldPosition;
 
     private CharacterController _characterController;
@@ -274,6 +278,7 @@ public class OasisCombatMovement : MonoBehaviour
         else if (_wasMenuOrMatchEnded)
         {
             _wasMenuOrMatchEnded = false;
+            ResetMovementState();
             SetThirdPersonMode(false); // Enter gameplay in natural First-Person Shooter view by default (V toggles 3rd-person)
             if (_inputs != null)
             {
@@ -474,19 +479,34 @@ public class OasisCombatMovement : MonoBehaviour
         }
     }
 
-    public void ApplyCrouchSpeed()
+    public void SyncControllerSpeeds()
     {
+        if (_fpc == null) _fpc = GetComponent<StarterAssets.FirstPersonController>();
         if (_fpc == null) return;
+
+        float abilitySpeedMult = 1.0f;
+        if (cloakTimeRemaining > 0f) abilitySpeedMult = 1.35f;
+        else if (scanReconTimeRemaining > 0f || medicFieldTimeRemaining > 0f) abilitySpeedMult = 1.20f;
+        else if (deadshotTimeRemaining > 0f) abilitySpeedMult = 1.15f;
+
+        float effectiveRun = baseRunSpeed * classMobilityMultiplier * abilitySpeedMult;
+        float effectiveSprint = Mathf.Max(10.5f, baseSprintSpeed) * classMobilityMultiplier * abilitySpeedMult;
+
         if (isCrouching)
         {
-            _fpc.MoveSpeed = baseRunSpeed * crouchSpeedMultiplier; // ~3.5 m/s tactical crouch walk
-            _fpc.SprintSpeed = baseRunSpeed * crouchSpeedMultiplier; // disallow sprint during crouch
+            _fpc.MoveSpeed = effectiveRun * crouchSpeedMultiplier;
+            _fpc.SprintSpeed = effectiveRun * crouchSpeedMultiplier;
         }
         else
         {
-            _fpc.MoveSpeed = baseRunSpeed;
-            _fpc.SprintSpeed = baseSprintSpeed;
+            _fpc.MoveSpeed = effectiveRun;
+            _fpc.SprintSpeed = effectiveSprint;
         }
+    }
+
+    public void ApplyCrouchSpeed()
+    {
+        SyncControllerSpeeds();
     }
 
     /// <summary>
@@ -590,51 +610,79 @@ public class OasisCombatMovement : MonoBehaviour
     public void ConfigureOperativeAbility(int opIndex)
     {
         currentOperativeIndex = opIndex;
+        float targetMaxHealth = 165f;
+
         switch (opIndex)
         {
             case 0: // Titanium Heavy Warrior
-                abilityName = "TITANIUM SLAM";
-                abilityDescription = "Kinetic shockwave (45 AoE dmg) + 60 HP Overshield";
-                abilityCooldown = 14f;
-                abilityActiveDuration = 0f;
-                break;
-            case 1: // Desert Tactical Commando
-                abilityName = "CLUSTER MORTAR";
-                abilityDescription = "4-bomblet incendiary cluster barrage (50 dmg each)";
-                abilityCooldown = 12f;
-                abilityActiveDuration = 0f;
-                break;
-            case 2: // Cyborg Special Operative
-                abilityName = "TACTICAL CLOAK";
-                abilityDescription = "Stealth camo, breaks AI aggro, +35% speed & instant reload";
-                abilityCooldown = 15f;
-                abilityActiveDuration = 6f;
-                break;
-            case 3: // Unit-07 Combat Android
-                abilityName = "CORE EMP PULSE";
-                abilityDescription = "14m EMP wave stuns enemies (3.5s), strips shields & maxes ammo";
-                abilityCooldown = 16f;
-                abilityActiveDuration = 0f;
-                break;
-            case 4: // Wasteland Nomad
-                abilityName = "ORBITAL RECON";
-                abilityDescription = "Exposes all enemy locations through walls + 25% blaster dmg";
+                abilityName = "AEGIS SIEGE OVERDRIVE";
+                abilityDescription = "+75 Shield/HP, 40% dmg reduction, instant reload & +25% fire rate (8s)";
                 abilityCooldown = 14f;
                 abilityActiveDuration = 8f;
+                classMobilityMultiplier = 0.94f;
+                targetMaxHealth = 185f;
+                break;
+            case 1: // Desert Tactical Commando
+                abilityName = "ORBITAL PRECISION STRIKE";
+                abilityDescription = "Laser-designates target up to 250m for 3-wave orbital plasma barrage";
+                abilityCooldown = 13f;
+                abilityActiveDuration = 2.0f;
+                classMobilityMultiplier = 1.00f;
+                targetMaxHealth = 165f;
+                break;
+            case 2: // Cyborg Special Operative
+                abilityName = "PHANTOM BLINK & CLOAK";
+                abilityDescription = "9m forward blink, stealth camo, +35% speed & +25% ambush dmg (6s)";
+                abilityCooldown = 14f;
+                abilityActiveDuration = 6f;
+                classMobilityMultiplier = 1.06f;
+                targetMaxHealth = 150f;
+                break;
+            case 3: // Unit-07 Combat Android
+                abilityName = "DIRECTED EMP SHOCKWAVE";
+                abilityDescription = "Ranged EMP orb + 20m pulse: stuns (4s), 55 EMP dmg & infinite beam (6s)";
+                abilityCooldown = 15f;
+                abilityActiveDuration = 6f;
+                classMobilityMultiplier = 0.96f;
+                targetMaxHealth = 180f;
+                break;
+            case 4: // Wasteland Nomad
+                abilityName = "ORBITAL RECON & LOCK";
+                abilityDescription = "Exposes all hostiles (8s), instant reload, +20% speed & +15% dmg";
+                abilityCooldown = 14f;
+                abilityActiveDuration = 8f;
+                classMobilityMultiplier = 1.03f;
+                targetMaxHealth = 155f;
                 break;
             case 5: // Combat Medic
-                abilityName = "NANO-MENDER FIELD";
-                abilityDescription = "AoE healing aura (18 HP/s for 6s) + instant squadmate revive";
-                abilityCooldown = 18f;
-                abilityActiveDuration = 6f;
+                abilityName = "NANO-MENDER SANCTUARY";
+                abilityDescription = "+40 HP burst, 22 HP/s aura (7s), +20% speed & 15m instant revive";
+                abilityCooldown = 15f;
+                abilityActiveDuration = 7f;
+                classMobilityMultiplier = 1.01f;
+                targetMaxHealth = 165f;
                 break;
+            case 6: // Cyber Outlaw Specialist
             default:
-                abilityName = "TACTICAL OVERCHARGE";
-                abilityDescription = "Restores 50 shield & reloads blaster instantly";
-                abilityCooldown = 12f;
-                abilityActiveDuration = 0f;
+                abilityName = "DEADSHOT OVERCLOCK";
+                abilityDescription = "Instant reload, +60% fire rate, +35% crit dmg, smart-snap & +25 HP siphon (7s)";
+                abilityCooldown = 14f;
+                abilityActiveDuration = 7f;
+                classMobilityMultiplier = 1.04f;
+                targetMaxHealth = 155f;
                 break;
         }
+
+        if (OasisShooterManager.Instance != null)
+        {
+            OasisShooterManager.Instance.maxHealth = targetMaxHealth;
+            if (!OasisShooterManager.Instance.isPlayerDead)
+            {
+                OasisShooterManager.Instance.currentHealth = targetMaxHealth;
+                OasisShooterManager.Instance.UpdateHealthUI();
+            }
+        }
+        SyncControllerSpeeds();
     }
 
     private void HandleAbilityInput()
@@ -661,6 +709,17 @@ public class OasisCombatMovement : MonoBehaviour
         }
     }
 
+    private void InstantReloadEquippedWeapon()
+    {
+        var wpn = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+        if (wpn == null) wpn = FindAnyObjectByType<BlasterWeapon>();
+        if (wpn != null)
+        {
+            wpn.currentAmmo = wpn.maxAmmo;
+            OasisShooterManager.Instance?.UpdateAmmo(wpn.currentAmmo, wpn.maxAmmo, false);
+        }
+    }
+
     private void ActivateSpecialAbility()
     {
         abilityCooldownRemaining = abilityCooldown;
@@ -671,137 +730,269 @@ public class OasisCombatMovement : MonoBehaviour
 
         switch (currentOperativeIndex)
         {
-            case 0: // Titanium Heavy Warrior: TITANIUM SLAM
+            case 0: // Titanium Heavy Warrior: AEGIS SIEGE OVERDRIVE
             {
-                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetBombExplosionClip(), 0.9f);
-                BlasterVFX.SpawnImpact(transform.position + Vector3.up * 0.2f, Vector3.up, false);
+                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetAegisOverdriveClip(), 0.95f);
+                aegisTimeRemaining = 8.0f;
+                InstantReloadEquippedWeapon();
 
-                // +60 Overshield
+                // +75 Shield/HP Reinforcement (allows up to +50 Overshield above maxHealth)
                 if (OasisShooterManager.Instance != null)
                 {
-                    OasisShooterManager.Instance.currentHealth = Mathf.Min(OasisShooterManager.Instance.maxHealth + 60f, OasisShooterManager.Instance.currentHealth + 60f);
+                    OasisShooterManager.Instance.currentHealth = Mathf.Min(
+                        OasisShooterManager.Instance.maxHealth + 50f,
+                        OasisShooterManager.Instance.currentHealth + 75f);
+                    OasisShooterManager.Instance.UpdateHealthUI();
                 }
 
-                // Concussive shockwave (deal 45 damage to all enemy bots within 9m)
-                foreach (var bot in OasisCombatAI.ActiveBots)
+                BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1.0f, Vector3.up, false);
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#26D9FF>[F: AEGIS SIEGE OVERDRIVE] +75 SHIELD // 40% DMG REDUCTION & +25% FIRE RATE (8s)</color>", 3.5f);
+                break;
+            }
+
+            case 1: // Desert Tactical Commando: ORBITAL PRECISION STRIKE
+            {
+                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetOrbitalStrikeClip(), 0.95f);
+                Camera cam = Camera.main;
+                Vector3 rayOrigin = cam != null ? cam.transform.position : transform.position + Vector3.up * 1.6f;
+                Vector3 rayDir = cam != null ? cam.transform.forward : transform.forward;
+
+                int mask = Physics.AllLayers & ~((1 << LayerMask.NameToLayer("Ignore Raycast")) | (1 << gameObject.layer) | (1 << 8));
+                Vector3 strikePoint = rayOrigin + rayDir * 45f;
+                if (Physics.Raycast(rayOrigin, rayDir, out RaycastHit hit, 250f, mask, QueryTriggerInteraction.Ignore))
                 {
-                    if (bot == null || bot.isDead || bot.isDowned || bot.teamId == localTeam) continue;
-                    float d = Vector3.Distance(transform.position, bot.transform.position);
-                    if (d <= 9.0f)
+                    strikePoint = hit.point;
+                }
+                else
+                {
+                    // Project down onto terrain at 65m ahead if aiming into sky
+                    Vector3 probe = rayOrigin + new Vector3(rayDir.x, 0f, rayDir.z).normalized * 65f;
+                    if (Physics.Raycast(new Vector3(probe.x, 40f, probe.z), Vector3.down, out RaycastHit gHit, 80f, mask, QueryTriggerInteraction.Ignore))
                     {
-                        Vector3 push = (bot.transform.position - transform.position).normalized;
-                        bot.TakeDamage(45f, bot.transform.position + Vector3.up * 1f, push, localId, localTeam);
-                        TriggerHitmarker();
+                        strikePoint = gHit.point;
                     }
                 }
-                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#26D9FF>[F: TITANIUM SLAM] SHOCKWAVE DISCHARGED // +60 OVERSHIELD</color>", 3.0f);
+
+                StartCoroutine(ExecuteOrbitalPrecisionStrikeRoutine(strikePoint, localTeam, localId));
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#FF9933>[F: ORBITAL PRECISION STRIKE] TARGET LOCKED // 3-WAVE ORBITAL PLASMA BARRAGE INBOUND!</color>", 3.5f);
                 break;
             }
 
-            case 1: // Desert Tactical Commando: CLUSTER MORTAR
+            case 2: // Cyborg Special Operative: PHANTOM BLINK & CLOAK
             {
-                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetBombLaunchClip(), 0.95f);
-                Vector3 launchOrigin = Camera.main != null ? Camera.main.transform.position + Camera.main.transform.forward * 0.6f : transform.position + Vector3.up * 1.5f;
-                Vector3 fwd = Camera.main != null ? Camera.main.transform.forward : transform.forward;
-
-                // Launch 4 bomblets in a cluster fan
-                for (int i = 0; i < 4; i++)
-                {
-                    Vector3 spreadDir = Quaternion.Euler(Random.Range(-5f, 2f), Random.Range(-18f, 18f), 0f) * fwd;
-                    Vector3 initialVel = spreadDir * Random.Range(16f, 22f) + Vector3.up * Random.Range(3f, 6f);
-                    OasisPlasmaBomb.SpawnBomb(launchOrigin, initialVel, 50f, 4.5f, localTeam, localId, 0.45f + i * 0.15f);
-                }
-                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#FF9933>[F: CLUSTER MORTAR] 4-BOMBLET BARRAGE DEPLOYED!</color>", 3.0f);
-                break;
-            }
-
-            case 2: // Cyborg Special Operative: TACTICAL CLOAK
-            {
-                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetAbilityChargeClip(), 0.9f);
+                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetPhantomBlinkClip(), 0.95f);
                 cloakTimeRemaining = 6.0f;
+                InstantReloadEquippedWeapon();
 
-                // Boost speed by 35%
-                if (_fpc != null)
+                // Instant 9m forward cyber-blink along aim/movement direction
+                Vector3 blinkDir = Camera.main != null ? Camera.main.transform.forward : transform.forward;
+                blinkDir.y = 0.08f;
+                blinkDir.Normalize();
+                BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, -blinkDir, false);
+                if (_characterController != null && _characterController.enabled)
                 {
-                    _fpc.MoveSpeed = baseRunSpeed * 1.35f;
-                    _fpc.SprintSpeed = baseSprintSpeed * 1.35f;
+                    _characterController.Move(blinkDir * 9.0f);
                 }
+                BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, blinkDir, false);
+                SyncControllerSpeeds();
 
-                // Instant blaster reload
-                var wpn = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
-                if (wpn == null) wpn = FindAnyObjectByType<BlasterWeapon>();
-                if (wpn != null)
-                {
-                    wpn.currentAmmo = wpn.maxAmmo;
-                    OasisShooterManager.Instance?.UpdateAmmo(wpn.currentAmmo, wpn.maxAmmo, false);
-                }
-
-                BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, Vector3.up, false);
-                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#33FFFF>[F: TACTICAL CLOAK] CAMOUFLAGE ACTIVE // +35% SPEED & AI AGGRO BROKEN (6s)</color>", 3.5f);
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#33FFFF>[F: PHANTOM BLINK & CLOAK] 9M BLINK // STEALTH CAMO, +35% SPEED & +25% AMBUSH DMG (6s)</color>", 3.5f);
                 break;
             }
 
-            case 3: // Unit-07 Combat Android: CORE EMP PULSE
+            case 3: // Unit-07 Combat Android: DIRECTED EMP SHOCKWAVE
             {
                 if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetEMPClip(), 1.0f);
+                empOverdriveTimeRemaining = 6.0f;
+                InstantReloadEquippedWeapon();
+
+                Camera cam = Camera.main;
+                Vector3 rayOrigin = cam != null ? cam.transform.position : transform.position + Vector3.up * 1.6f;
+                Vector3 rayDir = cam != null ? cam.transform.forward : transform.forward;
+                int mask = Physics.AllLayers & ~((1 << LayerMask.NameToLayer("Ignore Raycast")) | (1 << gameObject.layer) | (1 << 8));
+
+                Vector3 remoteEmpCenter = rayOrigin + rayDir * 35f;
+                if (Physics.Raycast(rayOrigin, rayDir, out RaycastHit hit, 180f, mask, QueryTriggerInteraction.Ignore))
+                {
+                    remoteEmpCenter = hit.point;
+                }
+
+                // Visual EMP beam from muzzle to remote detonation center
+                BlasterVFX.SpawnLaserBeam(transform.position + Vector3.up * 1.35f, remoteEmpCenter, new Color(0.20f, 0.95f, 1.0f), 0.18f, 0.30f);
+                BlasterVFX.SpawnBombExplosion(remoteEmpCenter, 8.0f);
                 BlasterVFX.SpawnImpact(transform.position + Vector3.up * 1f, Vector3.up, false);
 
-                // EMP stuns all enemy bots within 14m and strips 50 shields
                 int stunnedCount = 0;
                 foreach (var bot in OasisCombatAI.ActiveBots)
                 {
                     if (bot == null || bot.isDead || bot.isDowned || bot.teamId == localTeam) continue;
-                    float d = Vector3.Distance(transform.position, bot.transform.position);
-                    if (d <= 14.0f)
+                    float distSelf = Vector3.Distance(transform.position, bot.transform.position);
+                    float distTarget = Vector3.Distance(remoteEmpCenter, bot.transform.position);
+                    if (distSelf <= 20.0f || distTarget <= 14.0f)
                     {
-                        bot.ApplyEMPStun(3.5f);
+                        bot.ApplyEMPStun(4.0f);
+                        bot.TakeDamage(55f, bot.transform.position + Vector3.up * 1.1f, Vector3.up, localId, localTeam, Mathf.Min(distSelf, distTarget));
+                        BlasterVFX.SpawnDamagePopup(bot.transform.position + Vector3.up * 1.4f, 55f, false, false);
+                        TriggerHitmarker();
                         stunnedCount++;
                     }
                 }
 
-                // Instantly refill blaster ammo
-                var wpn = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
-                if (wpn == null) wpn = FindAnyObjectByType<BlasterWeapon>();
-                if (wpn != null)
+                // Also hit enemy real players in EMP radius
+                if (OasisNetworkManager.Instance != null)
                 {
-                    wpn.currentAmmo = wpn.maxAmmo;
-                    OasisShooterManager.Instance?.UpdateAmmo(wpn.currentAmmo, wpn.maxAmmo, false);
+                    var remList = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+                    for (int i = 0; i < remList.Count; i++)
+                    {
+                        var rp = remList[i];
+                        if (rp == null || rp.isDead || rp.teamId == localTeam || rp.transform == null) continue;
+                        float distSelf = Vector3.Distance(transform.position, rp.transform.position);
+                        float distTarget = Vector3.Distance(remoteEmpCenter, rp.transform.position);
+                        if (distSelf <= 20.0f || distTarget <= 14.0f)
+                        {
+                            OasisNetworkManager.Instance.SendPlayerHit(rp.id, 55f, localTeam);
+                            BlasterVFX.SpawnDamagePopup(rp.transform.position + Vector3.up * 1.4f, 55f, false, false);
+                            TriggerHitmarker();
+                            stunnedCount++;
+                        }
+                    }
                 }
 
-                OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#26D9FF>[F: CORE EMP PULSE] {stunnedCount} HOSTILES STUNNED // SHIELDS STRIPPED</color>", 3.5f);
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    $"<color=#26D9FF>[F: DIRECTED EMP SHOCKWAVE] {stunnedCount} HOSTILES STUNNED (55 DMG) // INFINITE BEAM ENERGY (6s)</color>", 3.5f);
                 break;
             }
 
-            case 4: // Wasteland Nomad: ORBITAL RECON
+            case 4: // Wasteland Nomad: ORBITAL RECON & LOCK
             {
-                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetScanPingClip(), 0.9f);
+                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetScanPingClip(), 0.95f);
                 scanReconTimeRemaining = 8.0f;
-                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#55FF55>[F: ORBITAL RECON] ALL HOSTILES DETECTED & +25% BLASTER DAMAGE (8s)</color>", 3.5f);
+                InstantReloadEquippedWeapon();
+                SyncControllerSpeeds();
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#55FF55>[F: ORBITAL RECON & LOCK] ALL HOSTILES LOCKED // +20% SPEED & +15% MARKSMAN DMG (8s)</color>", 3.5f);
                 break;
             }
 
-            case 5: // Combat Medic: NANO-MENDER FIELD
+            case 5: // Combat Medic: NANO-MENDER SANCTUARY
             {
                 if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetHealPulseClip(), 0.95f);
-                medicFieldTimeRemaining = 6.0f;
+                medicFieldTimeRemaining = 7.0f;
                 medicFieldPosition = transform.position;
+                SyncControllerSpeeds();
 
-                // Immediate emergency revive of any downed teammate within 7m
+                // Immediate +40 HP burst heal on cast
+                if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isPlayerDead)
+                {
+                    OasisShooterManager.Instance.currentHealth = Mathf.Min(
+                        OasisShooterManager.Instance.maxHealth,
+                        OasisShooterManager.Instance.currentHealth + 40f);
+                    OasisShooterManager.Instance.UpdateHealthUI();
+                }
+
+                // Immediate emergency revive of any downed AI or real teammate within 15m
                 foreach (var bot in OasisCombatAI.ActiveBots)
                 {
                     if (bot == null || bot.teamId != localTeam || !bot.isDowned) continue;
                     float d = Vector3.Distance(transform.position, bot.transform.position);
-                    if (d <= 7.0f)
+                    if (d <= 15.0f)
                     {
                         bot.Revive();
                         OasisShooterManager.Instance?.AddPlayerScore(75);
-                        OasisShooterManager.Instance?.ShowNotificationBanner($"<color=#FF5566>NANO-MENDER FIELD INSTANTLY RESURRECTED {bot.botName.ToUpper()}!</color>", 3.0f);
+                        OasisShooterManager.Instance?.ShowNotificationBanner(
+                            $"<color=#FF5566>NANO-MENDER SANCTUARY RESURRECTED {bot.botName.ToUpper()}!</color>", 3.0f);
+                    }
+                }
+                if (OasisNetworkManager.Instance != null)
+                {
+                    var remList = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+                    for (int i = 0; i < remList.Count; i++)
+                    {
+                        var rp = remList[i];
+                        if (rp == null || rp.teamId != localTeam || !rp.isDowned || rp.transform == null) continue;
+                        if (Vector3.Distance(transform.position, rp.transform.position) <= 15.0f)
+                        {
+                            OasisNetworkManager.Instance.BroadcastPlayerRevived(rp.id, localId);
+                            rp.isDowned = false;
+                            rp.reviveProgress = 0f;
+                            OasisShooterManager.Instance?.AddPlayerScore(75);
+                        }
                     }
                 }
 
-                OasisShooterManager.Instance?.ShowNotificationBanner("<color=#FF5566>[F: NANO-MENDER FIELD] FIELD DEPLOYED // REGENERATING 18 HP/S (6s)</color>", 3.5f);
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#FF5566>[F: NANO-MENDER SANCTUARY] +40 HP BURST // REGENERATING 22 HP/S & +20% SPEED (7s)</color>", 3.5f);
                 break;
             }
+
+            case 6: // Cyber Outlaw Specialist: DEADSHOT OVERCLOCK
+            default:
+            {
+                if (_audioSource != null) _audioSource.PlayOneShot(ProceduralAudio.GetDeadshotOverclockClip(), 0.95f);
+                deadshotTimeRemaining = 7.0f;
+                InstantReloadEquippedWeapon();
+                SyncControllerSpeeds();
+                OasisShooterManager.Instance?.ShowNotificationBanner(
+                    "<color=#EE55FF>[F: DEADSHOT OVERCLOCK] +60% FIRE RATE // SMART-LOCK & +25 HP SIPHON ON HIT (7s)</color>", 3.5f);
+                break;
+            }
+        }
+    }
+
+    private IEnumerator ExecuteOrbitalPrecisionStrikeRoutine(Vector3 centerPoint, int localTeam, int localId)
+    {
+        for (int wave = 0; wave < 3; wave++)
+        {
+            Vector2 offset2D = (wave == 0) ? Vector2.zero : Random.insideUnitCircle * 3.8f;
+            Vector3 impactPos = centerPoint + new Vector3(offset2D.x, 0f, offset2D.y);
+            Vector3 skyOrigin = impactPos + new Vector3(0f, 48f, 0f);
+
+            // Sky-to-ground orbital plasma beam
+            BlasterVFX.SpawnLaserBeam(skyOrigin, impactPos, new Color(1.0f, 0.72f, 0.18f), 0.36f, 0.32f);
+            BlasterVFX.SpawnBombExplosion(impactPos, 9.0f);
+            AudioSource.PlayClipAtPoint(ProceduralAudio.GetBombExplosionClip(), impactPos, 0.85f);
+
+            // Damage enemy AI bots within 9.5m blast radius
+            foreach (var bot in OasisCombatAI.ActiveBots)
+            {
+                if (bot == null || bot.isDead || bot.teamId == localTeam) continue;
+                float dist = Vector3.Distance(impactPos, bot.transform.position);
+                if (dist <= 9.5f)
+                {
+                    float falloff = Mathf.Lerp(1.0f, 0.55f, dist / 9.5f);
+                    float dmg = Mathf.Round(75f * falloff);
+                    Vector3 hitPos = bot.transform.position + Vector3.up * 1.1f;
+                    OasisAITelemetryLogger.Instance?.RecordPlayerHitLanded(bot, dmg, dist);
+                    bot.TakeDamage(dmg, hitPos, (bot.transform.position - impactPos).normalized, localId, localTeam, dist);
+                    BlasterVFX.SpawnDamagePopup(hitPos, dmg, false, false);
+                    TriggerHitmarker(false);
+                }
+            }
+
+            // Damage enemy real players within 9.5m blast radius
+            if (OasisNetworkManager.Instance != null)
+            {
+                var remList = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+                for (int i = 0; i < remList.Count; i++)
+                {
+                    var rp = remList[i];
+                    if (rp == null || rp.isDead || rp.teamId == localTeam || rp.transform == null) continue;
+                    float dist = Vector3.Distance(impactPos, rp.transform.position);
+                    if (dist <= 9.5f)
+                    {
+                        float falloff = Mathf.Lerp(1.0f, 0.55f, dist / 9.5f);
+                        float dmg = Mathf.Round(75f * falloff);
+                        OasisNetworkManager.Instance.SendPlayerHit(rp.id, dmg, localTeam);
+                        BlasterVFX.SpawnDamagePopup(rp.transform.position + Vector3.up * 1.3f, dmg, false, false);
+                        TriggerHitmarker(false);
+                    }
+                }
+            }
+
+            yield return new WaitForSeconds(0.28f);
         }
     }
 
@@ -817,14 +1008,29 @@ public class OasisCombatMovement : MonoBehaviour
             abilityActiveRemaining -= Time.deltaTime;
         }
 
+        if (aegisTimeRemaining > 0f)
+        {
+            aegisTimeRemaining -= Time.deltaTime;
+        }
+
+        if (empOverdriveTimeRemaining > 0f)
+        {
+            empOverdriveTimeRemaining -= Time.deltaTime;
+        }
+
+        if (deadshotTimeRemaining > 0f)
+        {
+            deadshotTimeRemaining -= Time.deltaTime;
+            if (deadshotTimeRemaining <= 0f) SyncControllerSpeeds();
+        }
+
         // 1. Cloak handling
         if (cloakTimeRemaining > 0f)
         {
             cloakTimeRemaining -= Time.deltaTime;
-            if (cloakTimeRemaining <= 0f && _fpc != null)
+            if (cloakTimeRemaining <= 0f)
             {
-                _fpc.MoveSpeed = baseRunSpeed;
-                _fpc.SprintSpeed = baseSprintSpeed;
+                SyncControllerSpeeds();
             }
         }
 
@@ -832,6 +1038,10 @@ public class OasisCombatMovement : MonoBehaviour
         if (scanReconTimeRemaining > 0f)
         {
             scanReconTimeRemaining -= Time.deltaTime;
+            if (scanReconTimeRemaining <= 0f)
+            {
+                SyncControllerSpeeds();
+            }
         }
 
         // 3. Medic Field healing aura
@@ -839,31 +1049,37 @@ public class OasisCombatMovement : MonoBehaviour
         {
             medicFieldTimeRemaining -= Time.deltaTime;
 
-            // Regenerate player health/shield
-            if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isPlayerDowned)
+            // Regenerate player health/shield at 22 HP/s
+            if (OasisShooterManager.Instance != null && !OasisShooterManager.Instance.isPlayerDowned && !OasisShooterManager.Instance.isPlayerDead)
             {
-                float healTick = Time.deltaTime * 18f;
+                float healTick = Time.deltaTime * 22f;
                 OasisShooterManager.Instance.currentHealth = Mathf.Min(OasisShooterManager.Instance.maxHealth, OasisShooterManager.Instance.currentHealth + healTick);
+                OasisShooterManager.Instance.UpdateHealthUI();
             }
 
-            // Heal friendly bots in 8m radius
+            // Heal friendly bots in 12m radius
             int localTeam = PlayerPrefs.GetInt("OasisPlayerTeam", 0);
             foreach (var bot in OasisCombatAI.ActiveBots)
             {
                 if (bot == null || bot.isDead || bot.teamId != localTeam) continue;
                 float d = Vector3.Distance(transform.position, bot.transform.position);
-                if (d <= 8.0f)
+                if (d <= 12.0f)
                 {
                     if (bot.isDowned)
                     {
-                        bot.reviveProgress += Time.deltaTime * 0.45f;
+                        bot.reviveProgress += Time.deltaTime * 0.55f;
                         if (bot.reviveProgress >= 1f) bot.Revive();
                     }
                     else
                     {
-                        bot.currentHealth = Mathf.Min(bot.maxHealth, bot.currentHealth + Time.deltaTime * 18f);
+                        bot.currentHealth = Mathf.Min(bot.maxHealth, bot.currentHealth + Time.deltaTime * 22f);
                     }
                 }
+            }
+
+            if (medicFieldTimeRemaining <= 0f)
+            {
+                SyncControllerSpeeds();
             }
         }
     }
@@ -1263,6 +1479,32 @@ public class OasisCombatMovement : MonoBehaviour
             }
         }
 
+        if (OasisNetworkManager.Instance != null)
+        {
+            var remList = OasisNetworkManager.Instance.GetRemotePlayerInstances();
+            for (int i = 0; i < remList.Count; i++)
+            {
+                var rp = remList[i];
+                if (rp == null || rp.isDead || rp.teamId == localTeam || rp.transform == null) continue;
+                Vector3 toRp = (rp.transform.position + Vector3.up * 1.0f) - transform.position;
+                float dist = toRp.magnitude;
+                if (dist <= 3.8f)
+                {
+                    Vector3 flatToRp = new Vector3(toRp.x, 0f, toRp.z).normalized;
+                    Vector3 flatFwd = new Vector3(strikeForward.x, 0f, strikeForward.z).normalized;
+                    if (Vector3.Dot(flatFwd, flatToRp) >= 0.25f || dist <= 1.8f)
+                    {
+                        float meleeDmg = 65f;
+                        Vector3 hitPos = rp.transform.position + Vector3.up * 1.2f;
+                        OasisNetworkManager.Instance.SendPlayerHit(rp.id, meleeDmg, localTeam);
+                        BlasterVFX.SpawnDamagePopup(hitPos, meleeDmg, true, false);
+                        TriggerHitmarker(true);
+                        landedHit = true;
+                    }
+                }
+            }
+        }
+
         if (landedHit && OasisShooterManager.Instance != null)
         {
             OasisShooterManager.Instance.currentHealth = Mathf.Min(
@@ -1281,6 +1523,26 @@ public class OasisCombatMovement : MonoBehaviour
 
         Vector3 vel = _characterController != null ? _characterController.velocity : Vector3.zero;
         float horizontalSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
+
+        // Priority 0: Airborne & Jetpack flight state - legs MUST NOT move whilst in the air!
+        bool isAirborne = _fpc != null && !_fpc.Grounded;
+        bool isJetpackFlight = _fpc != null && _fpc.IsJetpackActive;
+
+        if (isAirborne || isJetpackFlight)
+        {
+            if (robotHeroVisual != null)
+            {
+                robotHeroVisual.transform.localRotation = Quaternion.identity;
+            }
+
+            // Hold legs completely still in the authentic suspended airborne flight pose
+            robotHeroAnimator.speed = 0f;
+            if (!robotHeroAnimator.GetCurrentAnimatorStateInfo(0).IsName("Jump"))
+            {
+                robotHeroAnimator.Play("Jump", 0, 0.42f);
+            }
+            return;
+        }
 
         if (isCrouching)
         {
@@ -2273,30 +2535,64 @@ public class OasisCombatMovement : MonoBehaviour
     {
         if (_fpc == null) return;
 
-        float jW = 190f;
+        float jW = 200f;
         float jH = 22f;
         float jX = centerX - (jW * 0.5f);
         float jY = Screen.height - 108f;
 
-        bool ready = _fpc.thrusterCooldownRemaining <= 0f;
-        float cdPct = ready ? 1f : Mathf.Clamp01(1f - (_fpc.thrusterCooldownRemaining / _fpc.ThrusterCooldown));
+        float fuelPct = Mathf.Clamp01(_fpc.JetpackFuelRemaining / _fpc.JetpackMaxFuel);
+        bool isActive = _fpc.IsJetpackActive;
+        bool isFull = _fpc.JetpackFuelRemaining >= _fpc.JetpackMaxFuel - 0.05f;
+        bool isEmpty = _fpc.JetpackFuelRemaining <= 0.05f;
 
         // Background
         GUI.color = new Color(0.04f, 0.07f, 0.12f, 0.88f);
         GUI.DrawTexture(new Rect(jX, jY, jW, jH), _crosshairWhiteTex);
 
         // Progress line
-        GUI.color = ready ? new Color(0.2f, 0.95f, 1.0f, 0.95f) : new Color(0.95f, 0.55f, 0.15f, 0.85f);
-        GUI.DrawTexture(new Rect(jX + 4, jY + jH - 3, (jW - 8) * cdPct, 2), _crosshairWhiteTex);
+        if (isActive)
+        {
+            GUI.color = new Color(0.2f, 0.95f, 1.0f, 0.95f); // Bright active cyan
+        }
+        else if (isFull)
+        {
+            GUI.color = new Color(0.25f, 0.90f, 0.65f, 0.95f); // Teal/green ready
+        }
+        else if (isEmpty)
+        {
+            GUI.color = new Color(0.95f, 0.35f, 0.25f, 0.90f); // Depleted orange/red
+        }
+        else
+        {
+            GUI.color = new Color(0.95f, 0.75f, 0.25f, 0.85f); // Recharging amber
+        }
+        GUI.DrawTexture(new Rect(jX + 4, jY + jH - 3, (jW - 8) * fuelPct, 2), _crosshairWhiteTex);
 
         GUI.color = Color.white;
         GUIStyle jetStyle = new GUIStyle(GUI.skin.label);
         jetStyle.fontSize = 10;
         jetStyle.fontStyle = FontStyle.Bold;
         jetStyle.alignment = TextAnchor.MiddleCenter;
-        jetStyle.normal.textColor = ready ? new Color(0.2f, 0.95f, 1.0f) : new Color(0.8f, 0.85f, 0.9f);
+        jetStyle.normal.textColor = isActive ? new Color(0.2f, 0.95f, 1.0f) : (isFull ? new Color(0.35f, 0.95f, 0.70f) : (isEmpty ? new Color(0.95f, 0.4f, 0.3f) : new Color(0.95f, 0.85f, 0.45f)));
 
-        string status = ready ? "[SPACE x2] JET BOOST READY" : $"JET CHARGING {_fpc.thrusterCooldownRemaining:F1}s";
+        string status;
+        if (isActive)
+        {
+            status = $"JETPACK ACTIVE [{Mathf.RoundToInt(fuelPct * 100f)}%]";
+        }
+        else if (isFull)
+        {
+            status = "[SPACE HOLD] JETPACK READY";
+        }
+        else if (isEmpty)
+        {
+            status = "JETPACK DEPLETED // RECHARGING";
+        }
+        else
+        {
+            status = $"JETPACK RECHARGING [{Mathf.RoundToInt(fuelPct * 100f)}%]";
+        }
+
         GUI.Label(new Rect(jX, jY + 1, jW, 16), status, jetStyle);
         GUI.color = Color.white;
     }

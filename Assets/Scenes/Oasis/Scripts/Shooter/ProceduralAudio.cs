@@ -571,4 +571,394 @@ public static class ProceduralAudio
         clip.SetData(samples, 0);
         return clip;
     }
+
+    // =========================================================================
+    // DISTINCT CLASS WEAPON & ENHANCED ABILITY SOUND EFFECTS
+    // =========================================================================
+
+    private static AudioClip _autocannonShotClip;
+    private static AudioClip _burstRifleShotClip;
+    private static AudioClip _sniperShotClip;
+    private static AudioClip _handCannonShotClip;
+    private static AudioClip _carbineShotClip;
+    private static AudioClip _orbitalStrikeClip;
+    private static AudioClip _aegisOverdriveClip;
+    private static AudioClip _phantomBlinkClip;
+    private static AudioClip _deadshotOverclockClip;
+    private static AudioClip _oasisThemeTrackClip;
+
+    /// <summary>
+    /// Heavy Pulse Autocannon: Deep mechanical bolt punch + low-end plasma thump.
+    /// </summary>
+    public static AudioClip GetAutocannonShotClip()
+    {
+        if (_autocannonShotClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.13f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+            float phase = 0f;
+            float lowPass = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = Mathf.Lerp(175f, 44f, Mathf.Sqrt(t));
+                phase += 2f * Mathf.PI * freq / sampleRate;
+
+                float body = Mathf.Sin(phase) + Mathf.Sin(phase * 0.5f) * 0.45f;
+                float mechClick = Mathf.Sin(2f * Mathf.PI * 680f * (float)i / sampleRate) * Mathf.Exp(-42f * t);
+                float rawNoise = Random.value * 2f - 1f;
+                lowPass += (rawNoise - lowPass) * 0.22f;
+
+                float env = Mathf.Exp(-13f * t);
+                samples[i] = Mathf.Clamp((body * 0.55f + lowPass * 0.30f + mechClick * 0.25f) * env * 0.42f, -0.95f, 0.95f);
+            }
+            _autocannonShotClip = AudioClip.Create("AutocannonShot", sampleCount, 1, sampleRate, false);
+            _autocannonShotClip.SetData(samples, 0);
+        }
+        return _autocannonShotClip;
+    }
+
+    /// <summary>
+    /// 3-Round Burst Battle Rifle: Crisp, tight high-velocity tactical plasma crack.
+    /// </summary>
+    public static AudioClip GetBurstRifleShotClip()
+    {
+        if (_burstRifleShotClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.085f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+            float phase = 0f;
+            float lp = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = Mathf.Lerp(460f, 115f, t);
+                phase += 2f * Mathf.PI * freq / sampleRate;
+
+                float snap = Mathf.Sin(phase) * 0.65f + Mathf.Sin(phase * 1.5f) * 0.25f;
+                float noise = Random.value * 2f - 1f;
+                lp += (noise - lp) * 0.28f;
+
+                float env = Mathf.Exp(-18f * t);
+                samples[i] = (snap + lp * 0.25f) * env * 0.34f;
+            }
+            _burstRifleShotClip = AudioClip.Create("BurstRifleShot", sampleCount, 1, sampleRate, false);
+            _burstRifleShotClip.SetData(samples, 0);
+        }
+        return _burstRifleShotClip;
+    }
+
+    /// <summary>
+    /// Long-Range Scout Marksman Rifle: High-velocity rail snap + resonant canyon echo tail.
+    /// </summary>
+    public static AudioClip GetSniperShotClip()
+    {
+        if (_sniperShotClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.24f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+            float phase = 0f;
+            float lp = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = Mathf.Lerp(620f, 58f, Mathf.Pow(t, 0.45f));
+                phase += 2f * Mathf.PI * freq / sampleRate;
+
+                float railCrack = Mathf.Sin(phase) + Mathf.Sin(phase * 2f) * Mathf.Exp(-28f * t) * 0.35f;
+                float noise = Random.value * 2f - 1f;
+                lp += (noise - lp) * 0.18f;
+
+                float env = Mathf.Exp(-9.5f * t);
+                samples[i] = Mathf.Clamp((railCrack * 0.6f + lp * 0.4f) * env * 0.44f, -0.95f, 0.95f);
+            }
+            _sniperShotClip = AudioClip.Create("MarksmanSniperShot", sampleCount, 1, sampleRate, false);
+            _sniperShotClip.SetData(samples, 0);
+        }
+        return _sniperShotClip;
+    }
+
+    /// <summary>
+    /// Heavy Plasma Hand Cannon: Deep revolver-style plasma discharge with heavy sub punch.
+    /// </summary>
+    public static AudioClip GetHandCannonShotClip()
+    {
+        if (_handCannonShotClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.17f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+            float phase = 0f;
+            float lp = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = Mathf.Lerp(320f, 52f, Mathf.Sqrt(t));
+                phase += 2f * Mathf.PI * freq / sampleRate;
+
+                float slug = Mathf.Sin(phase) * 0.7f + Mathf.Sin(phase * 0.5f) * 0.45f;
+                float noise = Random.value * 2f - 1f;
+                lp += (noise - lp) * 0.20f;
+
+                float env = Mathf.Exp(-11f * t);
+                samples[i] = Mathf.Clamp((slug + lp * 0.3f) * env * 0.44f, -0.95f, 0.95f);
+            }
+            _handCannonShotClip = AudioClip.Create("HandCannonShot", sampleCount, 1, sampleRate, false);
+            _handCannonShotClip.SetData(samples, 0);
+        }
+        return _handCannonShotClip;
+    }
+
+    /// <summary>
+    /// Tactical Defense Carbine: Smooth, rapid sci-fi pulse carbine zip.
+    /// </summary>
+    public static AudioClip GetCarbineShotClip()
+    {
+        if (_carbineShotClip == null)
+        {
+            _carbineShotClip = CreateSoftThud("CarbinePulseShot", 0.075f, 340f, 95f, 0.28f);
+        }
+        return _carbineShotClip;
+    }
+
+    public static AudioClip GetWeaponShotClipForClass(string classId)
+    {
+        switch (classId)
+        {
+            case "heavy_warrior": return GetAutocannonShotClip();
+            case "desert_commando": return GetBurstRifleShotClip();
+            case "wasteland_nomad": return GetSniperShotClip();
+            case "cyber_outlaw": return GetHandCannonShotClip();
+            case "combat_medic": return GetCarbineShotClip();
+            case "cyborg_specops":
+            case "unit07_android": return GetBeamHumClip();
+            default: return GetBlasterShotClip();
+        }
+    }
+
+    public static AudioClip GetOrbitalStrikeClip()
+    {
+        if (_orbitalStrikeClip == null)
+        {
+            int sampleRate = 44100;
+            float duration = 0.55f;
+            int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+            float[] samples = new float[sampleCount];
+            float phase = 0f;
+            float lp = 0f;
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                float t = (float)i / sampleCount;
+                float freq = t < 0.35f ? Mathf.Lerp(920f, 180f, t / 0.35f) : Mathf.Lerp(140f, 38f, (t - 0.35f) / 0.65f);
+                phase += 2f * Mathf.PI * freq / sampleRate;
+                float noise = Random.value * 2f - 1f;
+                lp += (noise - lp) * (t < 0.35f ? 0.12f : 0.18f);
+
+                float env = t < 0.35f ? Mathf.Sin((t / 0.35f) * Mathf.PI * 0.5f) * 0.6f : Mathf.Exp(-5.5f * (t - 0.35f));
+                samples[i] = Mathf.Clamp((Mathf.Sin(phase) * 0.6f + lp * 0.5f) * env * 0.52f, -0.95f, 0.95f);
+            }
+            _orbitalStrikeClip = AudioClip.Create("OrbitalPrecisionStrike", sampleCount, 1, sampleRate, false);
+            _orbitalStrikeClip.SetData(samples, 0);
+        }
+        return _orbitalStrikeClip;
+    }
+
+    public static AudioClip GetAegisOverdriveClip()
+    {
+        if (_aegisOverdriveClip == null)
+        {
+            _aegisOverdriveClip = CreatePneumaticLaunch("AegisOverdrive", 0.42f, 140f, 520f, 0.48f);
+        }
+        return _aegisOverdriveClip;
+    }
+
+    public static AudioClip GetPhantomBlinkClip()
+    {
+        if (_phantomBlinkClip == null)
+        {
+            _phantomBlinkClip = CreateSubtleWhoosh("PhantomBlink", 0.30f, 540f, 150f, 0.42f);
+        }
+        return _phantomBlinkClip;
+    }
+
+    public static AudioClip GetDeadshotOverclockClip()
+    {
+        if (_deadshotOverclockClip == null)
+        {
+            _deadshotOverclockClip = CreatePneumaticLaunch("DeadshotOverclock", 0.36f, 260f, 780f, 0.44f);
+        }
+        return _deadshotOverclockClip;
+    }
+
+    /// <summary>
+    /// Synthesizes a 16-second seamless stereo Sci-Fi Canyon Synthwave / Tactical Ambient Backing Track
+    /// (D minor progression: Dm -> Bb -> F -> C) that plays continuously from the Home Page into the Squad Lobby.
+    /// </summary>
+    public static AudioClip GetOasisThemeTrackClip()
+    {
+        if (_oasisThemeTrackClip != null) return _oasisThemeTrackClip;
+
+        int sampleRate = 44100;
+        float duration = 16.0f; // 4 bars of 4.0s each (60 BPM / 120 BPM eighth-note pulse)
+        int totalFrames = Mathf.CeilToInt(sampleRate * duration);
+        float[] stereoSamples = new float[totalFrames * 2];
+
+        // Root bass frequencies for 4 chords (Dm -> Bb -> F -> C)
+        float[] bassRoots = new float[] { 73.42f, 58.27f, 87.31f, 65.41f };
+        // Chord triad frequencies (3 notes per bar)
+        float[][] chordNotes = new float[][]
+        {
+            new float[] { 146.83f, 174.61f, 220.00f }, // D3, F3, A3 (Dm)
+            new float[] { 116.54f, 146.83f, 174.61f }, // Bb2, D3, F3 (Bb)
+            new float[] { 174.61f, 220.00f, 261.63f }, // F3, A3, C4 (F)
+            new float[] { 130.81f, 164.81f, 196.00f }  // C3, E3, G3 (C)
+        };
+        // Atmospheric cyan arpeggio notes (8 steps per bar = 0.5s per step)
+        float[][] arpNotes = new float[][]
+        {
+            new float[] { 293.66f, 349.23f, 440.00f, 587.33f, 440.00f, 349.23f, 523.25f, 440.00f },
+            new float[] { 233.08f, 293.66f, 349.23f, 466.16f, 349.23f, 293.66f, 440.00f, 349.23f },
+            new float[] { 349.23f, 440.00f, 523.25f, 698.46f, 523.25f, 440.00f, 587.33f, 523.25f },
+            new float[] { 261.63f, 329.63f, 392.00f, 523.25f, 392.00f, 329.63f, 493.88f, 392.00f }
+        };
+
+        for (int i = 0; i < totalFrames; i++)
+        {
+            float time = (float)i / sampleRate;
+            int barIndex = Mathf.Clamp((int)(time / 4.0f), 0, 3);
+            float barTime = time - (barIndex * 4.0f); // 0..4s
+
+            // Smooth chord crossfade envelope at bar boundaries so transitions are velvety
+            float barEnv = 1.0f;
+            if (barTime < 0.18f) barEnv = barTime / 0.18f;
+            else if (barTime > 3.82f) barEnv = (4.0f - barTime) / 0.18f;
+
+            // 1. Deep Warm Sub-Bass + Subtle 8th-Note Synthwave Pulse (2Hz)
+            float bassFreq = bassRoots[barIndex];
+            float pulseGate = 0.72f + 0.28f * Mathf.Sin(2f * Mathf.PI * 2.0f * time);
+            float subBass = (Mathf.Sin(2f * Mathf.PI * bassFreq * time) * 0.75f +
+                             Mathf.Sin(2f * Mathf.PI * (bassFreq * 0.5f) * time) * 0.35f) * pulseGate * barEnv * 0.32f;
+
+            // 2. Lush Stereo Detuned Canyon Synth Pad
+            float[] triad = chordNotes[barIndex];
+            float padL = 0f;
+            float padR = 0f;
+            for (int n = 0; n < 3; n++)
+            {
+                float f = triad[n];
+                float slowMod = Mathf.Sin(2f * Mathf.PI * (0.25f + n * 0.08f) * time) * 0.45f;
+                padL += Mathf.Sin(2f * Mathf.PI * (f * 0.998f) * time + slowMod);
+                padR += Mathf.Sin(2f * Mathf.PI * (f * 1.002f) * time - slowMod);
+            }
+            padL = (padL / 3f) * barEnv * 0.22f;
+            padR = (padR / 3f) * barEnv * 0.22f;
+
+            // 3. Crystalline Desert-Night Arpeggio Pluck (0.5s step)
+            int arpStep = Mathf.Clamp((int)(barTime / 0.5f), 0, 7);
+            float stepTime = barTime - (arpStep * 0.5f);
+            float arpFreq = arpNotes[barIndex][arpStep];
+            float arpEnv = Mathf.Exp(-7.5f * stepTime) * Mathf.Min(1f, stepTime / 0.012f);
+            float arpWave = (Mathf.Sin(2f * Mathf.PI * arpFreq * time) * 0.75f +
+                             Mathf.Sin(2f * Mathf.PI * (arpFreq * 2f) * time) * 0.25f) * arpEnv * 0.14f;
+
+            // Stereo pan the arpeggio notes gently between left and right
+            float pan = (arpStep % 2 == 0) ? 0.68f : 0.32f;
+            float arpL = arpWave * pan;
+            float arpR = arpWave * (1f - pan);
+
+            // 4. Soft Tactical Heartbeat Kick on every 1.0s beat
+            float beatTime = barTime % 1.0f;
+            float kickFreq = Mathf.Lerp(115f, 38f, Mathf.Sqrt(Mathf.Clamp01(beatTime / 0.18f)));
+            float kickEnv = Mathf.Exp(-14f * beatTime);
+            float kick = Mathf.Sin(2f * Mathf.PI * kickFreq * beatTime) * kickEnv * 0.22f;
+
+            float left = Mathf.Clamp(subBass + kick + padL + arpL, -0.95f, 0.95f);
+            float right = Mathf.Clamp(subBass + kick + padR + arpR, -0.95f, 0.95f);
+
+            stereoSamples[i * 2] = left;
+            stereoSamples[i * 2 + 1] = right;
+        }
+
+        _oasisThemeTrackClip = AudioClip.Create("OasisProtocol_ThemeBackingTrack", totalFrames, 2, sampleRate, false);
+        _oasisThemeTrackClip.SetData(stereoSamples, 0);
+        return _oasisThemeTrackClip;
+    }
+}
+
+/// <summary>
+/// Persistent cross-scene background music manager that plays the Oasis Protocol backing track
+/// seamlessly from the Home Page (MainMenu) into the Operative Selection / Squad Lobby (OasisScene),
+/// smoothly fading out when deploying into active combat and fading back in when returning to menu/lobby.
+/// </summary>
+public class OasisMusicManager : MonoBehaviour
+{
+    public static OasisMusicManager Instance { get; private set; }
+
+    private AudioSource _musicSource;
+    private bool _shouldPlayMenuMusic = true;
+    private float _targetVolume = 0.34f;
+
+    public static void SetMenuMusicActive(bool active)
+    {
+        if (Instance == null)
+        {
+            GameObject go = new GameObject("OasisMusicManager_Persistent");
+            DontDestroyOnLoad(go);
+            Instance = go.AddComponent<OasisMusicManager>();
+        }
+        Instance._shouldPlayMenuMusic = active;
+        if (active && Instance._musicSource != null && !Instance._musicSource.isPlaying)
+        {
+            Instance._musicSource.Play();
+        }
+    }
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+
+        _musicSource = gameObject.AddComponent<AudioSource>();
+        _musicSource.clip = ProceduralAudio.GetOasisThemeTrackClip();
+        _musicSource.loop = true;
+        _musicSource.spatialBlend = 0f;
+        _musicSource.priority = 0;
+        _musicSource.volume = _targetVolume;
+        _musicSource.playOnAwake = false;
+        _musicSource.Play();
+    }
+
+    private void Update()
+    {
+        if (_musicSource == null) return;
+
+        float desired = _shouldPlayMenuMusic ? _targetVolume : 0f;
+        _musicSource.volume = Mathf.MoveTowards(_musicSource.volume, desired, Time.unscaledDeltaTime * 0.45f);
+
+        if (_shouldPlayMenuMusic && !_musicSource.isPlaying)
+        {
+            _musicSource.Play();
+        }
+        else if (!_shouldPlayMenuMusic && _musicSource.volume <= 0.001f && _musicSource.isPlaying)
+        {
+            _musicSource.Pause(); // Pause rather than Stop so resuming preserves exact phrase continuity
+        }
+    }
 }

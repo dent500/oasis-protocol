@@ -120,13 +120,17 @@ public class OasisNetworkManager : MonoBehaviour
         public int id;
         public string name;
         public GameObject gameObject;
+        public GameObject rootObject => gameObject;
         public Transform transform;
         public Vector3 targetPosition;
         public Quaternion targetRotation;
         public float targetPitch;
         public float currentPitch;
         public bool isCrouching;
+        public bool isGrounded = true;
         public bool isDowned;
+        public bool isDead;
+        public float deadTimer;
         public float downedTimer;
         public float reviveProgress;
         public CharacterController characterController;
@@ -833,10 +837,24 @@ public class OasisNetworkManager : MonoBehaviour
                     horizDelta.y = 0;
                     float speed = horizDelta.magnitude / Mathf.Max(Time.deltaTime, 0.001f);
 
-                    if (rp.isDowned)
+                    if (rp.isDead)
+                    {
+                        rp.deadTimer -= Time.deltaTime;
+                        if (rp.deadTimer <= 0f)
+                        {
+                            rp.isDead = false;
+                            rp.isDowned = false;
+                        }
+                    }
+
+                    if (rp.isDowned && !rp.isDead)
                     {
                         rp.downedTimer -= Time.deltaTime;
-                        if (rp.downedTimer < 0f) rp.downedTimer = 0f;
+                        if (rp.downedTimer <= 0f)
+                        {
+                            rp.downedTimer = 0f;
+                            rp.isDowned = false;
+                        }
 
                         // Prone ground crawl posture and animation for downed player
                         if (rp.visualRoot != null)
@@ -856,49 +874,67 @@ public class OasisNetworkManager : MonoBehaviour
                             rp.nameTagText.color = new Color(1f, 0.35f, 0.35f);
                         }
                     }
-                    else if (rp.animator != null)
+                    else
                     {
-                        if (rp.nameTagText != null && rp.nameTagText.text.StartsWith("[DOWNED]"))
+                        // Always restore normal name tag when not downed (fixes stuck [DOWNED ...] label)
+                        if (rp.nameTagText != null && (rp.nameTagText.text.StartsWith("[DOWNED") || rp.nameTagText.text.StartsWith("[RESPAWN")))
                         {
                             rp.nameTagText.text = $"{rp.name} [OP-{rp.id}]";
-                            rp.nameTagText.color = OasisShooterManager.GetTeamColor(rp.teamId);
+                            int localTeam = OasisShooterManager.Instance != null
+                                ? OasisShooterManager.Instance.localPlayerTeam
+                                : PlayerPrefs.GetInt("OasisPlayerTeam", 0);
+                            rp.nameTagText.color = (rp.teamId == localTeam)
+                                ? new Color(0.15f, 0.85f, 1.0f)
+                                : new Color(1.0f, 0.23f, 0.19f);
                         }
-                        if (rp.isCrouching)
+
+                        if (rp.animator != null)
                         {
-                            if (rp.visualRoot != null)
+                            if (!rp.isGrounded)
                             {
-                                rp.visualRoot.localPosition = Vector3.zero;
-                                rp.visualRoot.localRotation = Quaternion.Euler(0, 180f, 0);
+                                // In mid-air: legs must not pedal/cycle in thin air
+                                rp.animator.speed = 0f;
+                                if (!rp.animator.GetCurrentAnimatorStateInfo(0).IsName("Jump"))
+                                {
+                                    rp.animator.Play("Jump", 0, 0.42f);
+                                }
                             }
-                            rp.animator.speed = 1.0f;
-                            rp.animator.Play("Idle_Ducking_AR");
-                        }
-                        else
-                        {
-                            if (rp.visualRoot != null)
+                            else if (rp.isCrouching)
                             {
-                                rp.visualRoot.localPosition = Vector3.zero;
-                                rp.visualRoot.localRotation = Quaternion.identity;
-                            }
-                            rp.animator.speed = 1.0f;
-                            if (speed > 4.2f)
-                            {
-                                rp.animator.Play("Run_guard_AR");
-                            }
-                            else if (speed > 0.35f)
-                            {
-                                rp.animator.Play("WalkFront_Shoot_AR");
+                                if (rp.visualRoot != null)
+                                {
+                                    rp.visualRoot.localPosition = Vector3.zero;
+                                    rp.visualRoot.localRotation = Quaternion.Euler(0, 180f, 0);
+                                }
+                                rp.animator.speed = 1.0f;
+                                rp.animator.Play("Idle_Ducking_AR");
                             }
                             else
                             {
-                                rp.animator.Play("Idle_Shoot_Ar");
+                                if (rp.visualRoot != null)
+                                {
+                                    rp.visualRoot.localPosition = Vector3.zero;
+                                    rp.visualRoot.localRotation = Quaternion.identity;
+                                }
+                                rp.animator.speed = 1.0f;
+                                if (speed > 4.2f)
+                                {
+                                    rp.animator.Play("Run_guard_AR");
+                                }
+                                else if (speed > 0.35f)
+                                {
+                                    rp.animator.Play("WalkFront_Shoot_AR");
+                                }
+                                else
+                                {
+                                    rp.animator.Play("Idle_Shoot_Ar");
+                                }
                             }
                         }
-                    }
-                    else
-                    {
+                        else
+                        {
                         // Procedural walk animation based on horizontal velocity
-                        if (speed > 0.4f)
+                        if (speed > 0.4f && rp.isGrounded)
                         {
                             rp.animTime += Time.deltaTime * Mathf.Clamp(speed * 3.5f, 4f, 16f);
                             float legAngle = Mathf.Sin(rp.animTime) * 28f;
@@ -921,6 +957,7 @@ public class OasisNetworkManager : MonoBehaviour
                         {
                             Vector3 targetScale = rp.isCrouching ? new Vector3(1f, 0.65f, 1f) : Vector3.one;
                             rp.visualRoot.localScale = Vector3.Lerp(rp.visualRoot.localScale, targetScale, Time.deltaTime * 12f);
+                        }
                         }
                     }
                 }
@@ -1761,6 +1798,88 @@ public class OasisNetworkManager : MonoBehaviour
             return;
         }
 
+        // PvP Hit Registration (Real Player -> Real Player Damage)
+        if (cmd == "PLAYER_HIT" && parts.Length >= 6)
+        {
+            int targetId = int.Parse(parts[1]);
+            float dmg = float.Parse(parts[2], CultureInfo.InvariantCulture);
+            int attackerId = int.Parse(parts[3]);
+            int attackerTeam = int.Parse(parts[4]);
+            string attackerName = parts[5];
+
+            if (currentRole == NetworkRole.Host && targetId != myPlayerId)
+            {
+                BroadcastToClients(msg, attackerId);
+            }
+
+            if (targetId == myPlayerId && OasisShooterManager.Instance != null)
+            {
+                OasisShooterManager.Instance.DamagePlayerFromNetwork(dmg, attackerId, attackerTeam, attackerName);
+            }
+            return;
+        }
+
+        // PvP & Bot Player Elimination Notification
+        if (cmd == "PLAYER_ELIMINATED" && parts.Length >= 4)
+        {
+            int victimId = int.Parse(parts[1]);
+            int attackerId = int.Parse(parts[2]);
+            int scoringTeam = int.Parse(parts[3]);
+            string victimName = parts.Length > 4 ? parts[4] : $"Operative_{victimId}";
+
+            if (_remotePlayers.TryGetValue(victimId, out var rp) && rp != null)
+            {
+                rp.isDead = true;
+                rp.deadTimer = 3.0f;
+                rp.isDowned = false;
+                if (rp.nameTagText != null)
+                {
+                    rp.nameTagText.text = $"[RESPAWNING] {rp.name}";
+                    rp.nameTagText.color = new Color(1f, 0.55f, 0.25f);
+                }
+            }
+
+            if (attackerId >= 0 && attackerId == myPlayerId && victimId != myPlayerId && OasisShooterManager.Instance != null)
+            {
+                OasisShooterManager.Instance.AwardLocalPvPKill(victimName);
+            }
+
+            if (currentRole == NetworkRole.Host)
+            {
+                BroadcastToClients(msg, victimId);
+                if (victimId != myPlayerId && OasisShooterManager.Instance != null)
+                {
+                    OasisShooterManager.Instance.AddTeamKill(scoringTeam);
+                }
+            }
+            return;
+        }
+
+        // Player Respawned Notification (immediately clears dead/downed state & restores standing posture)
+        if (cmd == "PLAYER_RESPAWNED" && parts.Length >= 2)
+        {
+            int pId = int.Parse(parts[1]);
+            if (_remotePlayers.TryGetValue(pId, out var rp) && rp != null)
+            {
+                rp.isDead = false;
+                rp.deadTimer = 0f;
+                rp.isDowned = false;
+                rp.downedTimer = 0f;
+                rp.reviveProgress = 0f;
+                if (rp.visualRoot != null)
+                {
+                    rp.visualRoot.localPosition = Vector3.zero;
+                    rp.visualRoot.localRotation = Quaternion.identity;
+                }
+                ApplyOperativeSkinToRemotePlayer(rp);
+            }
+            if (currentRole == NetworkRole.Host)
+            {
+                BroadcastToClients(msg, pId);
+            }
+            return;
+        }
+
         if (currentRole == NetworkRole.Host)
         {
             // Host Packet Handling
@@ -2502,15 +2621,46 @@ public class OasisNetworkManager : MonoBehaviour
         }
     }
 
-    public void BroadcastLaserFire(Vector3 origin, Vector3 hitPoint, bool isHitTarget)
+    public void BroadcastLaserFire(Vector3 origin, Vector3 hitPoint, bool isHitTarget, int opIndex = -1)
     {
         if (currentRole == NetworkRole.Offline) return;
 
-        string packet = $"FIRE|{myPlayerId}|{origin.x.ToString("F2", CultureInfo.InvariantCulture)},{origin.y.ToString("F2", CultureInfo.InvariantCulture)},{origin.z.ToString("F2", CultureInfo.InvariantCulture)}|{hitPoint.x.ToString("F2", CultureInfo.InvariantCulture)},{hitPoint.y.ToString("F2", CultureInfo.InvariantCulture)},{hitPoint.z.ToString("F2", CultureInfo.InvariantCulture)}|{(isHitTarget ? 1 : 0)}";
+        if (opIndex < 0)
+        {
+            opIndex = OasisCharacterCustomizer.Instance != null
+                ? OasisCharacterCustomizer.Instance.selectedOperativeIndex
+                : PlayerPrefs.GetInt("OasisSelectedOperative", 0);
+        }
+
+        string packet = $"FIRE|{myPlayerId}|{origin.x.ToString("F2", CultureInfo.InvariantCulture)},{origin.y.ToString("F2", CultureInfo.InvariantCulture)},{origin.z.ToString("F2", CultureInfo.InvariantCulture)}|{hitPoint.x.ToString("F2", CultureInfo.InvariantCulture)},{hitPoint.y.ToString("F2", CultureInfo.InvariantCulture)},{hitPoint.z.ToString("F2", CultureInfo.InvariantCulture)}|{(isHitTarget ? 1 : 0)}|{opIndex}";
 
         if (currentRole == NetworkRole.Host)
         {
             BroadcastToClients(packet, myPlayerId);
+        }
+        else if (currentRole == NetworkRole.Client)
+        {
+            SendPacketToServer(packet);
+        }
+    }
+
+    public void SendPlayerHit(int targetPlayerId, float damage, int attackerTeamId)
+    {
+        if (currentRole == NetworkRole.Offline) return;
+
+        string safeName = string.IsNullOrEmpty(myPlayerName) ? $"Operative_{myPlayerId}" : myPlayerName.Replace("|", "");
+        string packet = $"PLAYER_HIT|{targetPlayerId}|{damage.ToString("F1", CultureInfo.InvariantCulture)}|{myPlayerId}|{attackerTeamId}|{safeName}";
+
+        if (currentRole == NetworkRole.Host)
+        {
+            if (targetPlayerId == myPlayerId)
+            {
+                OasisShooterManager.Instance?.DamagePlayerFromNetwork(damage, myPlayerId, attackerTeamId, safeName);
+            }
+            else
+            {
+                BroadcastToClients(packet, myPlayerId);
+            }
         }
         else if (currentRole == NetworkRole.Client)
         {
@@ -2537,9 +2687,37 @@ public class OasisNetworkManager : MonoBehaviour
         }
     }
 
-    public void BroadcastPlayerEliminated(int attackerTeam, int scoringTeam)
+    public void BroadcastPlayerEliminated(int attackerPlayerId, int scoringTeam)
     {
-        BroadcastPlayerDowned(attackerTeam, scoringTeam);
+        if (currentRole == NetworkRole.Offline) return;
+
+        string safeName = string.IsNullOrEmpty(myPlayerName) ? $"Operative_{myPlayerId}" : myPlayerName.Replace("|", "");
+        string packet = $"PLAYER_ELIMINATED|{myPlayerId}|{attackerPlayerId}|{scoringTeam}|{safeName}";
+
+        if (currentRole == NetworkRole.Host)
+        {
+            BroadcastToClients(packet, myPlayerId);
+        }
+        else if (currentRole == NetworkRole.Client)
+        {
+            SendPacketToServer(packet);
+        }
+    }
+
+    public void BroadcastPlayerRespawned()
+    {
+        if (currentRole == NetworkRole.Offline) return;
+
+        string packet = $"PLAYER_RESPAWNED|{myPlayerId}";
+
+        if (currentRole == NetworkRole.Host)
+        {
+            BroadcastToClients(packet, myPlayerId);
+        }
+        else if (currentRole == NetworkRole.Client)
+        {
+            SendPacketToServer(packet);
+        }
     }
 
     public void BroadcastPlayerDowned(int attackerId, int attackerTeamId)
@@ -2839,11 +3017,16 @@ public class OasisNetworkManager : MonoBehaviour
             isReady = (id == 0) // Host is always ready by default
         };
 
-        // Add CapsuleCollider so weapons and lasers register hits on remote operatives
+        // Add CapsuleCollider & OasisRemotePlayerHitbox so weapons, continuous beams, melee, and abilities register hits on remote operatives
+        operative.layer = 0; // Default layer for raycast hit registration
         CapsuleCollider col = operative.AddComponent<CapsuleCollider>();
-        col.center = new Vector3(0, 0.9f, 0);
-        col.radius = 0.45f;
-        col.height = 1.8f;
+        col.center = new Vector3(0f, 0.95f, 0f);
+        col.radius = 0.48f;
+        col.height = 1.95f;
+
+        OasisRemotePlayerHitbox hitbox = operative.AddComponent<OasisRemotePlayerHitbox>();
+        hitbox.playerId = id;
+        hitbox.remotePlayer = inst;
 
         // Build a sleek Sci-Fi FPS Operative Player Model
         BuildOperativeModel(operative, id, inst);
@@ -3346,8 +3529,77 @@ public class OasisNetworkManager : MonoBehaviour
             start = remotePlayer.gunArmBone.position + remotePlayer.gunArmBone.forward * 0.65f + remotePlayer.gunArmBone.up * 0.05f;
         }
 
-        BlasterVFX.SpawnLaserBeam(start, end, new Color(0.2f, 0.9f, 1f));
+        int opIdx = 0;
+        if (parts.Length > 5 && int.TryParse(parts[5], out int parsedOp))
+        {
+            opIdx = parsedOp;
+        }
+        else if (remotePlayer != null)
+        {
+            opIdx = remotePlayer.operativeIndex;
+        }
+
+        Color beamColor;
+        float beamWidth = 0.075f;
+        float beamDuration = 0.07f;
+        AudioClip shotClip;
+
+        switch (opIdx)
+        {
+            case 0: // Heavy Pulse Autocannon
+                beamColor = new Color(1.0f, 0.45f, 0.12f);
+                beamWidth = 0.11f;
+                beamDuration = 0.08f;
+                shotClip = ProceduralAudio.GetAutocannonShotClip();
+                break;
+            case 1: // 3-Round Burst Battle Rifle
+                beamColor = new Color(1.0f, 0.78f, 0.20f);
+                beamWidth = 0.08f;
+                beamDuration = 0.065f;
+                shotClip = ProceduralAudio.GetBurstRifleShotClip();
+                break;
+            case 2: // Cyborg Continuous Phase Laser
+                beamColor = new Color(0.15f, 0.96f, 1.0f);
+                beamWidth = 0.095f;
+                beamDuration = 0.14f;
+                shotClip = ProceduralAudio.GetBeamHumClip();
+                break;
+            case 3: // Unit-07 Twin-Core Phase Laser
+                beamColor = new Color(0.25f, 1.0f, 0.58f);
+                beamWidth = 0.105f;
+                beamDuration = 0.14f;
+                shotClip = ProceduralAudio.GetBeamHumClip();
+                break;
+            case 4: // Wasteland Nomad Scout Marksman Rifle
+                beamColor = new Color(1.0f, 0.62f, 0.22f);
+                beamWidth = 0.09f;
+                beamDuration = 0.18f;
+                shotClip = ProceduralAudio.GetSniperShotClip();
+                break;
+            case 5: // Combat Medic Tactical Defense Carbine
+                beamColor = new Color(0.25f, 1.0f, 0.65f);
+                beamWidth = 0.07f;
+                beamDuration = 0.065f;
+                shotClip = ProceduralAudio.GetCarbineShotClip();
+                break;
+            case 6: // Cyber Outlaw Heavy Plasma Hand Cannon
+                beamColor = new Color(0.95f, 0.35f, 1.0f);
+                beamWidth = 0.105f;
+                beamDuration = 0.11f;
+                shotClip = ProceduralAudio.GetHandCannonShotClip();
+                break;
+            default:
+                beamColor = new Color(0.2f, 0.9f, 1f);
+                shotClip = ProceduralAudio.GetBlasterShotClip();
+                break;
+        }
+
+        BlasterVFX.SpawnLaserBeam(start, end, beamColor, beamWidth, beamDuration);
         BlasterVFX.SpawnImpact(end, Vector3.up, isHit);
+        if (shotClip != null)
+        {
+            AudioSource.PlayClipAtPoint(shotClip, start, 0.65f);
+        }
     }
 
     private void RemoveRemotePlayer(int id)
@@ -3720,4 +3972,18 @@ public class FaceCameraBillboard : MonoBehaviour
             transform.localScale = Vector3.one * scale;
         }
     }
+}
+
+/// <summary>
+/// Attached to each spawned RemotePlayerInstance so BlasterWeapon raycasts, continuous beams,
+/// melee strikes, and special abilities accurately detect and damage enemy real players.
+/// </summary>
+public class OasisRemotePlayerHitbox : MonoBehaviour
+{
+    public int playerId;
+    public OasisNetworkManager.RemotePlayerInstance remotePlayer;
+
+    public int TeamId => remotePlayer != null ? remotePlayer.teamId : -1;
+    public bool IsDead => remotePlayer != null && remotePlayer.isDead;
+    public string PlayerName => remotePlayer != null && !string.IsNullOrEmpty(remotePlayer.name) ? remotePlayer.name : $"Operative_{playerId}";
 }

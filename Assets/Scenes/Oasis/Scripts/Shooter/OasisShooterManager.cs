@@ -63,6 +63,7 @@ public class OasisShooterManager : MonoBehaviour
     public int activePlayersPerTeam = 2;
     public int targetKills = 15;
     public bool isTeamBattleActive = false;
+    public bool isMapExplorationMode = false;
     public float playerSpawnShieldTimer = 0f;
     public bool isPlayerDead = false;
     public int localPlayerTeam => PlayerPrefs.GetInt("OasisPlayerTeam", 0);
@@ -357,6 +358,7 @@ public class OasisShooterManager : MonoBehaviour
             BlasterVFX.SpawnWarpIn(_playerTransform.position);
         }
 
+        OasisNetworkManager.Instance?.BroadcastPlayerRespawned();
         ShowNotificationBanner("<color=#26D9FF><b>✔ TACTICAL RESPAWN // WEAPONS HOT</b></color>", 2.0f);
         UpdateTeamBattleHUD();
     }
@@ -400,6 +402,7 @@ public class OasisShooterManager : MonoBehaviour
     }
 
     public List<TargetDrone> GetActiveDrones() => _activeDrones;
+    public List<OasisCombatAI> GetSpawnedAIBots() => _spawnedAIBots;
     public int GetNextNetworkDroneId() => _nextNetworkDroneId++;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -486,11 +489,13 @@ public class OasisShooterManager : MonoBehaviour
             spawnSysObj.AddComponent<OasisSpawnSystem>();
         }
 
-        if (FindAnyObjectByType<OasisWorldExpander>() == null)
+        OasisWorldExpander expander = FindAnyObjectByType<OasisWorldExpander>();
+        if (expander == null)
         {
             GameObject expanderObj = new GameObject("OasisWorldExpander");
-            expanderObj.AddComponent<OasisWorldExpander>();
+            expander = expanderObj.AddComponent<OasisWorldExpander>();
         }
+        expander.EnsureWorldExpanded();
 
         if (FindAnyObjectByType<OasisMapSystem>() == null)
         {
@@ -1181,8 +1186,24 @@ public class OasisShooterManager : MonoBehaviour
 
     public void TakeDamage(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null) => DamagePlayer(amount, attackerTeamId, attackerBot);
 
-    public void DamagePlayer(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null)
+    public void DamagePlayerFromNetwork(float amount, int attackerPlayerId, int attackerTeamId, string attackerPlayerName)
     {
+        DamagePlayer(amount, attackerTeamId, null, attackerPlayerId, attackerPlayerName);
+    }
+
+    public void AwardLocalPvPKill(string victimName)
+    {
+        kills++;
+        score += 100;
+        OasisNetworkManager.Instance?.BroadcastScore(score, kills);
+        TriggerKillConfirmedBanner(string.IsNullOrEmpty(victimName) ? "ENEMY OPERATIVE" : victimName);
+        UpdateTeamBattleHUD();
+        CheckWinCondition();
+    }
+
+    public void DamagePlayer(float amount, int attackerTeamId = -1, OasisCombatAI attackerBot = null, int attackerPlayerId = -1, string attackerPlayerName = null)
+    {
+        if (isMapExplorationMode) return;
         if (isPlayerDead) return;
         if (isTeamBattleActive && isPlayerDowned) return;
 
@@ -1201,11 +1222,19 @@ public class OasisShooterManager : MonoBehaviour
             return;
         }
 
+        // Aegis Siege Overdrive grants 40% incoming damage reduction while active
+        if (OasisCombatMovement.Instance != null && OasisCombatMovement.Instance.aegisTimeRemaining > 0f)
+        {
+            amount *= 0.60f;
+        }
+
         currentHealth = Mathf.Max(0, currentHealth - amount);
         _regenDelayTimer = 4.0f; // 4 seconds delay after taking damage before shields begin recharging
 
-        string attackerBotName = attackerBot != null ? attackerBot.botName : "ENEMY";
-        OasisAITelemetryLogger.Instance?.RecordPlayerDamageTaken(amount, attackerBotName);
+        string attackerName = !string.IsNullOrEmpty(attackerPlayerName)
+            ? attackerPlayerName
+            : (attackerBot != null ? attackerBot.botName : "ENEMY");
+        OasisAITelemetryLogger.Instance?.RecordPlayerDamageTaken(amount, attackerName);
 
         UpdateHealthUI();
 
@@ -1240,7 +1269,7 @@ public class OasisShooterManager : MonoBehaviour
             if (isPlayerDead) return;
             isPlayerDead = true;
             currentHealth = 0f;
-            lastEliminatedBy = string.IsNullOrEmpty(attackerBotName) ? "HOSTILE COMBATANT" : attackerBotName;
+            lastEliminatedBy = string.IsNullOrEmpty(attackerName) ? "HOSTILE COMBATANT" : attackerName;
             playerDeathTimestamp = Time.time;
             playerRespawnTotalDelay = 3.0f;
 
@@ -1253,7 +1282,7 @@ public class OasisShooterManager : MonoBehaviour
             if (isTeamBattleActive)
             {
                 isPlayerDowned = false;
-                OasisAITelemetryLogger.Instance?.RecordPlayerEliminated(attackerBotName);
+                OasisAITelemetryLogger.Instance?.RecordPlayerEliminated(attackerName);
 
                 if (attackerBot != null)
                 {
@@ -1267,7 +1296,8 @@ public class OasisShooterManager : MonoBehaviour
                     : ((myTeam + 1) % Mathf.Max(2, activeNumTeams));
                 AddTeamKill(scoringTeam);
 
-                OasisNetworkManager.Instance?.BroadcastPlayerEliminated(attackerBot != null ? attackerBot.teamId : -1, scoringTeam);
+                int killerNetId = attackerPlayerId >= 0 ? attackerPlayerId : -1;
+                OasisNetworkManager.Instance?.BroadcastPlayerEliminated(killerNetId, scoringTeam);
 
                 UpdateTeamBattleHUD();
                 CheckWinCondition();
@@ -1362,13 +1392,119 @@ public class OasisShooterManager : MonoBehaviour
     {
         Time.timeScale = 1f;
         OasisOutplayedOverlay.RequestStopRecording();
+        OasisMusicManager.SetMenuMusicActive(true);
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         SceneManager.LoadScene(0);
     }
 
+    /// <summary>
+    /// Enters peaceful Map Exploration Mode where all hostile AI bots and drones are cleared,
+    /// the match timer is paused, and the player can freely walk, sprint, jump, and test their
+    /// custom map layout with zero enemy fire.
+    /// </summary>
+    public void EnterMapExplorationMode()
+    {
+        OasisMusicManager.SetMenuMusicActive(false);
+        isMapExplorationMode = true;
+        isTeamBattleActive = false;
+        isTimerRunning = false;
+        isSimulationMode = false;
+        isWaitingForOperatives = false;
+        isMatchFinished = false;
+        isPlayerDead = false;
+        isPlayerDowned = false;
+        currentHealth = maxHealth;
+        if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
+
+        // Clear all active drones
+        for (int i = _activeDrones.Count - 1; i >= 0; i--)
+        {
+            if (_activeDrones[i] != null && _activeDrones[i].gameObject != null)
+            {
+                Destroy(_activeDrones[i].gameObject);
+            }
+        }
+        _activeDrones.Clear();
+
+        // Clear all spawned AI bots so there is zero enemy fire while exploring the map
+        for (int i = _spawnedAIBots.Count - 1; i >= 0; i--)
+        {
+            if (_spawnedAIBots[i] != null && _spawnedAIBots[i].gameObject != null)
+            {
+                Destroy(_spawnedAIBots[i].gameObject);
+            }
+        }
+        _spawnedAIBots.Clear();
+
+        if (OasisCombatAI.ActiveBots != null)
+        {
+            for (int i = OasisCombatAI.ActiveBots.Count - 1; i >= 0; i--)
+            {
+                var bot = OasisCombatAI.ActiveBots[i];
+                if (bot != null && bot.gameObject != null)
+                {
+                    Destroy(bot.gameObject);
+                }
+            }
+            OasisCombatAI.ActiveBots.Clear();
+        }
+
+        // Ensure player controller and weapon are active for first-person exploration
+        if (_playerTransform == null)
+        {
+            _playerTransform = OasisPlayerHelper.FindPlayerTransform();
+        }
+        if (_playerTransform != null)
+        {
+            _playerTransform.gameObject.SetActive(true);
+            var cc = _playerTransform.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = true;
+            var fpc = _playerTransform.GetComponent<StarterAssets.FirstPersonController>();
+            if (fpc != null) fpc.enabled = true;
+            var move = _playerTransform.GetComponent<OasisCombatMovement>();
+            if (move != null)
+            {
+                move.enabled = true;
+                move.ResetMovementState();
+            }
+            var inputs = _playerTransform.GetComponent<StarterAssets.StarterAssetsInputs>();
+            if (inputs != null)
+            {
+                inputs.enabled = true;
+                inputs.cursorLocked = true;
+                inputs.cursorInputForLook = true;
+                inputs.SetCursorState(true);
+            }
+        }
+
+        if (_weapon != null)
+        {
+            _weapon.enabled = true;
+            _weapon.SetWeaponVisualActive(true);
+        }
+
+        SetHUDActive(true);
+        UpdateHealthUI();
+        if (_waveText != null) _waveText.text = "<color=#38EF7D>MAP EXPLORATION MODE</color>";
+        if (_dronesText != null) _dronesText.text = "PEACEFUL WALKTHROUGH (NO ENEMIES)";
+        if (_scoreText != null) _scoreText.text = "[F10]: MAP DESIGNER  |  [ESC]: START MATCH";
+
+        if (OasisMapSystem.Instance != null)
+        {
+            OasisMapSystem.Instance.SetMapCanvasActive(true);
+        }
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        ShowBanner("<color=#38EF7D><b>MAP EXPLORATION MODE (NO ENEMY FIRE)</b></color>\n<size=14>Walk freely across your custom map! Press [F10] to edit items or [ESC] to start combat.</size>", 5.5f);
+    }
+
     public void StartTeamBattle()
     {
+        OasisMusicManager.SetMenuMusicActive(false);
+        isMapExplorationMode = false;
         isTeamBattleActive = true;
         isWaitingForOperatives = false;
         isMatchFinished = false;
@@ -1523,7 +1659,12 @@ public class OasisShooterManager : MonoBehaviour
                     inputs.cursorInputForLook = true;
                 }
                 if (_weapon != null) _weapon.enabled = true;
+                var move = _playerTransform.GetComponent<OasisCombatMovement>();
+                if (move != null) move.ResetMovementState();
                 OasisSpawnSystem.Instance.RespawnCombatant(_playerTransform, localPlayerTeam);
+                _initialSpawnPosition = _playerTransform.position;
+                SafeShelterCenter = _initialSpawnPosition;
+                OasisNetworkManager.Instance?.BroadcastPlayerRespawned();
             }
         }
 
@@ -1534,15 +1675,16 @@ public class OasisShooterManager : MonoBehaviour
 
         UpdateTeamBattleHUD();
         string modeDesc = $"{activeNumTeams} TEAMS × {activePlayersPerTeam} PLAYERS/TEAM";
+        string diffLabel = OasisCombatAI.GetDifficultyName(OasisCombatAI.CurrentDifficulty);
         if (isSimulationMode)
         {
-            ShowBanner($"<color=#26D9FF>AI SIMULATION ACTIVE ({modeDesc})</color>\n<size=13>[V / TAB: Next Bot]  [F: Drone]  [F8: Telemetry]  [M: Map]</size>", 6.0f);
+            ShowBanner($"<color=#26D9FF>AI SIMULATION ACTIVE ({modeDesc} • {diffLabel})</color>\n<size=13>[V / TAB: Next Bot]  [F: Drone]  [F8: Telemetry]  [M: Map]</size>", 6.0f);
         }
         else
         {
             string tHex = GetTeamColorHex(localPlayerTeam);
             string tFull = GetTeamFullName(localPlayerTeam);
-            ShowBanner($"TACTICAL ENGAGEMENT: {modeDesc}\nYOUR SQUAD: <color={tHex}>{tFull}</color>", 4.5f);
+            ShowBanner($"TACTICAL ENGAGEMENT: {modeDesc} • AI: <color=#26D9FF>{diffLabel}</color>\nYOUR SQUAD: <color={tHex}>{tFull}</color>", 4.5f);
         }
     }
 

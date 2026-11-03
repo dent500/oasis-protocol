@@ -59,52 +59,52 @@ public class OasisCharacterCustomizer : MonoBehaviour
     {
         new OperativeProfile(
             "heavy_warrior", "Titanium Heavy Warrior", "ASSAULT / FRONTLINE", 
-            "Reinforced titanium chassis engineered for intense frontline breaches. High kinetic resistance with balanced assault firepower.", 
+            "Reinforced titanium chassis engineered for intense frontline breaches. High kinetic resistance with heavy pulse suppression.", 
             "RobotHero_URP", new Color(0.25f, 0.75f, 1.0f),
-            0.95f, 0.60f, 0.85f, 0.75f,
-            "Heavy Plasma Mortar Cannon", "[F] TITANIUM SLAM", "Discharges kinetic shockwave (45 AoE dmg) & grants +60 HP temporary overshield."),
+            0.95f, 0.65f, 0.85f, 0.80f,
+            "Heavy Pulse Autocannon", "[F] AEGIS SIEGE OVERDRIVE", "Restores +75 Shield/HP, 40% damage reduction, instant reload & +25% fire rate (8s)."),
 
         new OperativeProfile(
-            "desert_commando", "Desert Tactical Commando", "DEMOLITIONS / INFANTRY", 
-            "Specialized desert warfare rig with high-traction dune boots and blast-resistant ballistic weave armor.", 
+            "desert_commando", "Desert Tactical Commando", "PRECISION / INFANTRY", 
+            "Specialized desert warfare rig with high-traction dune boots, burst battle optics, and orbital strike uplink.", 
             "Characters/Textures/skin_soldier", new Color(0.95f, 0.72f, 0.28f),
-            0.80f, 0.80f, 0.90f, 0.65f,
-            "Plasma Scatter Shotgun", "[F] CLUSTER MORTAR", "Launches a 4-fragment high-explosive incendiary cluster barrage."),
+            0.80f, 0.82f, 0.88f, 0.75f,
+            "3-Round Burst Battle Rifle", "[F] ORBITAL PRECISION STRIKE", "Laser-designates target up to 250m and calls down a 3-wave orbital plasma strike (75 AoE dmg/wave)."),
 
         new OperativeProfile(
             "cyborg_specops", "Cyborg Special Operative", "INFILTRATOR / AGILITY", 
-            "Cybernetically augmented operative equipped with nanotech fiber suit for rapid slide evasion and precision targeting.", 
+            "Cybernetically augmented operative equipped with nanotech fiber suit for rapid blink evasion and precision laser tracking.", 
             "Characters/Textures/cyborgFemaleA", new Color(0.20f, 0.95f, 0.90f),
             0.65f, 0.95f, 0.85f, 0.80f,
-            "Continuous Phase Laser Beam", "[F] TACTICAL CLOAK", "Active camouflage (breaks enemy AI target lock), +35% speed & instant weapon recharge."),
+            "Continuous Phase Laser Beam", "[F] PHANTOM BLINK & CLOAK", "Instant 9m forward blink, active stealth camo (breaks AI lock), +35% speed & +25% ambush dmg (6s)."),
 
         new OperativeProfile(
             "unit07_android", "Unit-07 Combat Android", "HEAVY MECH / VANGUARD", 
-            "Autonomous heavy military android with reinforced chassis, internal auto-repair units, and recoil dampeners.", 
+            "Autonomous heavy military android with reinforced chassis, twin-core phase emitter, and ranged EMP projector.", 
             "Characters/Textures/skin_robot", new Color(0.35f, 1.0f, 0.55f),
-            0.90f, 0.68f, 0.85f, 0.90f,
-            "Continuous Phase Laser Beam", "[F] CORE EMP PULSE", "14m electromagnetic wave stuns hostiles (3.5s), strips shields & maxes beam ammo."),
+            0.90f, 0.72f, 0.85f, 0.90f,
+            "Twin-Core Phase Laser", "[F] DIRECTED EMP SHOCKWAVE", "Fires ranged EMP shock orb + 20m self-pulse: stuns hostiles (4s), deals 55 EMP dmg & infinite beam ammo (6s)."),
 
         new OperativeProfile(
-            "wasteland_nomad", "Wasteland Nomad Adventurer", "RECON / SURVIVAL", 
-            "Seasoned desert scout wearing temperature-regulating dune silks, moisture seals, and lightweight tactical armor.", 
+            "wasteland_nomad", "Wasteland Nomad Adventurer", "RECON / MARKSMAN", 
+            "Seasoned desert scout wearing temperature-regulating dune silks, long-range telemetry optics, and lightweight tactical armor.", 
             "Characters/Textures/skin_adventurer", new Color(1.0f, 0.60f, 0.25f),
-            0.70f, 0.90f, 0.80f, 0.85f,
-            "Long-Range Scout Carbine", "[F] ORBITAL RECON", "Exposes all enemy locations through dunes/cover (8s) with +25% blaster damage buff."),
+            0.72f, 0.88f, 0.85f, 0.85f,
+            "Long-Range Scout Marksman", "[F] ORBITAL RECON & LOCK", "Exposes all hostiles through terrain (8s), instant reload, +20% speed & +15% marksman dmg."),
 
         new OperativeProfile(
             "combat_medic", "Oasis Combat Medic", "SUPPORT / BIO-SHIELD", 
-            "Field operative in sterile hazardous-environment armor equipped with rapid regenerative trauma patches.", 
+            "Field operative in sterile hazardous-environment armor equipped with rapid regenerative trauma patches and sanctuary emitters.", 
             "Characters/Textures/survivorFemaleA", new Color(0.98f, 0.40f, 0.45f),
-            0.75f, 0.85f, 0.70f, 0.95f,
-            "Tactical Defense Carbine", "[F] NANO-MENDER FIELD", "Deployable nanotech aura regenerates 18 HP/s for 6s and instantly revives nearby squadmates."),
+            0.78f, 0.85f, 0.78f, 0.95f,
+            "Tactical Defense Carbine", "[F] NANO-MENDER SANCTUARY", "Instant +40 HP burst, 22 HP/s aura (7s), +20% speed & instant 15m squadmate resurrection."),
 
         new OperativeProfile(
             "cyber_outlaw", "Cyber Outlaw Specialist", "GUNSLINGER / SHARPSHOOTER", 
-            "Rogue gunslinger in modified cyberwear with overclocked neural fire-rate boosters and critical reflex wiring.", 
+            "Rogue gunslinger in modified cyberwear with overclocked neural fire-rate boosters and smart-target reflex wiring.", 
             "Characters/Textures/criminalMaleA", new Color(0.92f, 0.35f, 0.95f),
-            0.70f, 0.90f, 0.95f, 0.70f,
-            "Heavy Plasma Hand Cannon", "Deadshot Overclock", "Weakspot critical hits deal 50% extra kinetic damage.")
+            0.72f, 0.90f, 0.90f, 0.75f,
+            "Heavy Plasma Hand Cannon", "[F] DEADSHOT OVERCLOCK", "Instant reload, +60% fire rate, +35% crit damage, smart-target snap & +25 HP siphon on hit (7s).")
     };
 
     public int selectedOperativeIndex = 0;
@@ -145,6 +145,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
     public int selectedTeam = 0; // 0 = Alpha, 1 = Bravo, 2 = Charlie, 3 = Delta
     public int selectedNumTeams = 2; // 2, 3, or 4 Teams
     public int selectedPlayersPerTeam = 2; // 1, 2, 3, or 4 Players per Team
+    public int selectedAIDifficulty = 1; // 0 = Recruit (Easy), 1 = Tactical (Normal / LoS Delay), 2 = Elite (Hard + HP)
     public string selectedMatchFormat = "2v2"; // Derived summary string (e.g. "2 TEAMS • 2/TEAM (2v2)")
     public bool isSpectatorMode = false; // True = AI Simulation / Spectator mode
 
@@ -157,6 +158,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
     private readonly Dictionary<int, Text> _numTeamsBtnTexts = new Dictionary<int, Text>();
     private readonly Dictionary<int, Image> _playersPerTeamBtnBgs = new Dictionary<int, Image>();
     private readonly Dictionary<int, Text> _playersPerTeamBtnTexts = new Dictionary<int, Text>();
+    private readonly Image[] _aiDiffBtnBgs = new Image[3];
+    private readonly Text[] _aiDiffBtnTexts = new Text[3];
 
     // Dynamic Team & Player Roster UI References (Supports 2, 3, or 4 Teams)
     private readonly GameObject[] _teamRosterBoxes = new GameObject[4];
@@ -443,9 +446,11 @@ public class OasisCharacterCustomizer : MonoBehaviour
         selectedNumTeams = Mathf.Clamp(PlayerPrefs.GetInt("OasisNumTeams", 2), 2, 4);
         selectedPlayersPerTeam = Mathf.Clamp(PlayerPrefs.GetInt("OasisPlayersPerTeam", 2), 1, 4);
         selectedTeam = Mathf.Clamp(PlayerPrefs.GetInt("OasisPlayerTeam", 0), 0, selectedNumTeams - 1);
+        selectedAIDifficulty = OasisCombatAI.CurrentDifficulty;
         UpdateMatchFormatString();
 
-        // 1. Hide in-game HUD & Radar while on the character selection page
+        // 1. Hide in-game HUD & Radar while on the character selection page and keep menu backing track active
+        OasisMusicManager.SetMenuMusicActive(true);
         if (OasisShooterManager.Instance != null)
         {
             OasisShooterManager.Instance.SetHUDActive(false);
@@ -916,6 +921,14 @@ public class OasisCharacterCustomizer : MonoBehaviour
         UpdatePreviewAndDossier();
     }
 
+    public void SetAIDifficulty(int diff)
+    {
+        selectedAIDifficulty = Mathf.Clamp(diff, 0, 2);
+        OasisCombatAI.SetDifficultyMode(selectedAIDifficulty);
+        RefreshMatchSettingsUI();
+        RefreshConfirmButtonState();
+    }
+
     public void SyncMatchConfigFromHost(int numTeams, int playersPerTeam)
     {
         selectedNumTeams = Mathf.Clamp(numTeams, 2, 4);
@@ -1020,6 +1033,40 @@ public class OasisCharacterCustomizer : MonoBehaviour
             {
                 txt.text = isSel ? $"<color=#38EF7D>● {p}</color>" : $"<color=#8FA0B5>{p}</color>";
                 txt.fontStyle = isSel ? FontStyle.Bold : FontStyle.Normal;
+            }
+        }
+
+        // 5. AI Difficulty Buttons (0 = Recruit, 1 = Tactical, 2 = Elite)
+        selectedAIDifficulty = OasisCombatAI.CurrentDifficulty;
+        Color[] diffActiveBgs = new Color[]
+        {
+            new Color(0.10f, 0.54f, 0.34f, 0.98f), // Recruit Green
+            new Color(0.10f, 0.46f, 0.68f, 0.98f), // Tactical Cyan
+            new Color(0.68f, 0.22f, 0.18f, 0.98f)  // Elite Crimson/Amber
+        };
+        string[] diffActiveLabels = new string[]
+        {
+            "<color=#38EF7D>● RECRUIT (EASY)</color>",
+            "<color=#26D9FF>● TACTICAL (DELAY)</color>",
+            "<color=#FF8844>● ELITE (+HP/FAST)</color>"
+        };
+        string[] diffIdleLabels = new string[]
+        {
+            "<color=#8FA0B5>RECRUIT (EASY)</color>",
+            "<color=#8FA0B5>TACTICAL (DELAY)</color>",
+            "<color=#8FA0B5>ELITE (+HP/FAST)</color>"
+        };
+        for (int d = 0; d < 3; d++)
+        {
+            bool isSel = (selectedAIDifficulty == d);
+            if (_aiDiffBtnBgs[d] != null)
+            {
+                _aiDiffBtnBgs[d].color = isSel ? diffActiveBgs[d] : new Color(0.08f, 0.12f, 0.18f, 0.85f);
+            }
+            if (_aiDiffBtnTexts[d] != null)
+            {
+                _aiDiffBtnTexts[d].text = isSel ? diffActiveLabels[d] : diffIdleLabels[d];
+                _aiDiffBtnTexts[d].fontStyle = isSel ? FontStyle.Bold : FontStyle.Normal;
             }
         }
 
@@ -1840,9 +1887,111 @@ public class OasisCharacterCustomizer : MonoBehaviour
         ConfirmAndEnterGameInternal();
     }
 
+    /// <summary>
+    /// Closes the operative selection UI, applies the selected operative skin and weapon to the player,
+    /// and enters peaceful Map Exploration Mode without launching any hostile AI bots.
+    /// </summary>
+    public void EnterExplorationFromSelection()
+    {
+        isSelectionActive = false;
+        _isCountingDown = false;
+        if (_countdownCoroutine != null)
+        {
+            StopCoroutine(_countdownCoroutine);
+            _countdownCoroutine = null;
+        }
+        if (_countdownModalObj != null)
+        {
+            Destroy(_countdownModalObj);
+            _countdownModalObj = null;
+        }
+
+        OasisMusicManager.SetMenuMusicActive(false);
+        UpdateMatchFormatString();
+        PlayerPrefs.SetInt("OasisSelectedOperative", selectedOperativeIndex);
+        PlayerPrefs.SetInt("OasisPlayerTeam", selectedTeam);
+        PlayerPrefs.SetInt("OasisNumTeams", selectedNumTeams);
+        PlayerPrefs.SetInt("OasisPlayersPerTeam", selectedPlayersPerTeam);
+        PlayerPrefs.SetString("OasisMatchFormat", selectedMatchFormat);
+        PlayerPrefs.Save();
+
+        var chosen = (selectedOperativeIndex >= 0 && selectedOperativeIndex < operatives.Count)
+            ? operatives[selectedOperativeIndex]
+            : operatives[0];
+
+        Texture2D skinTex = null;
+        if (!string.IsNullOrEmpty(chosen.textureResourcePath))
+        {
+            skinTex = Resources.Load<Texture2D>(chosen.textureResourcePath);
+        }
+        Color teamAccent = OasisShooterManager.GetTeamColor(selectedTeam);
+        if (OasisCombatMovement.Instance != null)
+        {
+            OasisCombatMovement.Instance.ApplyCharacterSkin(skinTex, teamAccent, chosen.id);
+            OasisCombatMovement.Instance.ConfigureOperativeAbility(selectedOperativeIndex);
+            OasisCombatMovement.Instance.SetThirdPersonMode(false);
+            var pWeapon = Camera.main != null ? Camera.main.GetComponent<BlasterWeapon>() : null;
+            if (pWeapon == null) pWeapon = FindAnyObjectByType<BlasterWeapon>();
+            if (pWeapon != null)
+            {
+                pWeapon.ApplyOperativeWeapon(selectedOperativeIndex);
+                pWeapon.SyncWeaponMaterial(OasisCombatMovement.Instance.currentCharacterMaterial);
+                pWeapon.SetWeaponVisualActive(true);
+            }
+        }
+
+        Transform pTransform = (OasisCombatMovement.Instance != null)
+            ? OasisCombatMovement.Instance.transform
+            : OasisPlayerHelper.FindPlayerTransform();
+
+        if (_previewRenderTexture != null)
+        {
+            _previewRenderTexture.Release();
+            Destroy(_previewRenderTexture);
+            _previewRenderTexture = null;
+        }
+        if (_stagingRoot != null)
+        {
+            Destroy(_stagingRoot);
+            _stagingRoot = null;
+        }
+        if (_selectionCanvas != null)
+        {
+            Destroy(_selectionCanvas);
+            _selectionCanvas = null;
+        }
+
+        if (_starterInputs != null)
+        {
+            _starterInputs.look = Vector2.zero;
+            _starterInputs.SetCursorState(true);
+        }
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        var pFpc = pTransform != null ? pTransform.GetComponent<StarterAssets.FirstPersonController>() : null;
+        if (pFpc != null)
+        {
+            pFpc.ResetCameraPitch(0f);
+        }
+        if (Camera.main != null && pTransform != null)
+        {
+            Camera.main.transform.rotation = pTransform.rotation;
+        }
+
+        if (OasisShooterManager.Instance != null)
+        {
+            OasisShooterManager.Instance.EnterMapExplorationMode();
+        }
+        if (OasisMapSystem.Instance != null)
+        {
+            OasisMapSystem.Instance.SetMapCanvasActive(true);
+        }
+    }
+
     private void ConfirmAndEnterGameInternal()
     {
         isSelectionActive = false;
+        OasisMusicManager.SetMenuMusicActive(false);
         UpdateMatchFormatString();
         PlayerPrefs.SetInt("OasisSelectedOperative", selectedOperativeIndex);
         PlayerPrefs.SetInt("OasisPlayerTeam", selectedTeam);
@@ -1986,6 +2135,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
     public void CloseCustomizerForSimulation()
     {
         isSelectionActive = false;
+        OasisMusicManager.SetMenuMusicActive(false);
 
         if (_previewRenderTexture != null)
         {
@@ -2099,11 +2249,43 @@ public class OasisCharacterCustomizer : MonoBehaviour
         subText.color = new Color(0.60f, 0.72f, 0.85f);
         subText.alignment = TextAnchor.MiddleLeft;
 
+        // Map Designer Button (Top Right)
+        GameObject mapDesignBtnObj = new GameObject("MapDesigner_Button");
+        mapDesignBtnObj.transform.SetParent(headerObj.transform, false);
+        RectTransform mdRT = mapDesignBtnObj.AddComponent<RectTransform>();
+        mdRT.anchorMin = new Vector2(0.515f, 0.14f);
+        mdRT.anchorMax = new Vector2(0.645f, 0.86f);
+        mdRT.offsetMin = Vector2.zero;
+        mdRT.offsetMax = Vector2.zero;
+        Image mdBg = mapDesignBtnObj.AddComponent<Image>();
+        mdBg.color = new Color(0.12f, 0.42f, 0.64f, 0.96f);
+        Button mdBtn = mapDesignBtnObj.AddComponent<Button>();
+        mdBtn.targetGraphic = mdBg;
+        mdBtn.onClick.AddListener(() =>
+        {
+            if (OasisMapDesigner.Instance != null) OasisMapDesigner.Instance.OpenDesignerMode();
+        });
+
+        GameObject mdTxtObj = new GameObject("Label");
+        mdTxtObj.transform.SetParent(mapDesignBtnObj.transform, false);
+        RectTransform mdTxtRT = mdTxtObj.AddComponent<RectTransform>();
+        mdTxtRT.anchorMin = Vector2.zero;
+        mdTxtRT.anchorMax = Vector2.one;
+        mdTxtRT.offsetMin = Vector2.zero;
+        mdTxtRT.offsetMax = Vector2.zero;
+        Text mdTxt = mdTxtObj.AddComponent<Text>();
+        mdTxt.font = font;
+        mdTxt.fontSize = 11;
+        mdTxt.fontStyle = FontStyle.Bold;
+        mdTxt.color = new Color(0.25f, 0.95f, 1.0f);
+        mdTxt.alignment = TextAnchor.MiddleCenter;
+        mdTxt.text = "🛠 MAP DESIGNER [F10]";
+
         // Session Role / Host Control Badge Button (Top Right)
         GameObject roleBtnObj = new GameObject("Role_HostToggle_Button");
         roleBtnObj.transform.SetParent(headerObj.transform, false);
         RectTransform roleRT = roleBtnObj.AddComponent<RectTransform>();
-        roleRT.anchorMin = new Vector2(0.63f, 0.14f);
+        roleRT.anchorMin = new Vector2(0.655f, 0.14f);
         roleRT.anchorMax = new Vector2(0.875f, 0.86f);
         roleRT.offsetMin = Vector2.zero;
         roleRT.offsetMax = Vector2.zero;
@@ -2179,11 +2361,11 @@ public class OasisCharacterCustomizer : MonoBehaviour
         lpRT.offsetMin = Vector2.zero;
         lpRT.offsetMax = Vector2.zero;
 
-        // --- 3A. TOP OF LEFT PANEL: Match, Squad & Spectator Settings Bar ---
+        // --- 3A. TOP OF LEFT PANEL: Match, Squad & AI Difficulty Settings Bar ---
         GameObject matchConfigObj = new GameObject("Top_MatchSettings_Box");
         matchConfigObj.transform.SetParent(leftPanel.transform, false);
         RectTransform mcRT = matchConfigObj.AddComponent<RectTransform>();
-        mcRT.anchorMin = new Vector2(0f, 0.78f);
+        mcRT.anchorMin = new Vector2(0f, 0.735f);
         mcRT.anchorMax = new Vector2(1f, 1.0f);
         mcRT.offsetMin = Vector2.zero;
         mcRT.offsetMax = Vector2.zero;
@@ -2205,13 +2387,13 @@ public class OasisCharacterCustomizer : MonoBehaviour
         GameObject mcHdrObj = new GameObject("Settings_Header");
         mcHdrObj.transform.SetParent(mcInner.transform, false);
         RectTransform mchRT = mcHdrObj.AddComponent<RectTransform>();
-        mchRT.anchorMin = new Vector2(0.025f, 0.78f);
-        mchRT.anchorMax = new Vector2(0.975f, 0.97f);
+        mchRT.anchorMin = new Vector2(0.02f, 0.82f);
+        mchRT.anchorMax = new Vector2(0.98f, 0.98f);
         mchRT.offsetMin = Vector2.zero;
         mchRT.offsetMax = Vector2.zero;
         Text mchText = mcHdrObj.AddComponent<Text>();
         mchText.font = font;
-        mchText.text = "MATCH CONFIGURATION // 3:00 TIMED MATCH • SQUAD SIDE, TEAMS & PLAYERS/TEAM";
+        mchText.text = "MATCH CONFIGURATION // 3:00 MATCH • SQUAD, TEAMS & AI DIFFICULTY";
         mchText.fontSize = 11;
         mchText.fontStyle = FontStyle.Bold;
         mchText.color = new Color(0.35f, 0.85f, 1.0f);
@@ -2221,8 +2403,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
         GameObject sideLabelObj = new GameObject("Side_Label");
         sideLabelObj.transform.SetParent(mcInner.transform, false);
         RectTransform slRT = sideLabelObj.AddComponent<RectTransform>();
-        slRT.anchorMin = new Vector2(0.02f, 0.42f);
-        slRT.anchorMax = new Vector2(0.135f, 0.75f);
+        slRT.anchorMin = new Vector2(0.02f, 0.56f);
+        slRT.anchorMax = new Vector2(0.135f, 0.80f);
         slRT.offsetMin = Vector2.zero;
         slRT.offsetMax = Vector2.zero;
         Text slText = sideLabelObj.AddComponent<Text>();
@@ -2243,8 +2425,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
             GameObject sqBtnObj = new GameObject($"Btn_Team_{shortName}");
             sqBtnObj.transform.SetParent(mcInner.transform, false);
             RectTransform sqRT = sqBtnObj.AddComponent<RectTransform>();
-            sqRT.anchorMin = new Vector2(sqMinX[t], 0.43f);
-            sqRT.anchorMax = new Vector2(sqMaxX[t], 0.74f);
+            sqRT.anchorMin = new Vector2(sqMinX[t], 0.56f);
+            sqRT.anchorMax = new Vector2(sqMaxX[t], 0.80f);
             sqRT.offsetMin = Vector2.zero;
             sqRT.offsetMax = Vector2.zero;
 
@@ -2272,8 +2454,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
         GameObject specBtnObj = new GameObject("Btn_SpectatorToggle");
         specBtnObj.transform.SetParent(mcInner.transform, false);
         RectTransform spRT = specBtnObj.AddComponent<RectTransform>();
-        spRT.anchorMin = new Vector2(0.765f, 0.43f);
-        spRT.anchorMax = new Vector2(0.98f, 0.74f);
+        spRT.anchorMin = new Vector2(0.765f, 0.56f);
+        spRT.anchorMax = new Vector2(0.98f, 0.80f);
         spRT.offsetMin = Vector2.zero;
         spRT.offsetMax = Vector2.zero;
         _btnSpectatorBg = specBtnObj.AddComponent<Image>();
@@ -2299,8 +2481,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
         GameObject teamsLabelObj = new GameObject("Teams_Label");
         teamsLabelObj.transform.SetParent(mcInner.transform, false);
         RectTransform tlRT = teamsLabelObj.AddComponent<RectTransform>();
-        tlRT.anchorMin = new Vector2(0.02f, 0.06f);
-        tlRT.anchorMax = new Vector2(0.135f, 0.37f);
+        tlRT.anchorMin = new Vector2(0.02f, 0.30f);
+        tlRT.anchorMax = new Vector2(0.135f, 0.54f);
         tlRT.offsetMin = Vector2.zero;
         tlRT.offsetMax = Vector2.zero;
         Text tlText = teamsLabelObj.AddComponent<Text>();
@@ -2322,8 +2504,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
             GameObject tBtnObj = new GameObject($"Btn_NumTeams_{countVal}");
             tBtnObj.transform.SetParent(mcInner.transform, false);
             RectTransform tbRT = tBtnObj.AddComponent<RectTransform>();
-            tbRT.anchorMin = new Vector2(tcMinX[i], 0.06f);
-            tbRT.anchorMax = new Vector2(tcMaxX[i], 0.37f);
+            tbRT.anchorMin = new Vector2(tcMinX[i], 0.30f);
+            tbRT.anchorMax = new Vector2(tcMaxX[i], 0.54f);
             tbRT.offsetMin = Vector2.zero;
             tbRT.offsetMax = Vector2.zero;
 
@@ -2355,8 +2537,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
         GameObject pptLabelObj = new GameObject("PlayersPerTeam_Label");
         pptLabelObj.transform.SetParent(mcInner.transform, false);
         RectTransform pptRT = pptLabelObj.AddComponent<RectTransform>();
-        pptRT.anchorMin = new Vector2(0.455f, 0.06f);
-        pptRT.anchorMax = new Vector2(0.625f, 0.37f);
+        pptRT.anchorMin = new Vector2(0.455f, 0.30f);
+        pptRT.anchorMax = new Vector2(0.625f, 0.54f);
         pptRT.offsetMin = Vector2.zero;
         pptRT.offsetMax = Vector2.zero;
         Text pptText = pptLabelObj.AddComponent<Text>();
@@ -2378,8 +2560,8 @@ public class OasisCharacterCustomizer : MonoBehaviour
             GameObject pBtnObj = new GameObject($"Btn_PlayersPerTeam_{pVal}");
             pBtnObj.transform.SetParent(mcInner.transform, false);
             RectTransform pbRT = pBtnObj.AddComponent<RectTransform>();
-            pbRT.anchorMin = new Vector2(pcMinX[i], 0.06f);
-            pbRT.anchorMax = new Vector2(pcMaxX[i], 0.37f);
+            pbRT.anchorMin = new Vector2(pcMinX[i], 0.30f);
+            pbRT.anchorMax = new Vector2(pcMaxX[i], 0.54f);
             pbRT.offsetMin = Vector2.zero;
             pbRT.offsetMax = Vector2.zero;
 
@@ -2407,12 +2589,65 @@ public class OasisCharacterCustomizer : MonoBehaviour
             _playersPerTeamBtnTexts[pVal] = pTxt;
         }
 
+        // ROW 3: AI Difficulty Mode (0 = Recruit, 1 = Tactical [Default LoS Delay], 2 = Elite [Hard + HP])
+        GameObject diffLabelObj = new GameObject("AIDifficulty_Label");
+        diffLabelObj.transform.SetParent(mcInner.transform, false);
+        RectTransform dlRT = diffLabelObj.AddComponent<RectTransform>();
+        dlRT.anchorMin = new Vector2(0.02f, 0.04f);
+        dlRT.anchorMax = new Vector2(0.215f, 0.28f);
+        dlRT.offsetMin = Vector2.zero;
+        dlRT.offsetMax = Vector2.zero;
+        Text dlText = diffLabelObj.AddComponent<Text>();
+        dlText.font = font;
+        dlText.text = "AI DIFFICULTY:";
+        dlText.fontSize = 11;
+        dlText.fontStyle = FontStyle.Bold;
+        dlText.color = new Color(0.80f, 0.88f, 0.96f);
+        dlText.alignment = TextAnchor.MiddleLeft;
+
+        float[] dfMinX = new float[] { 0.22f, 0.475f, 0.73f };
+        float[] dfMaxX = new float[] { 0.467f, 0.722f, 0.98f };
+        for (int d = 0; d < 3; d++)
+        {
+            int diffVal = d;
+            GameObject dBtnObj = new GameObject($"Btn_AIDifficulty_{diffVal}");
+            dBtnObj.transform.SetParent(mcInner.transform, false);
+            RectTransform dbRT = dBtnObj.AddComponent<RectTransform>();
+            dbRT.anchorMin = new Vector2(dfMinX[d], 0.04f);
+            dbRT.anchorMax = new Vector2(dfMaxX[d], 0.28f);
+            dbRT.offsetMin = Vector2.zero;
+            dbRT.offsetMax = Vector2.zero;
+
+            Image dBg = dBtnObj.AddComponent<Image>();
+            dBg.color = new Color(0.08f, 0.12f, 0.18f, 0.85f);
+            _aiDiffBtnBgs[d] = dBg;
+
+            Button dBtn = dBtnObj.AddComponent<Button>();
+            dBtn.targetGraphic = dBg;
+            dBtn.onClick.AddListener(() => SetAIDifficulty(diffVal));
+
+            GameObject dTxtObj = new GameObject("Text");
+            dTxtObj.transform.SetParent(dBtnObj.transform, false);
+            RectTransform dTxtRT = dTxtObj.AddComponent<RectTransform>();
+            dTxtRT.anchorMin = Vector2.zero;
+            dTxtRT.anchorMax = Vector2.one;
+            dTxtRT.offsetMin = Vector2.zero;
+            dTxtRT.offsetMax = Vector2.zero;
+
+            Text dTxt = dTxtObj.AddComponent<Text>();
+            dTxt.font = font;
+            dTxt.fontSize = 10;
+            dTxt.supportRichText = true;
+            dTxt.alignment = TextAnchor.MiddleCenter;
+            _aiDiffBtnTexts[d] = dTxt;
+        }
+
         // --- 3B. BOTTOM OF LEFT PANEL: Compact Operative Selection Cards (7 Cards) ---
         GameObject lpTitle = new GameObject("Roster_Header");
         lpTitle.transform.SetParent(leftPanel.transform, false);
         RectTransform lptRT = lpTitle.AddComponent<RectTransform>();
-        lptRT.anchorMin = new Vector2(0f, 0.715f);
-        lptRT.anchorMax = new Vector2(1f, 0.765f);
+        lptRT.anchorMin = new Vector2(0f, 0.685f);
+        lptRT.anchorMax = new Vector2(1f, 0.73f);
         lptRT.offsetMin = Vector2.zero;
         lptRT.offsetMax = Vector2.zero;
         Text lptText = lpTitle.AddComponent<Text>();
@@ -2427,7 +2662,7 @@ public class OasisCharacterCustomizer : MonoBehaviour
         rosterContainer.transform.SetParent(leftPanel.transform, false);
         RectTransform rcRT = rosterContainer.AddComponent<RectTransform>();
         rcRT.anchorMin = new Vector2(0f, 0f);
-        rcRT.anchorMax = new Vector2(1f, 0.71f);
+        rcRT.anchorMax = new Vector2(1f, 0.68f);
         rcRT.offsetMin = Vector2.zero;
         rcRT.offsetMax = Vector2.zero;
 

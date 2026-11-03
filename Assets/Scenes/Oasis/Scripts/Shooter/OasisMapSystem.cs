@@ -16,8 +16,8 @@ public class OasisMapSystem : MonoBehaviour
     public static OasisMapSystem Instance { get; private set; }
 
     [Header("Map Range & Settings")]
-    public float minimapWorldRadius = 90f; // Radar detection radius (meters)
-    public float fullscreenWorldRadius = 220f; // Full expanded world radius (meters)
+    public float minimapWorldRadius = 115f; // Radar detection radius (meters)
+    public float fullscreenWorldRadius = 260f; // Full expanded world radius (meters)
 
     // References
     private Transform _playerTransform;
@@ -112,11 +112,11 @@ public class OasisMapSystem : MonoBehaviour
     private void RegisterPointsOfInterest()
     {
         _pointsOfInterest.Clear();
-        _pointsOfInterest.Add(new POI { name = "OASIS CORE", worldPos = new Vector3(0f, 0f, -150f), color = new Color(0.2f, 0.9f, 0.95f) });
-        _pointsOfInterest.Add(new POI { name = "WEST OUTPOST", worldPos = new Vector3(-38f, 0f, -150f), color = new Color(1f, 0.65f, 0.2f) });
-        _pointsOfInterest.Add(new POI { name = "NORTH DUNES", worldPos = new Vector3(0f, 0f, -188f), color = new Color(0.95f, 0.85f, 0.3f) });
-        _pointsOfInterest.Add(new POI { name = "EAST GORGE", worldPos = new Vector3(38f, 0f, -150f), color = new Color(0.95f, 0.4f, 0.3f) });
-        _pointsOfInterest.Add(new POI { name = "SOUTH CANYON PASS", worldPos = new Vector3(0f, 0f, -114f), color = new Color(0.7f, 0.6f, 0.9f) });
+        _pointsOfInterest.Add(new POI { name = "OASIS BASIN", worldPos = new Vector3(0f, 0f, -150f), color = new Color(0.2f, 0.9f, 0.95f) });
+        _pointsOfInterest.Add(new POI { name = "WEST RIDGE HANGAR", worldPos = new Vector3(-74f, 0f, -150f), color = new Color(1f, 0.65f, 0.2f) });
+        _pointsOfInterest.Add(new POI { name = "NORTH DUNE HANGAR", worldPos = new Vector3(0f, 0f, -228f), color = new Color(0.95f, 0.85f, 0.3f) });
+        _pointsOfInterest.Add(new POI { name = "EAST GORGE HANGAR", worldPos = new Vector3(78f, 0f, -150f), color = new Color(0.95f, 0.4f, 0.3f) });
+        _pointsOfInterest.Add(new POI { name = "SOUTH CANYON HANGAR", worldPos = new Vector3(32f, 0f, -78f), color = new Color(0.7f, 0.6f, 0.9f) });
     }
 
     private void HandleMapToggleInput()
@@ -287,10 +287,10 @@ public class OasisMapSystem : MonoBehaviour
     public static Vector2 WorldToMapPosition(Vector3 worldPos)
     {
         // Playable canyon arena center is (0, 0, -150).
-        // UI markers: OASIS CORE=(0,0), NORTH DUNES=(0,200), SOUTH CANYON PASS=(0,-200), WEST OUTPOST=(-200,0), EAST GORGE=(200,0).
-        // Radius between center and sector bases is ~38-40m in world space.
+        // UI markers: OASIS CORE=(0,0), NORTH DUNE HANGAR=(0,200), SOUTH CANYON HANGAR=(0,-200), WEST RIDGE HANGAR=(-200,0), EAST GORGE HANGAR=(200,0).
+        // Radius between center and perimeter Hangar Hideouts is ~78m in world space.
         Vector3 mapCenter = new Vector3(0f, 0f, -150f);
-        float sectorRadius = 40f;
+        float sectorRadius = 78f;
         float markerRadiusPx = 200f;
         float nx = (worldPos.x - mapCenter.x) / sectorRadius;
         float ny = -(worldPos.z - mapCenter.z) / sectorRadius;
@@ -671,7 +671,7 @@ public class OasisMapSystem : MonoBehaviour
         pImg.raycastTarget = false;
 
         // Subtitle Key Prompt
-        CreateTextLabel(frameObj.transform, "RADAR 90M  [M: MAP]", 11, new Vector2(0, -92), FontStyle.Bold, new Color(0.3f, 0.9f, 1f));
+        CreateTextLabel(frameObj.transform, "RADAR 115M [M: MAP]", 11, new Vector2(0, -92), FontStyle.Bold, new Color(0.3f, 0.9f, 1f));
     }
 
     private void BuildFullscreenMapUI(Transform parent)

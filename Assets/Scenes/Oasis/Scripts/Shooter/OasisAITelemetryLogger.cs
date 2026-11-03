@@ -715,7 +715,6 @@ public class OasisAITelemetryLogger : MonoBehaviour
         }
         float overallAcc = totalShots > 0 ? Mathf.Min(100f, (totalHits / totalShots) * 100f) : 0f;
         sb.AppendLine($"- **Combat Accuracy:** Operatives fired `{totalShots}` total blaster bolts with `{overallAcc:F1}%` overall accuracy.");
-        sb.AppendLine($"- **Revival Effectiveness:** `{totalRevives}` fallen teammates were successfully saved before bleedout timeout.");
         sb.AppendLine($"- **Mobility & Navigation Health:** Total anti-stuck corrections triggered: `{totalStucks}` events.");
         sb.AppendLine($"- **Spatial Breadth:** Heatmap logged `{_spatialHeatmap.Count}` position samples over the canyon terrain.");
         sb.AppendLine();

@@ -417,6 +417,7 @@ public class MainMenuManager : MonoBehaviour
             loadingPanel.SetActive(false);
         }
 
+        OasisMusicManager.SetMenuMusicActive(true);
         BuildOrUpgradeHomeMenuUI();
         UpdateLobbyStatusDisplay();
     }
@@ -718,25 +719,37 @@ public class MainMenuManager : MonoBehaviour
         // Left: Controls Quick Summary (dynamically reflects custom keybinds)
         _controlsHintText = CreateAnchoredText(footerObj.transform, font, "Controls_Hint",
             "",
-            13, FontStyle.Normal, new Color(0.62f, 0.74f, 0.86f),
-            new Vector2(0.0f, 0.05f), new Vector2(0.58f, 0.90f), TextAnchor.MiddleLeft);
+            12, FontStyle.Normal, new Color(0.62f, 0.74f, 0.86f),
+            new Vector2(0.0f, 0.05f), new Vector2(0.47f, 0.90f), TextAnchor.MiddleLeft);
         UpdateFooterControlsHint();
 
-        // Right Utility Buttons: SETTINGS, CREDITS, QUIT GAME
+        // Right Utility Buttons: MAP DESIGNER, SETTINGS, CREDITS, QUIT GAME
+        CreateAnchoredButton(footerObj.transform, font, "Btn_MapDesigner",
+            "🛠  MAP DESIGNER",
+            13, new Color(0.10f, 0.44f, 0.64f, 0.96f), new Color(0.28f, 0.96f, 1.0f),
+            new Vector2(0.48f, 0.12f), new Vector2(0.605f, 0.85f), LaunchMapDesignerFromMenu);
+
         CreateAnchoredButton(footerObj.transform, font, "Btn_Settings",
             "⚙  SETTINGS",
             14, new Color(0.12f, 0.22f, 0.34f, 0.95f), new Color(0.85f, 0.95f, 1.0f),
-            new Vector2(0.60f, 0.12f), new Vector2(0.725f, 0.85f), OpenSettingsModal);
+            new Vector2(0.615f, 0.12f), new Vector2(0.735f, 0.85f), OpenSettingsModal);
 
         CreateAnchoredButton(footerObj.transform, font, "Btn_Credits",
             "★  CREDITS",
             14, new Color(0.12f, 0.22f, 0.34f, 0.95f), new Color(0.85f, 0.95f, 1.0f),
-            new Vector2(0.738f, 0.12f), new Vector2(0.863f, 0.85f), OpenCreditsModal);
+            new Vector2(0.745f, 0.12f), new Vector2(0.865f, 0.85f), OpenCreditsModal);
 
         CreateAnchoredButton(footerObj.transform, font, "Btn_QuitGame",
             "✕  QUIT GAME",
             14, new Color(0.45f, 0.14f, 0.16f, 0.95f), Color.white,
-            new Vector2(0.876f, 0.12f), new Vector2(1.0f, 0.85f), QuitGame);
+            new Vector2(0.875f, 0.12f), new Vector2(1.0f, 0.85f), QuitGame);
+    }
+
+    public void LaunchMapDesignerFromMenu()
+    {
+        if (_isLoading) return;
+        OasisMapDesigner.OpenOnSceneLoad = true;
+        LoadGameScene(oasisSceneName);
     }
 
     private void UpdateFooterControlsHint()
